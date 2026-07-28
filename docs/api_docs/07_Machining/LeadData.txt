@@ -1,0 +1,109 @@
+================================================================================
+SEKCJA: 07_Machining/LeadData.txt
+Wygenerowano z acAPI.bas
+================================================================================
+
+PLIK: Application_CreateLeadData
+================================================================================
+
+Application.CreateLeadData
+
+Application.CreateLeadData
+
+Create object representing Lead-In/Out data for use 
+ with a Machining Style.
+
+Syntax
+
+App.CreateLeadData
+
+[Return] LeadData object.
+
+================================================================================
+PLIK: Application_EnableAddin
+================================================================================
+
+Application.EnableAddin
+
+Application.EnableAddin
+
+Enable or disable an add-in given its full 
+ file name.
+
+Syntax
+
+App.EnableAddin (FileName, Enable)
+
+String  Name Full path name of AlphaCAM add-in
+
+Bool    True 
+ to enable, False to disable
+
+================================================================================
+PLIK: LeadData_Object
+================================================================================
+
+LeadData Object
+
+LeadData Object
+
+An object used to set the values for Lead-In/Out in 
+ a Machining Style.
+
+ 
+
+Properties
+
+ 
+
+Angle - (float) Angle for 
+ lead-in/out in degrees
+
+ 
+
+LeadIn - (AcamLeadType) acamLeadLINE, 
+ acamLeadARC, acamLeadBOTH, acamLeadNONE, acamLeadNO_CHANGE or acamLeadBOTH_NOT_TANGENTIAL
+
+ 
+
+LeadOut- (AcamLeadType) acamLeadLINE, 
+ acamLeadARC, acamLeadBOTH, acamLeadNONE, acamLeadNO_CHANGE or acamLeadBOTH_NOT_TANGENTIAL
+
+ 
+
+LengthIn - (float) Length 
+ of lead-in line
+
+ 
+
+LengthOut - (float) Length 
+ of lead-out line
+
+ 
+
+LineArcInTangential - (Bool) 
+ True if lead-in line and arc are to be tangential. (acamLeadBOTH only)
+
+ 
+
+LineArcOutTangential - (Bool) 
+ True if lead-in line and arc are to be tangential. (acamLeadBOTH only)
+
+ 
+
+Radius - (float) Radius of 
+ arc
+
+ 
+
+SlopeIn - (Bool) True if lead-in 
+ is to be sloping
+
+ 
+
+SlopeOut - (Bool) True if 
+ lead-out is to be sloping
+
+================================================================================
+
+

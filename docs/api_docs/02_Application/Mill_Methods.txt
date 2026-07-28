@@ -1,0 +1,131 @@
+================================================================================
+SEKCJA: 02_Application/Mill_Methods.txt
+Wygenerowano z acAPI.bas
+================================================================================
+
+PLIK: Application_CreateMillData_MillandTurnonly_
+================================================================================
+
+Application.CreateMillData (Mill and Turn only)
+ 
+ 
+
+ Application.CreateMillData (Mill and Turn only)
+
+ Create object representing Mill machining data. The properties of the object (eg SafeRapidLevel) may then be set before calling a method eg RoughFinish.
+
+ Syntax
+
+ App.CreateMillData
+
+ [Return] MillData MillData object
+
+================================================================================
+PLIK: Application_CreateMillStyle
+================================================================================
+
+Application.CreateMillStyle
+
+Application.CreateMillStyle
+
+Create object representing a Machining Style.
+
+Syntax
+
+App.CreateMillStyle
+
+[Return] MillStyle object representing the style.
+
+ 
+
+The example creates a style with a Rough/Finish operation.
+
+ 
+
+Public Sub CreateFinishPathStyle()
+
+    ' 
+ Setup the machining data
+
+    Dim 
+ MD As MillData
+
+    Set 
+ MD = App.CreateMillData
+
+    MD.XYCorners 
+ = acamCornersSTRAIGHT
+
+    MD.SafeRapidLevel 
+ = 20
+
+    MD.RapidDownTo 
+ = 1
+
+    MD.FinalDepth 
+ = -10
+
+    
+
+    MD.SpindleSpeed 
+ = 123
+
+    MD.DownFeed 
+ = 456
+
+    MD.CutFeed 
+ = 789
+
+    MD.ProcessType2 
+ = acamProcessROUGH_FINISH
+
+    
+
+    Dim 
+ MT As MillTool
+
+    Set 
+ MT = App.SelectTool(App.LicomdatPath + "licomdat\mtools.alp\Flat 
+ - 10mm.amt")
+
+    Dim 
+ LD As LeadData
+
+    Set 
+ LD = App.CreateLeadData
+
+    LD.LeadIn 
+ = acamLeadLINE
+
+    LD.LeadOut 
+ = acamLeadARC
+
+    LD.LengthIn 
+ = 10
+
+    LD.LengthOut 
+ = 5
+
+    LD.Radius 
+ = 10
+
+    LD.Angle 
+ = 90
+
+    Dim 
+ S As MillStyle
+
+    Set 
+ S = App.CreateMillStyle
+
+    S.AddOp 
+ MD, MT, LD
+
+    S.SaveAs 
+ App.LicomdirPath + "licomdir\styles\api1.amy"
+
+End Sub
+
+================================================================================
+
+

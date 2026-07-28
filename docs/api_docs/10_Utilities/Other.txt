@@ -1,0 +1,8689 @@
+================================================================================
+SEKCJA: 10_Utilities/Other.txt
+Wygenerowano z acAPI.bas
+================================================================================
+
+PLIK: Application.SetProcessAffinityMask
+================================================================================
+
+Application.SetProcessAffinityMask
+
+Application.SetProcessAffinityMask
+
+Set which processor should be used, eg SetProcessAffinityMask(1) 
+ to use just the first one.
+
+Syntax
+
+App.SetProcessAffinityMask (ProcessAffinityMask)
+
+long  ProcessAffinityMask The affinity mask 
+ for the threads of the process
+
+Remarks
+
+Some legacy programs have problems running on multi-core 
+ machines when communicating with Alphacam using COM. Restricting Alphacam 
+ to run on only the first cpu can help.
+
+(Only use this call if you know what you are doing, 
+ and have read the Microsoft documentation on this function!)
+
+================================================================================
+PLIK: Application_Authorise
+================================================================================
+
+Application.Authorise
+ 
+ 
+
+ Application.Authorise
+
+ Check authorisation for an extra-cost option.
+
+ Syntax
+
+ App.Authorise
+
+ [Return] Boolean True if OK, False to terminate macro.
+
+================================================================================
+PLIK: Application_AuthoriseModeless
+================================================================================
+
+Application.AuthoriseModeless
+ 
+ 
+
+ Application.AuthoriseModeless
+
+ Check authorisation for an extra-cost option which displays a modeless dialog box (The Authorise method will fail in that case) .
+
+ Syntax
+
+ App.AuthoriseModeless (FileName)
+
+ String FileName Full path name of add-in
+
+ [Return] Boolean True if OK, False to terminate macro.
+
+================================================================================
+PLIK: Application_CreateThreadDefinition_Turnonly_
+================================================================================
+
+Application.CreateThreadDefinition (Turn only)
+ 
+ 
+
+ Application.CreateThreadDefinition (Turn only)
+
+ Create object representing the definition of a thread. The properties of the object may then be set before calling SaveAs to save it to disk.
+
+ Syntax
+
+ App.CreateThreadDefinition
+
+ [Return] ThreadDefinition ThreadDefinition object
+
+================================================================================
+PLIK: Application_GetAlphaCamFileName
+================================================================================
+
+Application.GetAlphaCamFileName
+
+Application.GetAlphaCamFileName
+
+Show the Windows File Open/Save dialog box, to ask the 
+ user for a file name for an AlphaCAM file in the default directory for 
+ that type of file.
+
+Syntax
+
+App.GetAlphaCamFileName(Title, Type, Action, FullName, 
+ FileName)
+
+String  Title Title for the dialog box
+
+AcamFileType Type one of: acamFileTypeDRAWING, 
+ acamFileTypeFONT,
+
+   acamFileTypeNC, acamFileTypePOST, 
+ acamFileTypeTOOL
+
+AcamFileAction Action acamFileActionOPEN or acamFileActionSAVE
+
+[Return] String  FullName Returned full 
+ path name of the selected file
+
+[Return] String  FileName Returned file 
+ name only
+
+[Return] Boolean   False if user cancelled
+
+================================================================================
+PLIK: Application_InputNcFile
+================================================================================
+
+Application.InputNcFile
+ 
+ 
+
+ Application.InputNcFile
+
+ Input Nc file.
+
+ Syntax
+
+ App.InputNcFile (Name, Clear, AsToolpaths, LineByLine, UseM06)
+
+ String  Name  Full path name of file to open
+
+ boolean Clear  True to clear memory before reading file
+
+ boolean AsToolpaths True to input as tool paths, False for geometries
+
+ boolean LineByLine True to pause after each line
+
+ boolean UseM06  True to use M06 for tool change, False to use T
+
+================================================================================
+PLIK: Application_LoadAddIn
+================================================================================
+
+Application.LoadAddIn
+
+Application.LoadAddIn
+
+Load an add-in given full file name including path and 
+ extension.
+
+Syntax
+
+App.LoadAddIn (FileName)
+
+String  Name Full path name of AlphaCAM add-in 
+ to open
+
+================================================================================
+PLIK: Application_New
+================================================================================
+
+Application.New
+ 
+ 
+
+ Application.New
+
+ New drawing - clear all memory.
+
+================================================================================
+PLIK: Application_OpenAnvilFile
+================================================================================
+
+Application.OpenAnvilFile
+ 
+ 
+
+ Application.OpenAnvilFile
+
+ Open Anvil file.
+
+ Syntax
+
+ App.OpenAnvilFile (Name, Clear)
+
+ String  Name Full path name of file to open
+
+ boolean Clear True to clear memory before reading file
+
+ Remarks
+
+ See CadInputSettings.
+
+================================================================================
+PLIK: Application_OpenCadlFile
+================================================================================
+
+Application.OpenCadlFile
+ 
+ 
+
+ Application.OpenCadlFile
+
+ Open CADL file.
+
+ Syntax
+
+ App.OpenCadlFile (Name, Clear)
+
+ String  Name Full path name of file to open
+
+ boolean Clear True to clear memory before reading file
+
+ Remarks
+
+ See CadInputSettings.
+
+================================================================================
+PLIK: Application_OpenDxfFile
+================================================================================
+
+Application.OpenDxfFile
+ 
+ 
+
+ Application.OpenDxfFile
+
+ Open DXF or DWG file.
+
+ Syntax
+
+ App.OpenDxfFile (Name, Clear)
+
+ String  Name Full path name of file to open
+
+ boolean Clear True to clear memory before reading file
+
+ Remarks
+
+ If the extension is DWG it will be read as an AutoCAD DWG file, otherwise it will be read as an ASCII DXF file.
+
+ See CadInputSettings.
+
+================================================================================
+PLIK: Application_OpenExternalFile
+================================================================================
+
+Application.OpenExternalFile
+ 
+ 
+
+ Application.OpenExternalFile
+
+ Open a file using an import function in an Add-In.
+
+ Syntax
+
+ App.OpenExternalFile (Name, Type, Clear)
+
+ String  Name  Full path name of file to open
+
+ String Type  String giving type of file, may be empty ("")
+
+ Boolean Clear  True to clear memory before reading file
+
+ Remarks
+
+ For example, if the "Parasolid Input" Add-In is loaded (Utils | Add-Ins | Parasolid Input), the following line will read a Parasolid file:
+
+ App.OpenExternalFile "C:\Cadfiles\Part.x_t", "Parasolid", True
+
+ If the Type is empty the extension will be used to determine the import function to use. If the Type is not empty it will be used to find the import function, so any extension can be used.
+
+ See Frame.RegisterImportFunction
+
+================================================================================
+PLIK: Application_OpenIgesFile
+================================================================================
+
+Application.OpenIgesFile
+ 
+ 
+
+ Application.OpenIgesFile
+
+ Open IGES file.
+
+ Syntax
+
+ App.OpenIgesFile (Name, Clear, TransType)
+
+ String  Name  Full path name of file to open
+
+ boolean Clear  True to clear memory before reading file
+
+ long TransType Translator to use, see remarks
+
+ Remarks
+
+ TransType is one of the following to choose the translator option:
+
+ acamIgesSTD (= 0) Standard
+
+ acamIgesADV (= 1) Advanced with no validate
+
+ acamIgesVAL (= 2) Advanced with validate
+
+ acamIgesASK (= -1) Show dialog box
+
+ See CadInputSettings.
+
+================================================================================
+PLIK: Application_OpenStepFile
+================================================================================
+
+Application.OpenStepFile
+
+Application.OpenStepFile
+
+Open STEP file, as surfaces. See OpenStepFileEx.
+
+Syntax
+
+App.OpenStepFile (Name, Clear)
+
+String  Name Full path name of file to open
+
+boolean Clear True to clear memory before 
+ reading file
+
+================================================================================
+PLIK: Application_OpenStepFileEx
+================================================================================
+
+Application.OpenStepFileEx
+ 
+ 
+
+ Application.OpenStepFileEx
+
+ Open STEP file, as OpenStepFile but with translator option.
+
+ Syntax
+
+ App.OpenStepFileEx (Name, Clear, TransType)
+
+ String  Name Full path name of file to open
+
+ boolean Clear True to clear memory before reading file
+
+ typeAcamStepTranslator TransType Translator to use, see remarks
+
+ Remarks
+
+ TransType is one of the following to choose the translator option:
+
+ acamStepSURFACES (= 0) Surfaces
+
+ acamStepSOLID (= 1) Solid Model
+
+ acamStepASK (= -1) Show dialog box
+
+================================================================================
+PLIK: Application_OpenStlFile
+================================================================================
+
+Application.OpenStlFile
+ 
+ 
+
+ Application.OpenStlFile
+
+ Open STL file.
+
+ Syntax
+
+ App.OpenStlFile (Name, Clear)
+
+ String  Name Full path name of file to open
+
+ boolean Clear True to clear memory before reading file
+
+================================================================================
+PLIK: Application_OpenTempDxfFile
+================================================================================
+
+Application.OpenTempDxfFile
+ 
+ 
+
+ Application.OpenTempDxfFile
+
+ Open DXF or DWG file into a temporary drawing, which will not be displayed.
+
+ Syntax
+
+ App.OpenTempDxfFile (Name)
+
+ String  Name Full path name of file to open
+
+ [Return] Drawing  Drawing object representing the drawing.
+
+ Remarks
+
+ This can be used to open a drawing that is not to be displayed, and to copy geometries to the main drawing.
+
+ The example opens a drawing and copies circles from it to the main drawing.
+
+ Public Sub TestOpenTempDxf()
+
+ Dim Drw1 As Drawing 
+
+ Dim Drw2 As Drawing 
+
+  
+
+ Set Drw1 = App.ActiveDrawing 
+
+  
+
+ Set Drw2 = App.OpenTempDxfFile("G:\cadfiles\dxftut.dxf") 
+
+  
+
+ Dim P As Path, P2 As Path 
+
+ For Each P In Drw2.Geometries 
+
+ Dim CP As CircleProperties 
+
+ Set CP = P.GetCircleProperties 
+
+ If Not (CP Is Nothing) Then 
+
+ ' Copy circle to main drawing 
+
+ Set P2 = P.CopyTemporary 
+
+ P2.StoreTemporary 
+
+ End If 
+
+ Next P 
+
+ Drw1.ZoomAll 
+
+ End Sub
+
+================================================================================
+PLIK: Application_OpenVBAProject
+================================================================================
+
+Application.OpenVBAProject
+
+Application.OpenVBAProject
+
+Open VBA project for editing.
+
+Syntax
+
+App.OpenVBAProject (Name)
+
+String  Name Full path name of AlphaCAM VBA 
+ project
+
+================================================================================
+PLIK: Application_OpenVdaFile
+================================================================================
+
+Application.OpenVdaFile
+ 
+ 
+
+ Application.OpenVdaFile
+
+ Open VDA file.
+
+ Syntax
+
+ App.OpenVdaFile (Name, Clear)
+
+ String  Name Full path name of file to open
+
+ boolean Clear True to clear memory before reading file
+
+================================================================================
+PLIK: Application_Quit
+================================================================================
+
+Application.Quit
+ 
+ 
+
+ Application.Quit
+
+ Exits the Application.
+
+================================================================================
+PLIK: Application_Run
+================================================================================
+
+Application.Run
+ 
+ 
+
+ Application.Run
+
+ Run a VBA Macro.
+
+ Syntax
+
+ App.Run (MacroName, [Parm1], [Parm2], [Parm3], [Parm4], [Parm5], [Parm6], [Parm7], [Parm8])
+
+ String MacroName The name of the macro, Project.Module.Macro
+
+ Variant Parm1 - Parm8 Optional parameters
+
+ [Return] Variant  Return value from macro.
+
+ Remarks
+
+ This is particularly useful to run a VBA macro from an external program, because a VBA macro will run much more quickly than an external program if it makes a lot of AlphaCAM method or property calls.
+
+ The macro must be in a VBA project that is currently loaded.
+
+================================================================================
+PLIK: Application_RunParametricMacro
+================================================================================
+
+Application.RunParametricMacro
+ 
+ 
+
+ Application.RunParametricMacro
+
+ Run an AlphaCAM Parametric Macro. (Not a VBA Macro.)
+
+ Syntax
+
+ App.RunParametricMacro (MacroName)
+
+ String MacroName The full path name of the macro
+
+================================================================================
+PLIK: Application_SetUndoCommandName
+================================================================================
+
+Application.SetUndoCommandName
+ 
+ 
+
+ Application.SetUndoCommandName
+
+ Set the text that will appear in the confirmation message box when the Undo command is used.
+
+ Syntax
+
+ App.SetUndoCommandName (Name)
+
+ String Name Command Name
+
+ Remarks
+
+ See the example for SetUndoPoint.
+
+================================================================================
+PLIK: Application_ShellAndWait
+================================================================================
+
+Application.ShellAndWait
+ 
+ 
+
+ Application.ShellAndWait
+
+ Run an external program and wait for it to exit. AlphaCAM will do nothing, and will not respond to user input, until the external program exits.
+
+ Syntax
+
+ App.ShellAndWait (Name)
+
+ String  Name Full path name of program to run, or just program name if program is in a directory on the path.
+
+ Example
+
+ The example will run Windows Notepad, which is usually in the C:\Windows directory which is on the path.
+
+ App.ShellAndWait "notepad c:\temp\open.txt"
+
+================================================================================
+PLIK: ApplicationObject
+================================================================================
+
+Application Object
+
+Application Object
+
+The top-level object, contains methods to open AlphaCAM 
+ and CAD files, and create tools and machining data
+
+More:
+
+Application 
+ Properties
+
+================================================================================
+PLIK: Caption_152
+================================================================================
+
+Caption.152
+
+(AcamProcessType) Type of machining process (read-only)
+
+Values are:
+
+acamProcessROUGH_FINISH = 1
+
+acamProcessCONTOUR_POCKET = 2
+
+acamProcessMANUAL = 3
+
+acamProcessSPIRAL_POCKET = 4
+
+acamProcessLINEAR_POCKET = 5
+
+acamProcessENGRAVE = 10
+
+acamProcessMACHINE_SURFACE = 11
+
+acamProcessMACHINE_POLYLINE = 12
+
+acamProcessDRILL = 21
+
+acamProcessPECK = 22
+
+acamProcessTAP = 23
+
+acamProcessBORE = 24
+
+================================================================================
+PLIK: Clamp.Move
+================================================================================
+
+Clamp.Move
+
+Clamp.Move
+
+Add a move-clamp operation.
+
+Syntax
+
+Cl.Move (X, Y, Z, Angle)
+
+double X X coordinate of new position for 
+ reference point
+
+double Y Y coordinate of new position for reference 
+ point
+
+double Z Z coordinate of new position for reference 
+ point
+
+double Angle Angle to rotate about reference point, 
+ after move
+
+See also
+
+Clamp.Move2
+
+================================================================================
+PLIK: Clamp.Move2
+================================================================================
+
+Clamp.Move2
+
+Clamp.Move2
+
+Add a move-clamp operation, as Clamp.Move except the 
+ parameters are optional.
+
+Syntax
+
+Cl.Move2 (X, Y, Z, Angle)
+
+double X X coordinate of new position for 
+ reference point
+
+double Y Y coordinate of new position for reference 
+ point
+
+double Z Z coordinate of new position for reference 
+ point
+
+double Angle Angle to rotate about reference point, 
+ after move
+
+Example
+
+Cl.Move2 , , 100
+
+will move the clamp by 100 in Z only.
+
+================================================================================
+PLIK: Clamp_Object
+================================================================================
+
+Clamp Object
+
+Clamp Object
+
+An object representing a (maybe moveable) clamp or fixture.
+
+A clamp/fixture can be an extruded or rotated geometry, 
+ or a solid. Use the GeometryPath and GeometrySolidPart properties to get 
+ the path or solid. (One will be empty)
+
+================================================================================
+PLIK: Clamp_Properties
+================================================================================
+
+Clamp Properties
+
+Clamp Properties
+
+BasePointX, BasePointY, BasePointZ - (double) XYZ coordinates 
+ of clamp reference point
+
+GeometryPath - (Path) Path for this clamp, will be empty 
+ if clamp is a Solid Part (read-only)
+
+GeometrySolidPart - (SolidPart) Solid Part for this 
+ clamp, will be empty if clamp is a Path (read-only)
+
+Layer - (Layer) This clamp's layer (read-only)
+
+MaxX, MaxY, MaxZ, MinX, MinY, MinZ - (double) Extents 
+ of this clamp (read-only)
+
+Name - (String) Clamp name
+
+Number - (long) Clamp ID Number (read-only)
+
+Parent - (Clamp) This clamp's parent, will be empty 
+ if clamp does not have one (read-only)
+
+Visible - (Boolean) True to show the clamp, false to 
+ hide it
+
+================================================================================
+PLIK: Copyright
+================================================================================
+
+Copyright
+ 
+ 
+
+ Copyright
+
+ Licom AlphaCAM software for off-line programming NC machines has been created and developed, and is exclusively owned, by Licom Systems Limited of Coventry, England. Licom Systems own the copyright to the source code that comprises the AlphaCAM CAD/CAM system, and any purchaser of any AlphaCAM module buys a licence to use the software, and not the software itself. Anyone that has purchased AlphaCAM (ie a licence to use AlphaCAM) may pass on or sell the licence to another user without informing Licom Systems that they have done so, but they may not under any circumstances make any warranties about performance, support or upgrades to the system. All end-users of any AlphaCAM modules have permission to make as many copies of the relevant manuals as they wish.
+
+ The Licom AlphaCAM family of systems is modular :-
+
+ 3D Mill, 3D Router, Mill, Router, Lathe, Laser, Flame, Wire, Punch, Punch/Plasma, Diecut and Marble are CAD/CAM Systems for the machines implied by the name. All modules (except 3D Mill) are available as Basic, Standard or Advanced levels. All AlphaCAM modules require Windows 95/98 or Windows NT / 2000 / XP. Windows is a Trade Mark of Microsoft Corporation.
+
+================================================================================
+PLIK: Dimension_CreateAligned
+================================================================================
+
+Dimension.CreateAligned
+ 
+ 
+
+ Dimension.CreateAligned
+
+ Create an aligned dimension for two points.
+
+ Syntax
+
+ dim.CreateAligned (X1, Y1, X2, Y2, XPosition, YPosition, XControl, YControl)
+
+ double X1 X coordinate of first point
+
+ double Y1 Y coordinate of first point
+
+ double X2 X coordinate of second point
+
+ double Y2 Y coordinate of second point
+
+ double XPosition X coordinate of dimension position
+
+ double YPosition Y coordinate of dimension position
+
+ double XControl X coordinate of control point
+
+ double YControl Y coordinate of control point
+
+ [Return] Paths  Returned Paths object
+
+ Remarks
+
+ The control point is used if the dimension position is to be outside the leader lines and the text is not aligned. The line parallel to the line between the two points will go through the control point, which should be between the leader lines. If the dimension position is between the leader lines the control point can be given any value eg (0, 0)
+
+ The example will draw a line and dimension it:
+
+ Public Sub Aligned2Points()
+
+ With App.ActiveDrawing 
+
+ .Create2DLine 50, 20, 200, 70 
+
+ .Font = "AStencil" 
+
+ With .Dimension 
+
+ .TextPosition = acamDimCENTER 
+
+ .TextAlignment = acamDimHORIZONTAL 
+
+ .TextHeight = 6 
+
+ .ArrowLength = 4 
+
+ .CreateAligned 50, 20, 200, 70, 300, 110, 150, 75 
+
+ End With 
+
+ .ZoomAll 
+
+ End With 
+
+ End Sub
+
+================================================================================
+PLIK: Dimension_CreateAlignedArc
+================================================================================
+
+Dimension.CreateAlignedArc
+ 
+ 
+
+ Dimension.CreateAlignedArc
+
+ Create an aligned dimension for the distance along the arc between the end points.
+
+ Syntax
+
+ dim.CreateAlignedArc (Element, XPosition, YPosition, XControl, YControl)
+
+ Element Element The Arc element
+
+ double XPosition X coordinate of dimension position
+
+ double YPosition Y coordinate of dimension position
+
+ double XControl X coordinate of control point
+
+ double YControl Y coordinate of control point
+
+ [Return] Paths  Returned Paths object
+
+ Remarks
+
+ The control point is used if the dimension position is to be outside the leader lines. The dimension arc will go through the control point, which should be between the leader lines. If the dimension position is between the leader lines the control point can be given any value eg (0, 0)
+
+ The example will draw an arc and dimension it:
+
+ Public Sub AlignedArc()
+
+ With App.ActiveDrawing 
+
+ Dim G2 As Geo2D 
+
+ Set G2 = .Create2DGeometry(-50, 10) 
+
+ G2.AddArc2Point 50, 50, 150, 20 
+
+ Dim P As Path, E As Element 
+
+ Set P = G2.Finish 
+
+ Set E = P.Elements(1) 
+
+ .Font = "AStencil" 
+
+ With .Dimension 
+
+ .TextPosition = acamDimCENTER 
+
+ .TextAlignment = acamDimALIGNED 
+
+ .TextHeight = 6 
+
+ .ArrowLength = 4 
+
+ .Gap = 1 
+
+ .CreateAlignedArc E, 50, 0, 0, 0 
+
+ End With 
+
+ .ZoomAll 
+
+ End With 
+
+ End Sub
+
+================================================================================
+PLIK: Dimension_CreateAngle
+================================================================================
+
+Dimension.CreateAngle
+ 
+ 
+
+ Dimension.CreateAngle
+
+ Create a dimension for the angle between two lines.
+
+ Syntax
+
+ dim.CreateAngle (Element1, Element2, XPosition, YPosition, XControl, YControl)
+
+ Element Element1 First line element
+
+ Element Element2 Second line element
+
+ double XPosition X coordinate of dimension position
+
+ double YPosition Y coordinate of dimension position
+
+ double XControl X coordinate of control point
+
+ double YControl Y coordinate of control point
+
+ [Return] Paths  Returned Paths object
+
+ Remarks
+
+ The control point is used if the dimension position is to be outside the leader lines. The dimension arc will go through the control point, which should be between the leader lines. If the dimension position is between the leader lines the control point can be given any value eg (0, 0)
+
+ The example will draw two lines and dimension the angle between them:
+
+ Public Sub Angle()
+
+ With App.ActiveDrawing 
+
+ Dim P1 As Path, P2 As Path 
+
+ Set P1 = .Create2DLine(0, 0, 50, 0) 
+
+ Set P2 = .Create2DLine(0, 0, 10, 60) 
+
+ .Font = "AStencil" 
+
+ With .Dimension 
+
+ .TextPosition = acamDimCENTER 
+
+ .TextAlignment = acamDimALIGNED 
+
+ .TextHeight = 6 
+
+ .ArrowLength = 4 
+
+ .Gap = 1 
+
+ .CreateAngle P1.Elements(1), P2.Elements(1), -60, 45, 30, 30 
+
+ End With 
+
+ .ZoomAll 
+
+ End With 
+
+ End Sub
+
+================================================================================
+PLIK: Dimension_CreateDiameter
+================================================================================
+
+Dimension.CreateDiameter
+ 
+ 
+
+ Dimension.CreateDiameter
+
+ Create a diameter dimension for the given arc or circle.
+
+ Syntax
+
+ dim.CreateDiameter (Element, XPosition, YPosition, XControl, YControl)
+
+ Element Element The Arc element
+
+ double XPosition X coordinate of dimension position
+
+ double YPosition Y coordinate of dimension position
+
+ double XControl X coordinate of control point
+
+ double YControl Y coordinate of control point
+
+ [Return] Paths  Returned Paths object
+
+ Remarks
+
+ The control point is used if the dimension position is to be outside the circle. The dimension line will go through the control point, which should be on or inside the circle, between the centre of the circle and the point on the circumference where the extended dimension line intersects it. If the dimension position is inside the circle the control point can be given any value eg (0, 0)
+
+ The example will draw a circle and dimension the diameter:
+
+ Public Sub Diameter()
+
+ With App.ActiveDrawing 
+
+ Dim P As Path 
+
+ Set P = .CreateCircle(100, 0, 0) 
+
+ .Font = "AStencil" 
+
+ With .Dimension 
+
+ .TextAlignment = acamDimALIGNED 
+
+ .TextPosition = acamDimABOVE_LINE 
+
+ .CreateDiameter P.Elements(1), -100, -60, -10, -10 
+
+ End With 
+
+ .ZoomAll 
+
+ End With 
+
+ End Sub
+
+================================================================================
+PLIK: Dimension_CreateHorizontal
+================================================================================
+
+Dimension.CreateHorizontal
+ 
+ 
+
+ Dimension.CreateHorizontal
+
+ Create a horizontal dimension for two points.
+
+ Syntax
+
+ dim.CreateHorizontal (X1, Y1, X2, Y2, XPosition, YPosition)
+
+ double X1 X coordinate of first point
+
+ double Y1 Y coordinate of first point
+
+ double X2 X coordinate of second point
+
+ double Y2 Y coordinate of second point
+
+ double XPosition X coordinate of dimension position
+
+ double YPosition Y coordinate of dimension position
+
+ [Return] Paths  Returned Paths object
+
+ Example 1: draw a line and dimension it:
+
+ Public Sub HorizontalLine()
+
+ Dim Drw As Drawing 
+
+ Set Drw = App.ActiveDrawing 
+
+ Dim P As Path 
+
+ Set P = Drw.Create2DLine(-50, 10, 50, 10) 
+
+ Dim E As Element 
+
+ Set E = P.Elements(1) 
+
+ With Drw.Dimension 
+
+ .TextHeight = 5 
+
+ .ArrowLength = 3 
+
+ .TextPosition = acamDimABOVE_LINE 
+
+ .CreateHorizontal E.StartXL, E.StartYL, E.EndXL, E.EndYL, _ 
+
+ (E.StartXL + E.EndXL) * 0.5, E.EndYL + 20 
+
+ End With 
+
+ Drw.ZoomAll 
+
+ End Sub
+
+ Example 2: draw two circles and dimension between their centres. Note the use of MarkAsCenter1 and MarkAsCenter2 to draw a cross at the circle centres:
+
+ Public Sub Horizontal2Circles()
+
+ Dim Drw As Drawing 
+
+ Set Drw = App.ActiveDrawing 
+
+ Dim P1 As Path, P2 As Path 
+
+ Set P1 = Drw.CreateCircle(50, 0, 0) 
+
+ Set P2 = Drw.CreateCircle(50, 100, 0) 
+
+ With Drw.Dimension 
+
+ .TextHeight = 5 
+
+ .ArrowLength = 3 
+
+ .TextPosition = acamDimABOVE_LINE 
+
+ .MarkAsCenter1 = True 
+
+ .MarkAsCenter2 = True 
+
+ .CreateHorizontal 0, 0, 100, 0, 50, 50 
+
+ End With 
+
+ Drw.ZoomAll 
+
+ End Sub
+
+================================================================================
+PLIK: Dimension_CreateHorizontal2
+================================================================================
+
+Dimension.CreateHorizontal2
+
+Dimension.CreateHorizontal2
+
+Create a horizontal dimension for two points, as CreateHorizontal but with added 
+ control over the positioning of the dimension using XControl and YControl
+
+Syntax
+
+dim.CreateHorizontal2 (X1, Y1, X2, Y2, XPosition, 
+ YPosition, XControl, YControl)
+
+double X1 X coordinate of first point
+
+double Y1 Y coordinate of first point
+
+double X2 X coordinate of second point
+
+double Y2 Y coordinate of second point
+
+double XPosition X coordinate of dimension 
+ position
+
+double YPosition Y coordinate of dimension 
+ position
+
+double XControl X coordinate of control point
+
+double YControl Y coordinate of control point
+
+[Return] Paths  Returned Paths object
+
+================================================================================
+PLIK: Dimension_CreateMaxXX
+================================================================================
+
+Dimension.CreateMaxXX
+ 
+ 
+
+ Dimension.CreateMaxXX
+
+ Create a horizontal dimension for the maximum and minimum X coordinates of a collection of geometries.
+
+ Syntax
+
+ dim.CreateMaxXX (Paths, XPosition, YPosition)
+
+ Paths Paths  The geometries
+
+ double XPosition X coordinate of dimension position
+
+ double YPosition Y coordinate of dimension position
+
+ [Return] Paths  Returned Paths object
+
+ The example asks the user to select some geometries and draws a Max XX dimension:
+
+ Public Sub MaxXX()
+
+ With App.ActiveDrawing 
+
+ Dim PS As Paths 
+
+ Set PS = .UserSelectMultiGeosCollection("MaxXX Dimension: Select Geometries", 0) 
+
+ If PS.Count = 0 Then Exit Sub 
+
+ Dim X1 As Double, Y1 As Double, X2 As Double, Y2 As Double 
+
+ PS.GetExtentL X1, Y1, X2, Y2 
+
+ .Font = "AStencil" 
+
+ With .Dimension 
+
+ .TextPosition = acamDimCENTER 
+
+ .TextAlignment = acamDimALIGNED 
+
+ .CreateMaxXX PS, (X1 + X2) * 0.5, Y2 + 50 
+
+ End With 
+
+ .ZoomAll 
+
+ End With 
+
+ End Sub
+
+================================================================================
+PLIK: Dimension_CreateMaxYY
+================================================================================
+
+Dimension.CreateMaxYY
+ 
+ 
+
+ Dimension.CreateMaxYY
+
+ Create a vertical dimension for the maximum and minimum Y coordinates of a collection of geometries.
+
+ Syntax
+
+ dim.CreateMaxYY (Paths, XPosition, YPosition, XControl, YControl)
+
+ Paths Paths  The geometries
+
+ double XPosition X coordinate of dimension position
+
+ double YPosition Y coordinate of dimension position
+
+ double XControl X coordinate of control point
+
+ double YControl Y coordinate of control point
+
+ [Return] Paths  Returned Paths object
+
+ Remarks
+
+ The control point is used if the dimension position is to be outside the leader lines and the text is not aligned. The vertical line will go through the control point, which should be between the leader lines. If the dimension position is between the leader lines the control point can be given any value eg (0, 0)
+
+ The example asks the user to select some geometries and draws a Max YY dimension:
+
+ Public Sub MaxYY()
+
+ With App.ActiveDrawing 
+
+ Dim PS As Paths 
+
+ Set PS = .UserSelectMultiGeosCollection("MaxYY Dimension: Select Geometries", 0) 
+
+ .Font = "AStencil" 
+
+ With .Dimension 
+
+ .TextPosition = acamDimCENTER 
+
+ .TextAlignment = acamDimHORIZONTAL 
+
+ .TextHeight = 6 
+
+ .ArrowLength = 4 
+
+ .Gap = 1 
+
+ .TrailingZeroes = False 
+
+ .DecimalPlacesLinear = 2 
+
+ .CreateMaxYY PS, 70, 90, 30, 30 
+
+ End With 
+
+ .ZoomAll 
+
+ End With 
+
+ End Sub
+
+================================================================================
+PLIK: Dimension_CreateRadius
+================================================================================
+
+Dimension.CreateRadius
+ 
+ 
+
+ Dimension.CreateRadius
+
+ Create a radius dimension for the given arc or circle.
+
+ Syntax
+
+ dim.CreateRadius (Element, XPosition, YPosition, XControl, YControl)
+
+ Element Element The Arc element
+
+ double XPosition X coordinate of dimension position
+
+ double YPosition Y coordinate of dimension position
+
+ double XControl X coordinate of control point
+
+ double YControl Y coordinate of control point
+
+ [Return] Paths  Returned Paths object
+
+ Remarks
+
+ The control point is used if the dimension position is to be outside the circle. The dimension line will go through the control point, which should be on or inside the circle, between the centre of the circle and the point on the circumference where the extended dimension line intersects it. If the dimension position is inside the circle the control point can be given any value eg (0, 0)
+
+ The example will draw a circle and dimension the radius:
+
+ Public Sub Radius()
+
+ With App.ActiveDrawing 
+
+ Dim P As Path 
+
+ Dim E As Element 
+
+ Set P = .CreateCircle(100, 0, 0) 
+
+ Set E = P.Elements(1) 
+
+ .Font = "AStencil" 
+
+ With .Dimension 
+
+ .TextAlignment = acamDimALIGNED 
+
+ .TextPosition = acamDimABOVE_LINE 
+
+ .MarkRadsWithR = True 
+
+ .CreateRadius E, E.CenterXL + E.Radius * 1.3, E.CenterYL + E.Radius * 0.5, 10, 5 
+
+ End With 
+
+ .ZoomAll 
+
+ End With 
+
+ End Sub
+
+================================================================================
+PLIK: Dimension_CreateVertical
+================================================================================
+
+Dimension.CreateVertical
+ 
+ 
+
+ Dimension.CreateVertical
+
+ Create a vertical dimension for two points.
+
+ Syntax
+
+ dim.CreateVertical (X1, Y1, X2, Y2, XPosition, YPosition)
+
+ double X1 X coordinate of first point
+
+ double Y1 Y coordinate of first point
+
+ double X2 X coordinate of second point
+
+ double Y2 Y coordinate of second point
+
+ double XPosition X coordinate of dimension position
+
+ double YPosition Y coordinate of dimension position
+
+ [Return] Paths  Returned Paths object
+
+ The example will draw a line and dimension it:
+
+ Public Sub Vertical2Points()
+
+ Dim Drw As Drawing 
+
+ Set Drw = App.ActiveDrawing 
+
+ Dim P As Path 
+
+ Set P = Drw.Create2DLine(0, 0, 0, 40) 
+
+ Dim E As Element 
+
+ Set E = P.Elements(1) 
+
+ With Drw.Dimension 
+
+ .TextHeight = 5 
+
+ .ArrowLength = 3 
+
+ .TextPosition = acamDimABOVE_LINE 
+
+ .CreateVertical E.StartXL, E.StartYL, E.EndXL, E.EndYL, _ 
+
+ E.StartXL - 30, (E.StartYL + E.EndYL) * 0.5 
+
+ End With 
+
+ Drw.ZoomAll 
+
+ End Sub
+
+================================================================================
+PLIK: Dimension_CreateXOrdinate
+================================================================================
+
+Dimension.CreateXOrdinate
+ 
+ 
+
+ Dimension.CreateXOrdinate
+
+ Create an X-Ordinate dimension.
+
+ Syntax
+
+ dim.CreateXOrdinate (X, YPickPoint, YPosition)
+
+ double X  X ordinate to be dimensioned
+
+ double YPickPoint Y coordinate of start of dimension line
+
+ double YPosition Y coordinate of dimension position
+
+ [Return] Paths  Returned Paths object
+
+ Remarks
+
+ SetOrdinateReference should be called first to set the reference coordinate.
+
+ Example:
+
+ Public Sub XOrdinate()
+
+ With App.ActiveDrawing 
+
+ With .Dimension 
+
+ .SetOrdinateReference 50, 150 
+
+ .CreateXOrdinate 0, 40, 100 
+
+ .CreateXOrdinate 100, 50, 100 
+
+ .CreateXOrdinate 120, 50, 100 
+
+ .CreateXOrdinate 140, 50, 100 
+
+ End With 
+
+ .ZoomAll 
+
+ End With 
+
+ End Sub
+
+================================================================================
+PLIK: Dimension_CreateYOrdinate
+================================================================================
+
+Dimension.CreateYOrdinate
+ 
+ 
+
+ Dimension.CreateYOrdinate
+
+ Create an Y-Ordinate dimension.
+
+ Syntax
+
+ dim.CreateYOrdinate (Y, XPickPoint, XPosition)
+
+ double Y  Y ordinate to be dimensioned
+
+ double XPickPoint X coordinate of start of dimension line
+
+ double XPosition X coordinate of dimension position
+
+ [Return] Paths  Returned Paths object
+
+ Remarks
+
+ SetOrdinateReference should be called first to set the reference coordinate.
+
+ Example:
+
+ Public Sub YOrdinate()
+
+ With App.ActiveDrawing 
+
+ With .Dimension 
+
+ .SetOrdinateReference 50, 50 
+
+ .CreateYOrdinate 0, 40, 100 
+
+ .CreateYOrdinate 50, 50, 100 
+
+ .CreateYOrdinate 100, 50, 100 
+
+ .CreateYOrdinate 120, 50, 100 
+
+ .CreateYOrdinate 140, 50, 100 
+
+ End With 
+
+ .ZoomAll 
+
+ End With 
+
+ End Sub
+
+================================================================================
+PLIK: Dimension_SetOrdinateReference
+================================================================================
+
+Dimension.SetOrdinateReference
+ 
+ 
+
+ Dimension.SetOrdinateReference
+
+ Set the reference point for subsequent X or Y-ordinate dimensions.
+
+ Syntax
+
+ dim.SetOrdinateReference (X, Y)
+
+ double X  X ordinate of reference point
+
+ double Y  Y ordinate of reference point
+
+ See Dimension.CreateXOrdinate and Dimension.CreateYOrdinate.
+
+================================================================================
+PLIK: Dimension_UpdateGUISettings
+================================================================================
+
+Dimension.UpdateGUISettings
+ 
+ 
+
+ Dimension.UpdateGUISettings
+
+ In Alphacam versions before V8, changing the settings in the API would change the GUI ones,
+ which was often not desired. This routine was added so it can still be done. After setting the properties of this object call this method to make the user-interface default to the same settings.
+
+ Syntax
+
+ dim.UpdateGUISettings
+
+================================================================================
+PLIK: DimensionObject
+================================================================================
+
+Dimension Object
+
+Dimension Object
+
+An object used to add dimensions to the drawing. It 
+ is accessed as a property of the Drawing. Its properties correspond to 
+ the settings in the General and Configure pages shown when the Dimension 
+ command is used in AlphaCAM. These should be set (or left at the defaults) 
+ and then one of the Create methods called to create a dimension.
+
+For example, the following draws a line and then draws 
+ a horizontal dimension for it:
+
+Public Sub Horizontal2Points()
+
+Dim Drw As Drawing 
+
+Set Drw = App.ActiveDrawing 
+
+Dim P As Path 
+
+Set P = Drw.Create2DLine(-50, 
+ 10, 50, 20) 
+
+Dim E As Element 
+
+Set E = P.Elements(1) 
+
+With Drw.Dimension 
+
+.TextHeight = 5 
+
+.ArrowLength = 3 
+
+.TextPosition = acamDimABOVE_LINE 
+
+.CreateHorizontal E.StartXL, 
+ E.StartYL, E.EndXL, E.EndYL, _ 
+
+(E.StartXL + E.EndXL) * 0.5, 
+ E.EndYL + 20 
+
+End With 
+
+Drw.ZoomAll 
+
+End Sub
+
+More:
+
+Dimension Properties
+
+================================================================================
+PLIK: DimensionProperties
+================================================================================
+
+Dimension Properties
+
+Dimension Properties
+
+ArrowLength - (float) Length of arrow head
+
+DecimalPlacesAngle - (short) Number of decimal places 
+ for Angle dimensions
+
+DecimalPlacesLinear - (short) Number of decimal places 
+ for linear dimensions
+
+Gap - (float) Gap between part and dimension line
+
+MarkAsCenter1 - (boolean) True to mark the first dimension 
+ point (eg in CreateVertical) or the only point (eg in CreatePoint) as 
+ the centre of a circle
+
+MarkAsCenter2 -(boolean) True to mark the second dimension 
+ point (eg in CreateVertical) as the centre of a circle
+
+MarkRadsWithR - (boolean) True to mark radius dimensions 
+ with R
+
+Text - (String) If not empty, text to use for dimension 
+ instead of measured value, equivalent to Text = Manual in General page
+
+TextAlignment - (AcamDimTextAlign) Text alignment, acamDimALIGNED 
+ or acamDimHORIZONTAL
+
+TextHeight - (float) Height of text
+
+TextPosition - (AcamDimTextPos) Text position, acamDimABOVE_LINE 
+ or acamDimCENTER
+
+ToleranceFormat - (AcamDimTolerance) Format for tolerance, 
+ acamDimTolNONE, acamDimTolMAX_MIN, acamDimTolMINUS_MINUS, acamDimTolPLUS_MINUS 
+ or acamDimTolPLUS_PLUS
+
+ToleranceLower - (float) Lower value for tolerance
+
+ToleranceUpper - (float) Upper value for tolerance
+
+TrailingZeroes - (boolean) True to show trailing zeroes
+
+================================================================================
+PLIK: ErrorHandling
+================================================================================
+
+Error Handling
+ 
+ 
+
+ Error Handling
+
+ Some AlphaCAM API methods will "Raise an Error" if they are unable to do the required action. "Raise an Error" means that the macro will stop and VBA will display a dialog box describing the error. (Other languages handle errors differently, see their documentation). For example, if the Application.SelectTool method is called with an invalid tool name, the dialog box will display the text "Error selecting tool". The user then has the option of ending the macro or debugging the code! This is reasonable while you are developing the macro. However, if the macro is to be distributed and used by other people, you should try to avoid these errors. You can trap the error with the On Error statement. The following routine shows how it could be handled. The statement On Error Resume Next suppresses the error dialog box for any errors raised in the remainder of the routine. The system object Err is checked to see if an error was raised. If an error is raised the user is asked to select a file name.
+
+ See the VBA Help for more information, eg "On Error statement". Many VBA statements will also raise an error, eg the Open statement.
+
+ Private Sub GetMillTool(Name As String) ' Name of tool, eg "Flat - 10mm", no folder or extension
+
+ ' Enable error handling 
+
+ On Error Resume Next 
+
+ ' Try to select given tool 
+
+ App.SelectTool App.LicomdatPath & "LICOMDAT\MTOOLS.ALP\" & Name & ".AMT" 
+
+ If Err.Number <> 0 Then 
+
+ ' Failed so ask user 
+
+ Err.Clear 
+
+ Dim F1 As String, F2 As String 
+
+ If Not App.GetAlphaCamFileName(Name & " not found: Select Tool", acamFileTypeTOOL, acamFileActionOPEN, F1, F2) Then 
+
+ End 
+
+ End If 
+
+ ' Select chosen tool 
+
+ App.SelectTool F1 
+
+ End If 
+
+ End Sub
+
+================================================================================
+PLIK: Example2_Helicalarc_
+================================================================================
+
+Example 2, Helical arc.
+ 
+ 
+
+ Example 2, Helical arc.
+
+ A single helical arc. Note that the Post Processor must use the Z value (eg post variable AZ) in the dollar numbers for arc.
+
+ Public Sub TestManualToolPath3DHelical()
+
+ App.New 
+
+ App.SelectTool App.LicomdatPath & "LICOMDAT\MTOOLS.ALP\User - Cone - 10mm x 45 deg.amt" 
+
+ Dim MD As MillData 
+
+ Set MD = App.CreateMillData 
+
+ MD.SafeRapidLevel = 50 
+
+ MD.RapidDownTo = 2 
+
+ MD.FinalDepth = 0 
+
+ MD.Attribute("LicomUKDMBOperationName") = "3D HELICAL PATH" 
+
+  
+
+ Dim MTP As MillManualToolPath 
+
+ Set MTP = MD.ManualToolPath(50, 25, 0) 
+
+  
+
+ MTP.Add3DArcCenterIncludedAngle 75, 75, 270, -10 
+
+  
+
+ Dim PS As Paths 
+
+ Set PS = MTP.Finish 
+
+  
+
+ Dim Drw As Drawing 
+
+ Set Drw = App.ActiveDrawing 
+
+ Drw.Options.ShowRapids = True 
+
+ Drw.Options.ShowTools = True 
+
+ Drw.ThreeDViews = True 
+
+ End Sub
+
+================================================================================
+PLIK: Example3_Facingarectangle
+================================================================================
+
+Example 3, Facing a rectangle
+ 
+ 
+
+ Example 3, Facing a rectangle
+
+ Shows how the 3D methods can be used to give control over the rapids between paths. If 2D methods were used the tool would rapid up to the safe rapid level between each pass.
+
+ Public Sub TestManualToolPathFace()
+
+ Const RapidLevel As Double = 25 
+
+ Const ZDepth As Double = -2 
+
+ Const X1 As Double = 0 
+
+ Const Y1 As Double = 0 
+
+ Const X2 As Double = 100 
+
+ Const Y2 As Double = 75 
+
+ Dim X As Double, Y As Double 
+
+ Dim XMargin As Double, YStep As Double 
+
+ Dim Direction As Boolean, First As Boolean 
+
+  
+
+ App.New 
+
+  
+
+ Dim Drw As Drawing 
+
+ Set Drw = App.ActiveDrawing 
+
+  
+
+ Drw.CreateRectangle X1, Y1, X2, Y2 
+
+  
+
+ Dim Tool As MillTool 
+
+ Set Tool = App.SelectTool(App.LicomdatPath & "LICOMDAT\MTOOLS.ALP\Flat - 20mm.amt") 
+
+ XMargin = Tool.Diameter * 0.6 
+
+ YStep = Tool.Diameter * 0.8 
+
+  
+
+ Dim MD As MillData 
+
+ Set MD = App.CreateMillData 
+
+ MD.SafeRapidLevel = RapidLevel 
+
+ MD.RapidDownTo = ZDepth 
+
+ MD.FinalDepth = ZDepth 
+
+ MD.Attribute("LicomUKDMBOperationName") = "FACING" 
+
+  
+
+ Dim MTP As MillManualToolPath 
+
+ Set MTP = MD.ManualToolPath(X1, Y1, ZDepth) 
+
+  
+
+ First = True 
+
+ Direction = True 
+
+ For Y = Y1 To Y2 + YStep * 0.5 Step YStep 
+
+ If Direction Then 
+
+ If Not First Then 
+
+ MTP.Add3DRapid X1 - XMargin, Y, ZDepth 
+
+ End If 
+
+ MTP.Add3DLine X2 + XMargin, Y, ZDepth 
+
+ Else 
+
+ If Not First Then 
+
+ MTP.Add3DRapid X2 + XMargin, Y, ZDepth 
+
+ End If 
+
+ MTP.Add3DLine X1 - XMargin, Y, ZDepth 
+
+ End If 
+
+ First = False 
+
+ Direction = Not Direction 
+
+ Next Y 
+
+  
+
+ Dim PS As Paths 
+
+ Set PS = MTP.Finish 
+
+  
+
+ Drw.Options.ShowRapids = True 
+
+ Drw.ThreeDViews = True 
+
+  
+
+ ' MsgBox PS.Count & IIf(PS.Count > 1, " Paths", " Path")
+
+ End Sub
+
+================================================================================
+PLIK: Geo2D_AddArcCenterIncludedAngle
+================================================================================
+
+Geo2D.AddArcCenterIncludedAngle
+ 
+ 
+
+ Geo2D.AddArcCenterIncludedAngle
+
+ Add an arc to 2D geometry, start point is end point of last line or arc, or point passed to Drawing.Create2DGeometry if this is the first line or arc.
+
+ Syntax
+
+ geo.AddArcCenterIncludedAngle (XCen, YCen, Angle)
+
+ double  XCen  X coordinate of center point
+
+ double  YCen  Y coordinate of center point
+
+ double  Angle  Included angle in degrees, CW -ve
+
+================================================================================
+PLIK: Geo2DObject
+================================================================================
+
+Geo2D Object
+
+Geo2D Object
+
+An object used to create a 2D Geometry, ie a set of 
+ connected lines and arcs. The geometry may be open or closed. Create it 
+ with Drawing.Create2DGeometry, 
+ use Geo2D.Add methods to add 
+ lines and arcs, then finish with Geo2D.Finish, 
+ Geo2D.CloseAndFinishLine or 
+ Geo2D.CloseAndFinishTanArc 
+ methods. The Finish methods will 
+ return a Path object.
+
+================================================================================
+PLIK: GeoBitmap_Object
+================================================================================
+
+GeoBitmap Object
+
+GeoBitmap Object
+
+An object storing a bitmap associated with a geometry path.
+
+The bitmap can be assigned to a geometry by setting the attribute LicomUKDMBBmpName to the full path name of the file, which may have extension: bmp, jpg, jpeg, gif, emf, tiff, png.
+
+This object gives access to the bitmap.
+
+ 
+
+Properties
+
+ActualFileName - (String) The file containing the image, which may be temporary, eg if the bitmap is stored in the Alphacam drawing file
+
+HBITMAP - (HBITMAP) Handle of bitmap as an HBITMAP. Null if none
+
+OriginalFileName - (String) The name of the file originally assigned to the geometry, may not exist now
+
+================================================================================
+PLIK: GeoCad_AddArc
+================================================================================
+
+GeoCad.AddArc
+ 
+ 
+
+ GeoCad.AddArc
+
+ Add an arc in any plane. The center, start and end points must be given in 3D Global coordinates. The plane containing the arc is specified by giving the axis ie the unit normal vector of the plane, for example (0, 0, 1) for a plane parallel to the global XY plane. The arc is CCW.
+
+ Syntax
+
+ geo.AddArc (CenX, CenY, CenZ, AxisX, AxisY, AxisZ, X1, Y1, Z1, X2, Y2, Z2)
+
+ double CenX X coord of arc center
+
+ double CenY Y coord of arc center
+
+ double CenZ Z coord of arc center
+
+ double AxisX X coord of axis
+
+ double AxisY Y coord of axis
+
+ double AxisZ Z coord of axis
+
+ double X1 X coord of start point
+
+ double Y1 Y coord of start point
+
+ double Z1 Z coord of start point
+
+ double X2 X coord of end point
+
+ double Y2 Y coord of end point
+
+ double Z2 Z coord of end point
+
+================================================================================
+PLIK: GeoCadobject
+================================================================================
+
+GeoCad object
+
+GeoCad object
+
+An object used to add 3D geometry consisting of 3D lines 
+ and arcs in any plane. When all lines and arcs are added the Finish method 
+ will try to join them into connected paths in work planes. Useful for 
+ geometry from a CAD system.
+
+Create the object with Drawing.CreateCadGeometry. 
+ Use AddArc and AddLine 
+ methods to add 3D lines and arcs. Use the Finish 
+ method to sort the lines and arcs into paths in work planes.
+
+================================================================================
+PLIK: GeometriesUpdated
+================================================================================
+
+GeometriesUpdated
+ 
+ 
+
+ GeometriesUpdated
+
+ Sub GeometriesUpdated
+
+ Called when geometries are changed eg move, copy, delete etc.
+
+ If a single geometry is added this routine will NOT be called. GeometryAdded will be called instead.
+
+================================================================================
+PLIK: GettingStartedwithVBAMacros
+================================================================================
+
+Getting Started with VBA Macros
+ 
+ 
+
+ Getting Started with VBA Macros
+
+ A short tutorial on creating a very simple VBA Macro:
+
+ Notice that while you type program code, a window pops up offering suggestions. Press . (dot) or space (whichever is the one you want to follow the words) to accept the highlighted one.
+
+ 1) In any Advanced AlphaCAM module, select Utils | VBA Macros | New VBA Project
+
+ 2) The VBA Editor will appear. Select Insert | Module
+
+ 3) Select Insert | Procedure
+
+ 4) Enter Test in the text box and click OK
+
+ 5) An empty Subroutine should appear in the module window. Between the Public Sub Test() and End Sub lines type:
+
+ App.ActiveDrawing.CreateRectangle 0, 0, 20, 10
+
+ App.ActiveDrawing.ZoomAll
+
+ 6) Select Run | Run Sub/UserForm, or press F5
+
+ 7) you will be asked to save the project, accept the default name
+
+ 8) Switch to AlphaCAM (Press Alt-F11 or click on the AlphaCAM window if visible.) You should see a rectangle has been drawn. You can switch back to VBA with Alt-F11
+
+ That was your first VBA Macro! You can also run it from AlphaCAM using Utils | VBA Macros | Macros, pick Test if it is not highlighted (It may be, for example, VBAProject2.Module1.Test if there are other projects in memory), and click OK.
+
+ You can cut and paste example macros from this help file into the module to try them - a macro is any code between the Public Sub and End Sub statements. You can have more than one macro in a module. Alternatively (in Mill), you can try the example macros in ManualExamples.amb in Licomdir\VBMacros, using Utils | VBA Macros | Open VBA Project.
+
+================================================================================
+PLIK: InitAlphacamAddIn
+================================================================================
+
+InitAlphacamAddIn
+ 
+ 
+
+ InitAlphacamAddIn
+
+ Function InitAlphacamAddIn (AcamVersion As long) As Integer
+
+ Called when AlphaCAM loads the VBA Project or DLL (when AlphaCAM starts). At present the return value is ignored but should be 0.
+
+ The parameter AcamVersion is the Date Code of the AlphaCAM module calling the routine. It may be used to decide whether or not your add-in should run. If you know that you need functions that are only in the latest version of AlphaCAM you can test this value. It is based on the date in the form YYYYMMDD. for example, at the time of writing it is 19990215 (1999 February 15). If the value is less than the value you want you can display a message and skip the initialisation code and menu item calls.
+
+ The example will add a menu item called Draw Circles. The function Circles (in the same file) will be called when the menu item is picked. See Frame.AddMenuItem2 for more details.
+
+  ' In Events module in a VBA project in Licomdir\VBMacros\StartUp
+
+  Function InitAlphacamAddIn (AcamVersion As long) As Integer
+
+   Dim frm As Frame
+
+   Set frm = App.Frame
+
+   frm.AddMenuItem2 "&Circles", "Circles", acamMenuGEO, ""
+
+   frm.AddMenuItem2 "&Name", "MyName", acamMenuNEW, "E&xtras"
+
+   InitAlphacamAddIn = 0
+
+  End Function
+
+  
+
+  Function Circles()
+
+   MsgBox "Circles"
+
+  End Function
+
+  Function MyName()
+
+   MsgBox "Name"
+
+  End Function
+
+================================================================================
+PLIK: Introduction2
+================================================================================
+
+Introduction - Introduction
+
+Introduction
+
+The Alphacam API is a COM programming interface to Alphacam. 
+ The API contains many functions that can be called from Visual Basic for 
+ Applications (VBA) in Alphacam. The functions can also be called by VBA 
+ (in Excel, Access, Word etc) or by programs or DLLs created with Visual 
+ Basic, Delphi, C++ or any other language that supports COM.
+
+The API functions provide the programmer with direct 
+ access to Alphacam functionality such as creating geometries, machining 
+ them, controlling the input and saving of files etc. To run a VBA macro, 
+ select UTILS | VBA Macros | Macros 
+ if it is in a loaded project. If it is not loaded, use UTILS 
+ | VBA Macros | Open VBA Project first.
+
+The API interface uses an object 
+ oriented approach. All of the functions described in this document 
+ are methods or properties 
+ which apply to an object. Thus, there is an 
+ assumption that these methods will apply to the current state. For example, 
+ there is a method RoughFinish 
+ with no arguments. Instead of passing the geometries to be machined, the 
+ RoughFinish method will act on the currently selected geometries.
+
+The Alphacam API 
+ (Application Programming Interface) is implemented for all levels ie Basic, 
+ Standard and Advanced. However, only Advanced modules can create or edit 
+ VBA macros. Standard and Basic modules can run VBA macros created in the 
+ equivalent Advanced module. All modules can load DLLs or be run by external 
+ programs.
+
+Note that all Advanced modules include the ability to 
+ run externally created Parametric Macros. The API does not replace Parametric 
+ Macros, but is an additional, more powerful, way of controlling the functions 
+ in an Alphacam module.
+
+This document gives an overview of using the API, and 
+ documents the objects, methods and properties available. The best way 
+ to learn how to use the API is to look at the examples in the API directory 
+ on the Alphacam cdrom. There are examples of VBA projects, and the complete 
+ source for DLLs and EXEs in Visual C++ and Delphi.
+
+Note that the Object 
+ Browser in the View menu 
+ of the VBA Editor contains a complete searchable list of all the objects, 
+ methods and properties available in the program. It is the most accurate 
+ description because it is automatically created at the same time as the 
+ program. If a function is added between releases the help file may not 
+ be updated, but the Object Browser will. Use it, even if you are not using 
+ VBA. If you are using C++ or Delphi, make sure that you import the Type 
+ Library which is bound into each Alphacam executable.
+
+For support email: apisupport@licom.com
+
+================================================================================
+PLIK: LatheMachineConfiguration_Object
+================================================================================
+
+LatheMachineConfiguration Object
+
+LatheMachineConfiguration Object
+
+An object storing the machine configuration data for simulation, for a Lathe.
+
+The properties determine whether the part or tool moves, for Z moves.
+
+ 
+
+Properties
+
+MainSpindleMoveZ - (AcamMCMoveType) acamMCMoveTOOL or acamMCMovePART
+
+SubSpindleMoveZ - (AcamMCMoveType) acamMCMoveTOOL or acamMCMovePART
+
+================================================================================
+PLIK: Layer_Delete
+================================================================================
+
+Layer.Delete
+ 
+ 
+
+ Layer.Delete
+
+ Delete the layer, if it is empty and is not a special AlphaCAM layer.
+
+ Syntax
+
+ layer.Delete
+
+================================================================================
+PLIK: Layer_GetNext
+================================================================================
+
+Layer.GetNext
+ 
+ 
+
+ Layer.GetNext
+
+ Get the next layer in the list.
+
+ Syntax
+
+ layer.GetNext
+
+ [Return] Layer  Pointer to Layer Dispatch object 
+
+ Example
+
+ See example.
+
+================================================================================
+PLIK: LayerExample1
+================================================================================
+
+Layer Example 1
+ 
+ 
+
+ Layer Example 1
+
+ This example will create a new layer, set its colour and make it the active drawing layer.
+
+ It then draws a circle in the layer and cancels the active layer.
+
+  Dim drw As Drawing
+
+  Set drw = App.ActiveDrawing
+
+  Dim lyr As Layer
+
+  Set lyr = drw.CreateLayer ("CIRCLES")
+
+  lyr.color = acamRED
+
+  drw.SetLayer lyr
+
+  drw.CreateCircle 20, 0, 0
+
+  drw.SetLayer Nothing ' Cancel active layer
+
+================================================================================
+PLIK: LayerExample2
+================================================================================
+
+Layer Example 2
+ 
+ 
+
+ Layer Example 2
+
+ This example will display the names of the user layers only, ignoring the special AlphaCAM layers.
+
+  Dim drw As Drawing
+
+  Set drw = App.ActiveDrawing
+
+  Dim lyr As Layer
+
+  For Each lyr in drw.Layers
+
+  If lyr.Special = 0 Then
+
+   MsgBox "Layer name = " & lyr.Name
+
+  End If
+
+  Next lyr
+
+================================================================================
+PLIK: LayerExample3
+================================================================================
+
+Layer Example 3
+ 
+ 
+
+ Layer Example 3
+
+ This example will fillet all the geometries on user layer "BOXES".
+
+ Dim Drw As Drawing 
+
+ Set Drw = App.ActiveDrawing 
+
+  
+
+ Dim Lyr As Layer 
+
+ On Error Resume Next 
+
+ Set Lyr = Drw.Layers("BOXES") 
+
+ If Err.Number <> 0 Then 
+
+ MsgBox "Layer BOXES not found" 
+
+ End 
+
+ End If 
+
+  
+
+ Dim P As Path 
+
+ For Each P In Lyr.Geometries 
+
+ P.Fillet 5 
+
+ Next P
+
+================================================================================
+PLIK: LayerExamples
+================================================================================
+
+Layer Examples
+ 
+ 
+
+ Layer Examples
+
+ Layer Example 1
+
+ Layer Example 2
+
+ Layer Example 3
+
+================================================================================
+PLIK: LayerObject
+================================================================================
+
+Layer Object
+
+Layer Object
+
+An AlphaCAM or User layer.
+
+Use Drawing.Layers to get the layers as a Collection.
+
+Use Drawing.GetLayer 
+ to get the current user layer.
+
+Use Drawing.SetLayer 
+ to set the current user layer.
+
+Use Drawing.CreateLayer 
+ to create a new user layer.
+
+Use Path.GetLayer to 
+ get the layer for a Path.
+
+Use Path.SetLayer to 
+ set the layer for a Path.
+
+More:
+
+Layer Properties
+
+Layer Examples
+
+Drawing 
+ / Path / Layer Colours
+
+Path / Layer 
+ Line Types
+
+================================================================================
+PLIK: LayerProperties
+================================================================================
+
+Layer Properties
+
+Layer Properties
+
+Active - (boolean) True if this is the active layer
+
+Name - (String) Name of this layer
+
+Color - (AcamColor) Colour for this layer, see key below
+
+ColorRGB - (OLE_COLOR) Colour for this layer, as an 
+ RGB value
+
+Geometries - (Paths) The geometries on this layer, as 
+ a Paths Collection (read-only)
+
+LineType - (AcamLineType) Line type for this layer, 
+ see key below
+
+LineWidth - (long) Line width for this layer, 0 to 9
+
+Lock - (Boolean) True if this layer is locked
+
+Special - (short) Non-zero if this is a special layer 
+ ie not a user layer (read-only)
+
+Splines - (Splines) The splines on this layer, as a 
+ Splines Collection (read-only)
+
+Text - (Texts) The text on this layer, as a Texts Collection 
+ (read-only)
+
+Visible - (Boolean) True if geometries in this layer 
+ are drawn
+
+Key
+
+Colours
+
+Line Types
+
+================================================================================
+PLIK: License.GetAcamModuleLicense
+================================================================================
+
+License.GetAcamModuleLicense
+
+License.GetAcamModuleLicense
+
+Get license for module, feature name will be Alphacam: 
+ + Name. License will be released when Alphacam exits, or may be released 
+ with ReleaseLicense(Handle), where Handle is the return value of this 
+ method.
+
+Syntax
+
+Lic.GetAcamModuleLicense (Name)
+
+String Name Name of feature
+
+[Return] long, Handle of license, zero if error
+
+================================================================================
+PLIK: License.GetCustomerName
+================================================================================
+
+License.GetCustomerName
+
+License.GetCustomerName
+
+Get the name of the customer that this copy of Alphacam 
+ is licensed to, the name shown in the Help | About box.
+
+Syntax
+
+Lic.GetCustomerName
+
+[Return] String, name
+
+================================================================================
+PLIK: License.GetLastError
+================================================================================
+
+License.GetLastError
+
+License.GetLastError
+
+Get error code for last call to GetAcamModuleLicense.
+
+Syntax
+
+Lic.GetLastError
+
+[Return] AcamLicenseError, error code
+
+ 
+
+Possible values are:
+
+acamLicenseNoError = 0
+
+acamNoModuleLicense = 4
+
+acamNoNetworkModuleLicense = 10
+
+acamTooManyUsersModule = 14
+
+acamClockTamperDetected = 16
+
+acamLicenseVersionTooOld = 17
+
+================================================================================
+PLIK: License.IsFeatureLicensed
+================================================================================
+
+License.IsFeatureLicensed
+
+License.IsFeatureLicensed
+
+See if a license exists for given feature. Name should 
+ be the full name of the feature eg Alphacam:am5axaps. 
+
+The fact that it exists does not guarantee that it is 
+ available, for example on a network system they might all be in use.
+
+Syntax
+
+Lic.IsFeatureLicensed (Name)
+
+String Name Full name of feature
+
+[Return] Bool, True if a license exists
+
+================================================================================
+PLIK: License.ReleaseLicense
+================================================================================
+
+License.ReleaseLicense
+
+License.ReleaseLicense
+
+Release the handle, only handles acquired by this instance 
+ of the License object can be released.
+
+Syntax
+
+Lic.ReleaseLicense (Handle)
+
+long Handle Handle returned from GetAcamModuleLicense
+
+================================================================================
+PLIK: License_Object
+================================================================================
+
+License Object
+
+License Object
+
+An object giving access to the Alphacam License system, 
+ introduced with V7.5.
+
+================================================================================
+PLIK: MachineComponent_Object
+================================================================================
+
+MachineComponent Object
+
+MachineComponent Object
+
+An object storing the data for a machine component for simulation, for a Mill or Router.
+
+ 
+
+Properties
+
+CanMoveX (Bool) True if the component can move in X
+
+CanMoveY (Bool) True if the component can move in Y
+
+CanMoveZ (Bool) True if the component can move in Z
+
+CanRotateX (Bool) True if the component can rotate in X
+
+CanRotateY (Bool) True if the component can rotate in Y
+
+CanRotateZ (Bool) True if the component can rotate in Z
+
+ColorRGB (OLE_COLOR) The component's colour (read-only)
+
+GeometryPath (Path) Path for this MachineComponent, will be empty if MachineComponent is a Solid Part (read-only)
+
+GeometrySolidPart (SolidPart) Solid Part for this MachineComponent, will be empty if MachineComponent is a Path (read-only)
+
+MaxX (double) Maximum X coordinate (read-only)
+
+MaxY (double) Maximum Y coordinate (read-only)
+
+MaxZ (double) Maximum Z coordinate (read-only)
+
+MinX (double) Minimum X coordinate (read-only)
+
+MinY (double) Minimum Y coordinate (read-only)
+
+MinZ (double) Minimum Z coordinate (read-only)
+
+Name (String) Name
+
+Type (AcamMachineComponentType) Type: acamMachineComponentTypeNONE, acamMachineComponentTypeFIXED, acamMachineComponentTypeMOVE_WITH_TOOL or acamMachineComponentTypeMOVE_WITH_PART
+
+Visible (Bool) True if the component is visible
+
+================================================================================
+PLIK: MachineConfiguration_Object
+================================================================================
+
+MachineConfiguration Object
+
+MachineConfiguration Object
+
+An object storing the machine configuration data for simulation, for a Mill or Router.
+
+ 
+
+Properties
+
+CWTilt - (Bool) True for Clockwise tilt
+
+CardanicAngle (double) Calculated cardanic angle (read-only)
+
+CardanicAxisPoint1X (double) X coordinate of first point on cardanic axis (read-only)
+
+CardanicAxisPoint1Y (double) Y coordinate of first point on cardanic axis (read-only)
+
+CardanicAxisPoint1Z (double) Z coordinate of first point on cardanic axis (read-only)
+
+CardanicAxisPoint2X (double) X coordinate of second point on cardanic axis (read-only)
+
+CardanicAxisPoint2Y (double) Y coordinate of second point on cardanic axis (read-only)
+
+CardanicAxisPoint2Z (double) Z coordinate of second point on cardanic axis (read-only)
+
+IsCardanic (Bool) True if the machine is cardanic
+
+MoveX - (AcamMCMoveType) acamMCMoveTOOL if tool moves in X, acamMCMovePART if part moves in X
+
+MoveY - (AcamMCMoveType) acamMCMoveTOOL if tool moves in Y, acamMCMovePART if part moves in Y
+
+MoveZ - (AcamMCMoveType) acamMCMoveTOOL if tool moves in Z, acamMCMovePART if part moves in Z
+
+RotateBothAtSameTime (Bool) True if both axes should rotate at the same time
+
+RotateX - (AcamMCRotateType) acamMCRotateTOOL if tool rotates in X, acamMCRotatePART if part rotates in X, acamMCRotateNONE if there is no X rotation
+
+RotateY - (AcamMCRotateType) acamMCRotateTOOL if tool rotates in Y, acamMCRotatePART if part rotates in Y, acamMCRotateNONE if there is no Y rotation
+
+RotateZ - (AcamMCRotateType) acamMCRotateTOOL if tool rotates in Z, acamMCRotatePART if part rotates in Z, acamMCRotateNONE if there is no Z rotation
+
+ToolHomeSet (Bool) True if the tool home position is set
+
+ToolHomeX (double) X coordinate of tool home position
+
+ToolHomeY (double) Y coordinate of tool home position
+
+ToolHomeZ (double) Z coordinate of tool home position
+
+XAxisY (double) Y coordinate of point on X rotation axis
+
+XAxisZ (double) Z coordinate of point on X rotation axis
+
+YAxisX (double) X coordinate of point on Y rotation axis
+
+YAxisZ (double) Z coordinate of point on Y rotation axis
+
+ZAxisX (double) X coordinate of point on Z rotation axis
+
+ZAxisY (double) Y coordinate of point on Z rotation axis
+
+Method
+
+SetCardanicAxis - Set the cardanic axis and calculate the angle.
+
+mc.SetCardanicAxis (X1, Y1, Z1, X2, Y2, Z2)
+
+double X1 X coordinate of first point on axis
+
+double Y1 Y coordinate of first point on axis
+
+double Z1 Z coordinate of first point on axis
+
+double X2 X coordinate of second point on axis
+
+double Y2 Y coordinate of second point on axis
+
+double Z2 Z coordinate of second point on axis
+
+================================================================================
+PLIK: MachineSurfacesExamples
+================================================================================
+
+MachineSurfaces Examples
+ 
+ 
+
+ MachineSurfaces Examples
+
+ Example 1: Machine Surfaces using Along Line in XY Plane.
+
+ Example 2: Machine a surface using Parameter Lines, checking against another surface.
+
+ Example 3: Rough all the surfaces.
+
+ Example 4: Machine surfaces using the side of the tool.
+
+================================================================================
+PLIK: MachiningDefaultsObject
+================================================================================
+
+MachiningDefaults Object
+ 
+ 
+
+ MachiningDefaults Object
+
+ An object containing the default values set by the user for machining, in File | Configure | General | Machining.
+
+ More:
+
+ MachiningDefaults Properties
+
+================================================================================
+PLIK: MachiningDefaultsProperties
+================================================================================
+
+MachiningDefaults Properties
+
+MachiningDefaults Properties
+
+RapidDownTo - (float) Rapid Down To value for Rough 
+ / Finish, Pocket etc. (read-only)
+
+SafeRapidLevel - (float) Safe Rapid Level value for 
+ Rough / Finish, Pocket etc. (read-only)
+
+WidthOfCutContourPocket - (float) Width Of Cut for Contour 
+ Pocket as a percentage of the tool diameter. (read-only)
+
+WidthOfCutLinearPocket - (float) Width Of Cut for Linear 
+ Pocket as a percentage of the tool diameter. (read-only)
+
+================================================================================
+PLIK: MaterialObject
+================================================================================
+
+Material Object
+
+Material Object
+
+A material from eg MMAT.DAT, used for speed and feed 
+ calculations.
+
+Use Drawing.SelectMaterial 
+ to select a material by name from the material file and make it the current 
+ material.
+
+Use Drawing.GetMaterial 
+ to get the current material as a Material object.
+
+Use Drawing.SetMaterial 
+ to set the current material from a Material object.
+
+Use Drawing.CreateMaterial 
+ to create a material that is not in the material file. Its properties 
+ may then be set, and Drawing.SetMaterial 
+ can be used to make it the current material.
+
+Use Drawing.Materials to get the materials as a Collection.
+
+More:
+
+Material Properties
+
+================================================================================
+PLIK: MaterialProperties
+================================================================================
+
+Material Properties
+
+Material Properties
+
+Name - (String) Material name
+
+Inch - (boolean) True if speed units are feet / minute, 
+ false if metres / minute
+
+Speed - (float) Surface speed. (See Inch property for 
+ units)
+
+KFactor - (float) K-factor for bending
+
+Note - (String) note(I), I = 1 to 20. Notes for this 
+ material
+
+================================================================================
+PLIK: Methods
+================================================================================
+
+Methods
+ 
+ 
+
+ Methods
+
+ AlphaCAM API objects have Methods. Methods are functions that may be called to perform tasks in AlphaCAM. For example, the MillData object has a RoughFinish method which is equivalent to the Rough / Finish command in the Machine menu in Mill AlphaCAM.
+
+ AlphaCAM API objects support a Dual interface. To call a method use the syntax
+
+  ObjectVariable.method (arguments)
+
+ For example, the following examples show how to call the method OpenDrawing in the Application object in different languages. OpenDrawing has one argument (Name, the file name, a string) which is passed to the function. A Drawing pointer representing the drawing is returned. 
+
+ acam is an object variable representing the Application object declared in the appropriate way for each language.
+
+ Note that the full path is required for file names.
+
+ VBA / VB
+
+  Set drw = acam.OpenDrawing("C:\Licomdir\MyFolder\Example2.amd")
+
+ OR
+
+  acam.OpenDrawing "C:\Licomdir\MyFolder\Example2.amd" 
+
+ For VBA / VB, the parentheses () must be used if the return value will be used. They must NOT be used if the return value is not used or the method does not return a value.
+
+ C++ (Using Smart Pointers)
+
+  acam->OpenDrawing("C:\\Licomdir\\MyFolder\\Example2.amd");
+
+ Note ->, double-quotes, \\, and semi-colon at end.
+
+ Delphi
+
+  acam.OpenDrawing('C:\Licomdir\MyFolder\Example2.amd');
+
+ Note single-quotes, and semi-colon at end.
+
+ The only difference in the syntax of the three examples is in the rules of the language, therefore, in this help file, only the Basic versions of functions will be shown. C++ and other programmers should modify the syntax to suit as indicated above.
+
+================================================================================
+PLIK: MillData_CalculateFeedsAndSpeed
+================================================================================
+
+MillData.CalculateFeedsAndSpeed
+ 
+ 
+
+ MillData.CalculateFeedsAndSpeed
+
+ Calculate the feeds and speed to be used for the current tool and material.
+
+ Syntax
+
+ MD.CalculateFeedsAndSpeed (Drill)
+
+ boolean Drill True if feeds and speed are for a drilliing operation
+
+ Remarks
+
+ The properties CutFeed, DownFeed and SpindleSpeed are set to the calculated values.
+
+================================================================================
+PLIK: MillData_MachineSolid
+================================================================================
+
+MillData.MachineSolid
+
+MillData.MachineSolid
+
+Machine currently selected solids using properties 
+ set for this MillData object.
+
+Syntax
+
+mc.MachineSolid
+
+[Return] Paths  Returned Paths object
+
+See examples
+
+================================================================================
+PLIK: MillData_MachineSurfaces
+================================================================================
+
+MillData.MachineSurfaces
+ 
+ 
+
+ MillData.MachineSurfaces
+
+ Machine currently selected surfaces, using properties set for this MillData object.
+
+ Syntax
+
+ mc.MachineSurfaces
+
+ [Return] Paths  Returned Paths object
+
+ See examples
+
+================================================================================
+PLIK: MillData_RotateYAxisWorkArea_Latheonly_
+================================================================================
+
+MillData.RotateYAxisWorkArea (Lathe only)
+ 
+ 
+
+ MillData.RotateYAxisWorkArea (Lathe only)
+
+ Rotate the Y-axis work area.
+
+ Syntax
+
+ mc.RotateYAxisWorkArea (Angle)
+
+ double Angle Absolute value of angle in degrees
+
+================================================================================
+PLIK: MillData_SetSideProfile
+================================================================================
+
+MillData.SetSideProfile
+ 
+ 
+
+ MillData.SetSideProfile
+
+ Set side profile for profiled sides in RoughFinish or Pocket.
+
+ Syntax
+
+ mc.SetSideProfile (Path, RefPtX, RefPtY)
+
+ Path Path Path object for profile
+
+ double  RefPtX X coordinate of reference point
+
+ double  RefPtY Y coordinate of reference point
+
+================================================================================
+PLIK: MillData_SetStlOrSolidAsMaterial
+================================================================================
+
+MillData.SetStlOrSolidAsMaterial
+
+MillData.SetStlOrSolidAsMaterial
+
+For Roughing, use currently selected STL or Solid as 
+ material.
+
+Syntax
+
+mc.SetStlOrSolidAsMaterial
+
+================================================================================
+PLIK: MillData_SetSurfaceDriveCurve
+================================================================================
+
+MillData.SetSurfaceDriveCurve
+ 
+ 
+
+ MillData.SetSurfaceDriveCurve
+
+ Set the drive curve for machining surfaces using a drive curve. This is used when SurfaceMCMethod = acamSurfaceMCSINGLE_DRIVE_CURVE
+
+ Syntax
+
+ mc.SetSurfaceDriveCurve (Path)
+
+ Path Path The single path to use as a drive curve
+
+================================================================================
+PLIK: MillData_SetSurfaceMCBoundary
+================================================================================
+
+MillData.SetSurfaceMCBoundary
+ 
+ 
+
+ MillData.SetSurfaceMCBoundary
+
+ Set the boundary geometries for surface machining.
+
+ Syntax
+
+ mc.SetSurfaceMCBoundary (Paths)
+
+ Paths Paths Paths object containing one or more Path objects.
+
+ Remarks
+
+ Some surface machining methods will use just the first path, some will use all of them.
+
+================================================================================
+PLIK: MillData_SetSurfaceMCIntersectionData
+================================================================================
+
+MillData.SetSurfaceMCIntersectionData
+ 
+ 
+
+ MillData.SetSurfaceMCIntersectionData
+
+ Set the surfaces and start points for machining along the intersection of two surfaces.
+
+ Syntax
+
+ mc.SetSurfaceMCIntersectionData (Surface1, Surface2, X1, Y1, Z1, X2, Y2, Z2)
+
+ Surface  Surface1  First surface
+
+ Surface  Surface2  Second surface
+
+ double  X1
+
+ double  Y1  Start point on first surface
+
+ double  Z1
+
+ double  X2
+
+ double  Y2  Point on first surface to set direction of cut
+
+ double  Z2
+
+================================================================================
+PLIK: MillData_SetWorkAreaForYAxis_Latheonly_
+================================================================================
+
+MillData.SetWorkAreaForYAxis (Lathe only)
+ 
+ 
+
+ MillData.SetWorkAreaForYAxis (Lathe only)
+
+ Set the geometry to be used as the work area for Y-axis machining.
+
+ Syntax
+
+ mc.SetWorkAreaForYAxis (Geo)
+
+ Path Geo Path to be used as work area
+
+================================================================================
+PLIK: MillDataMachiningEngine.MachineSolid
+================================================================================
+
+MillDataMachiningEngine.MachineSolid
+
+MillDataMachiningEngine.MachineSolid
+
+Machine currently selected solids using properties set 
+ for this MillDataMachiningEngine object, using the Planit Machining Engine.
+
+Syntax
+
+mc.MachineSolid
+
+[Return] Paths  Returned Paths object
+
+See example
+
+================================================================================
+PLIK: MillDataMachiningEngine.MachineSurfaces
+================================================================================
+
+MillDataMachiningEngine.MachineSurfaces
+
+MillDataMachiningEngine.MachineSurfaces
+
+Machine currently selected surfaces, using properties 
+ set for this MillDataMachiningEngine object, using the Planit Machining 
+ Engine.
+
+Syntax
+
+mc.MachineSurfaces
+
+[Return] Paths  Returned Paths object
+
+See example
+
+================================================================================
+PLIK: MillDataMachiningEngine_Example_1
+================================================================================
+
+MillDataMachiningEngine Example 1
+
+Example 1: 3D Solid Roughing using the Machining Engine
+
+Const ATTR_GEO_Z_LEVEL_TOP As String = "LicomUKDMBGeoZLevelTop"
+
+Const ATTR_GEO_Z_LEVEL_BOTTOM As String = "LicomUKDMBGeoZLevelBottom"
+
+' 3D Solid Roughing using the Machining Engine.
+
+' This macro drills some holes so the Pre-Drilled-Holes 
+ option can be used,
+
+' then roughs with a 10mm tool and then rest-roughing with 
+ a 2mm tool
+
+' If the OpenExternalFile call fails edit the path to the 
+ Cadfiles folder on your PC.
+
+Public Sub ZContourRoughingSolid()
+
+    ' 
+ Part
+
+    App.OpenExternalFile 
+ App.LicomdirPath & "licomdir\cadfiles\SIMPLE MILL PART.SLDPRT", 
+ "", True
+
+    
+
+    ' 
+ Material
+
+    Dim 
+ PMat As Path
+
+    Set 
+ PMat = App.ActiveDrawing.CreateRectangle(-85, -55, 85, 55)
+
+    PMat.SetMaterial 
+ 25, 0
+
+    
+
+    ' 
+ Create and drill holes that can be used to plunge into.
+
+    ' 
+ The Z value should be the bottom of the hole.
+
+    MakeDrillHoles
+
+    
+
+    ' 
+ Tool
+
+    App.SelectTool 
+ App.LicomdatPath & "licomdat\mtools.alp\flat - 10mm.amt"
+
+    Dim 
+ MD As MillData
+
+    Set 
+ MD = App.CreateMillData
+
+    
+
+    ' 
+ Solids to machine
+
+    SelectSolidsNotMat
+
+    MD.SurfaceMCAction 
+ = acamSurfaceMCActionROUGHING
+
+    MD.PocketType 
+ = acamPocketCONTOUR
+
+    
+
+    MD.SafeRapidLevel 
+ = 30
+
+    MD.MaxDepthPerCut 
+ = 5
+
+    MD.RapidDownTo 
+ = 26
+
+    MD.WidthOfCut 
+ = 5
+
+    MD.StockXY 
+ = 0.5
+
+    MD.StockZ 
+ = 0.25
+
+    
+
+    MD.SurfaceMCZOrder 
+ = acamSurfaceMCZOrderZONE
+
+    MD.SurfaceMCUseFlatAreas 
+ = True
+
+  
+
+    ' 
+ Use V9 Machining Engine
+
+    Dim 
+ MDME As MillDataMachiningEngine
+
+    Set 
+ MDME = MD.MillDataMachiningEngine
+
+    
+
+    MDME.MillType 
+ = AcamMillTypeClimb
+
+    
+
+    MDME.ApproachType 
+ = acamMEApproachPreDrilledHoles
+
+    MDME.FeedWhenPlunging 
+ = True
+
+       
+
+    ' 
+ Store the hole coordinates
+
+    MDME.StartDrillPoints
+
+    Dim 
+ P As Path
+
+    For 
+ Each P In App.ActiveDrawing.Geometries
+
+        If 
+ P.PathType = acamPathGEOMETRY Then
+
+            Dim 
+ CP As CircleProperties
+
+            Set 
+ CP = P.GetCircleProperties
+
+            If 
+ Not CP Is Nothing Then
+
+                MDME.AddDrillPoint 
+ CP.CenterXG, CP.CenterYG, P.Attribute(ATTR_GEO_Z_LEVEL_BOTTOM)
+
+            End 
+ If
+
+        End 
+ If
+
+    Next 
+ P
+
+       
+
+    MDME.MachineSolid
+
+       
+
+    ' 
+ Second tool
+
+    App.SelectTool 
+ App.LicomdatPath & "licomdat\mtools.alp\flat - 2mm.amt"
+
+    
+
+    SelectSolidsNotMat
+
+    MD.SurfaceMCRoughingUsePreviousMachining 
+ = True
+
+    MD.MaxDepthPerCut 
+ = 2
+
+    MD.WidthOfCut 
+ = 1
+
+    MDME.ApproachType 
+ = acamMEApproachHelix
+
+    MDME.RampAngle 
+ = 20
+
+    MDME.MinimumRadius 
+ = 1
+
+    MDME.HighSpeedCornering 
+ = True
+
+    
+
+    MDME.MachineSolid
+
+End Sub
+
+' Select solids that aren't materials
+
+Public Sub SelectSolidsNotMat()
+
+    Dim 
+ S As SolidPart
+
+    For 
+ Each S In App.ActiveDrawing.SolidParts
+
+        S.Selected 
+ = (S.Attribute("LicomUKDMBStockType") = 0)
+
+    Next 
+ S
+
+End Sub
+
+' Make geometries for drill holes and drill them
+
+Public Sub MakeDrillHoles()
+
+    Const 
+ Dia As Double = 10
+
+    Dim 
+ Drw As Drawing
+
+    Set 
+ Drw = App.ActiveDrawing
+
+    Dim 
+ P As Path
+
+    Set 
+ P = Drw.CreateCircle(Dia, -40, 10)
+
+    P.Attribute(ATTR_GEO_Z_LEVEL_TOP) 
+ = 25#
+
+    P.Attribute(ATTR_GEO_Z_LEVEL_BOTTOM) 
+ = 0#
+
+    P.Selected 
+ = True
+
+    
+
+    Set 
+ P = Drw.CreateCircle(Dia, 40, -10)
+
+    P.Attribute(ATTR_GEO_Z_LEVEL_TOP) 
+ = 25#
+
+    P.Attribute(ATTR_GEO_Z_LEVEL_BOTTOM) 
+ = 0#
+
+    P.Selected 
+ = True
+
+    
+
+    Set 
+ P = Drw.CreateCircle(Dia, 0, 0)
+
+    P.Attribute(ATTR_GEO_Z_LEVEL_TOP) 
+ = 25#
+
+    P.Attribute(ATTR_GEO_Z_LEVEL_BOTTOM) 
+ = 10#
+
+    P.Selected 
+ = True
+
+    
+
+    App.SelectTool 
+ App.LicomdatPath & "licomdat\mtools.alp\drill - 10mm.amt"
+
+    Dim 
+ MD As MillData
+
+    Set 
+ MD = App.CreateMillData
+
+    MD.AutoZ 
+ = True
+
+    MD.DrillType 
+ = acamDRILL
+
+    MD.HoleDepthIsShoulder 
+ = False
+
+    MD.SafeRapidLevel 
+ = 30
+
+    MD.FeedDownDistance 
+ = 1.5
+
+    MD.DrillTap
+
+End Sub
+
+================================================================================
+PLIK: MillDataMachiningEngine_Example_2
+================================================================================
+
+MillDataMachiningEngine Example 2
+
+Example 2: 3D Surface Roughing using the Machining Engine
+
+' 3D Surface Roughing using the Machining Engine
+
+Public Sub ZContourRoughingSurfaces()
+
+    ' 
+ Part
+
+    App.OpenDrawing 
+ App.LicomdirPath & "licomdir\3dtutor\Dome on curved surface.amd"
+
+    
+
+    ' 
+ Material
+
+    Dim 
+ PMat As Path
+
+    Set 
+ PMat = App.ActiveDrawing.CreateRectangle(0, 0, 100, 100)
+
+    PMat.SetMaterial 
+ 0, -25
+
+    ' 
+ Tool
+
+    App.SelectTool 
+ App.LicomdatPath & "licomdat\mtools.alp\flat - 10mm.amt"
+
+    Dim 
+ MD As MillData
+
+    Set 
+ MD = App.CreateMillData
+
+    
+
+    ' 
+ Surfaces to machine
+
+    SelectSurfaces
+
+    MD.SurfaceMCAction 
+ = acamSurfaceMCActionROUGHING
+
+    MD.PocketType 
+ = acamPocketCONTOUR
+
+    
+
+    MD.SafeRapidLevel 
+ = 10
+
+    MD.MaxDepthPerCut 
+ = 5
+
+    MD.RapidDownTo 
+ = 1
+
+    MD.WidthOfCut 
+ = 5
+
+    MD.StockXY 
+ = 0.5
+
+    MD.StockZ 
+ = 0.25
+
+    
+
+    MD.SurfaceMCZOrder 
+ = acamSurfaceMCZOrderZONE
+
+    MD.SurfaceMCUseFlatAreas 
+ = False
+
+  
+
+    ' 
+ Use V9 Machining Engine
+
+    Dim 
+ MDME As MillDataMachiningEngine
+
+    Set 
+ MDME = MD.MillDataMachiningEngine
+
+    
+
+    MDME.MillType 
+ = AcamMillTypeClimb
+
+    MDME.ApproachType 
+ = acamMEApproachAutomatic
+
+    MDME.WidthOfCutCleanUp 
+ = MD.WidthOfCut * 0.5
+
+    
+
+    ' 
+ Use intermediate levels to clean up the dome
+
+    MDME.IntermediateMaxDepthPerCut 
+ = 1
+
+    MDME.IntermediateWidthOfCut 
+ = MD.WidthOfCut * 0.5
+
+      
+
+    MDME.MachineSurfaces
+
+End Sub
+
+Public Sub SelectSurfaces()
+
+    Dim 
+ S As Surface
+
+    For 
+ Each S In App.ActiveDrawing.Surfaces
+
+        S.Selected 
+ = True
+
+    Next 
+ S
+
+End Sub
+
+================================================================================
+PLIK: MillDataMachiningEngine_Object
+================================================================================
+
+MillDataMachiningEngine Object
+
+MillDataMachiningEngine Object
+
+An object used to do 3D roughing of solid or surface 
+ models using the Planit Machining Engine introduced in AlphaV9.
+
+To use the object create a MillData object and set the 
+ properties as usual, then create a MillDataMachiningEngine object using 
+ the MillDataMachiningEngine property of the MillData object, and set the 
+ extra properties of this object. These are properties used by the Machining 
+ Engine which are described in the main Alphacam help file.
+
+ 
+
+MillDataMachiningEngine Properties
+
+ApproachType AcamMEApproachType
+
+MillType AcamMillType
+
+LinkMethod AcamMELinkMethod
+
+LinkType AcamMELinkType
+
+IntermediateWidthOfCut 
+ double
+
+IntermediateMaxDepthPerCut 
+ double
+
+IntermediatePercentageFeed 
+ double
+
+MaxPlungeDepth double
+
+XYStandOff double
+
+MinimumRadius double
+
+WidthOfCutCleanUp double
+
+CentreCuttingTool bool
+
+CloseOpenPockets bool
+
+AvoidRollover bool
+
+FeedWhenPlunging bool
+
+HighSpeedCornering bool
+
+Trochoidal bool
+
+RampAngle double
+
+ 
+
+MillDataMachiningEngine Examples
+
+3D Solid Roughing
+
+3D Surface Roughing
+
+================================================================================
+PLIK: MillDataObject
+================================================================================
+
+MillData Object
+
+MillData Object
+
+Machining data for a Mill operation, eg Z levels, feeds 
+ and speeds.
+
+More:
+
+MillData Properties
+
+MachineSurfaces 
+ Examples
+
+================================================================================
+PLIK: MillDataProperties
+================================================================================
+
+MillData Properties
+
+MillData Properties
+
+Most of these properties have the same name as the text 
+ in the dialog boxes in the English version of AlphaCAM, in the corresponding 
+ commands eg Rough / Finish.
+
+Attribute - See Attributes
+
+AutoZ - (boolean) True for automatic multi-level cuts 
+ in RoughFinish or Pocket
+
+AutoZMaxDepthOfCut - (float) Maximum depth of cut for 
+ auto-z cuts
+
+AutoZMinDepthOfCut - (float) Minimum depth of cut for 
+ auto-z cuts
+
+AutoZRampAngle - (float) Ramp angle for auto-z cuts
+
+AutoZRapidLevelIsAbsolute - (float) True if rapid level 
+ is absolute for Auto Z, False for relative
+
+AutoZStockZ - (float) Z stock for auto-z cuts
+
+Bidirectional - (boolean) True for bi-directional cuts 
+ in RoughFinish
+
+BottomOfHole - (float) Bottom of hole in DrillTap
+
+BottomRadius - (float) Bottom radius of sloping side
+
+CheckFoulCurrentSurface - (boolean) True to check for 
+ fouling the current surface in 3D Surface Machining using Parameter Lines
+
+CheckFoulOtherMachinedSurfaces - (boolean) True to check 
+ for fouling other machined surfaces in 3D Surface Machining using Parameter 
+ Lines
+
+ChordError - (float) Chord error for Engrave or 3D Surface 
+ machining
+
+CompOnRapid - (boolean) True to apply compensation on 
+ Rapid approach in RoughFinish
+
+Coolant -(short) Coolant, acamCoolNONE = 0, acamCoolMIST 
+ = 1, acamCoolFLOOD = 2, acamCoolTOOL = 3
+
+CuspHeight - (float) Cusp height for surface machining
+
+CutDirection - (float) Cut Direction for Linear Pocket
+
+CutFeed - (float) Cut feed
+
+DepthOfCut - (float) Depth of cut for 3D machining
+
+DepthsOfCutSpecified - (boolean) True for specified 
+ depths of cut, also set ThicknessFirstCut and ThicknessLastCut
+
+Diameter - (double) Effective tool diameter
+
+DirectionAngle - (double) Angle for polyline machining, 
+ relative to surface normal
+
+DownFeed - (float) Down feed for RoughFinish etc (not 
+ drilling)
+
+DrillFeed - (float) Feedrate for drilling
+
+DrillGlobalLinear - (boolean) True to use Global / Linear 
+ code for drilling, False to use Canned Cycle
+
+DrillSubroutines - (boolean) True to use subroutines 
+ for drilling
+
+DrillType - (short) Type of drilling, acamDRILL = 0, 
+  acamPECK 
+ = 1,  acamTAP 
+ = 2, acamBORE = 3
+
+DwellTime - (float) Dwell for peck drilling
+
+EndAngle - (double) End angle for Radial surface machining
+
+EndFaceMethod - (acamEndFaceMethod) Type of machining 
+ on end face, acamEndFaceMethodCAXIS = 0 or acamEndFaceMethodYAXIS =1 (Lathe 
+ only)
+
+EngraveCornerAngleLimit - (float) For Engrave, ignore 
+ corners if the angle is more than this
+
+EngraveCornerAngleMin - (float) For Engrave, ignore 
+ corners if the angle is less than this
+
+EngraveType - (AcamEngraveType) Engrave method: acamEngraveGEOMETRIES, 
+ acamEngraveGUIDE_LINES_APPROX or acamEngraveGUIDE_LINES_EXACT
+
+FacetToleranceMultiplier - (double) Facet tolerance 
+ = ChordError multiplied by this (for 3D machining)
+
+FeedDownDistance - (float) Feed down distance for 3D 
+ machining
+
+FinalDepth - (double) Final depth for machining eg RoughFinish 
+ (not drilling)
+
+FinalPassIsland - (short) Final pass around islands 
+ for pocketing, acamFinalPassFULL = 0, acamFinalPassPARTIAL = 1, acamFinalPassNONE 
+ = 2
+
+GivenHoleDiameter - (double) Hole diameter to select 
+ holes to drill
+
+HelicalInterpolation - (boolean) True to use helical 
+ interpolation for rough/finish. Pitch is given by MaxDepthPerCut, or Tool.DepthOfCut 
+ if zero
+
+HoleDepthIsShoulder - (boolean) True if hole depth is 
+ measured to drill shoulder
+
+InnerRadius - (double) Inner Radius for Spiral Surface 
+ Machining
+
+KnifeLoops - (boolean) True for knife loops
+
+LoopRadius - (float) Radius for loops in RoughFinish
+
+MaterialTop - (double) Material top
+
+MaxDepthPerCut - (float) Maximum depth per cut for sloping 
+ side
+
+McComp - (short) Machine compensation, acamCompTOOLCEN 
+ = 0, acamCompMC = 1, acamCompBOTH = 2
+
+NoUpdate - (boolean) True to suppress association of 
+ geometry and tool paths for this process
+
+NumberOfCuts - (short) Number of Z levels
+
+OffsetNumber - (long) Tool offset number
+
+OpGroup - (long) Operation Group, Lathe only
+
+OpNo - (short) Operation number
+
+OpSequenceNo - (long) Operation Sequence number, Lathe 
+ only (read-only)
+
+OuterRadius - (double) Outer Radius for Spiral Surface 
+ Machining
+
+OverlapOnOpenElements - (double) For RoughFinish with 
+ open elements
+
+PeckDistance - (float) Peck distance for peck drilling
+
+PocketOrder - (AcamPocketOrder) Order of pocket toolpaths 
+ for multiple Z levels, acamPocketOrderZONE = 0, acamPocketOrderDEPTH= 
+ 1
+
+PocketType - (AcamPocketType) Type of pocket operation, 
+ acamPocketCONTOUR = 0, acamPocketLINEAR = 1, acamPocketSPIRAL = 2
+
+PocketUsePreviousMachining - (boolean) True to take 
+ account of previous machining in Pocket
+
+PolylineToolSide - (AcamToolSide) Tool side for Machine 
+ Polyline
+
+ProcessType2
+
+RapidDownTo - (double) Z level to rapid down to
+
+RetractPartial - (Boolean) True for Partial Retract 
+ in Peck Drilling
+
+RotationAngle - (double) Tool Rotation angle eg for 
+ Machine Polyline
+
+RoughFinishUsePreviousMachining - (boolean) True to 
+ take account of previous machining in Rough/Finish
+
+RoughFinishPreMCOverlap - (float) Overlap for previous 
+ machining in Rough/Finish
+
+SafeRapidLevel 
+ - (double) Z level to rapid at
+
+SawAngle - (double) Angle for saw. (For elements 
+ whose angles are not set by element property SawAngle)
+
+SawExternalCornerDistance - (double) External 
+ corner distance (If SawExternalCorners is not acamSawCUT_ON)
+
+SawExternalCorners - (AcamSawCornerType) 
+ How to saw external corners: acamSawCUT_ON, acamSawCUT_PAST or acamSawCUT_TO
+
+SawHeadPosition - (AcamSawHeadPosition) Head 
+ position if tool vertical: acamSawHeadLEFT or acamSawHeadRIGHT
+
+SawInternalCornerDistance - (double) Internal 
+ corner distance (If SawInternalCorners is not acamSawCUT_ON)
+
+SawInternalCorners - (AcamSawCornerType) 
+ How to saw internal corners: acamSawCUT_ON, acamSawCUT_PAST or acamSawCUT_TO
+
+SawOpenEndsDistance - (double) Open ends 
+ distance (If SawOpenEnds is not acamSawCUT_ON)
+
+SawOpenEnds - (AcamSawCornerType) How to 
+ saw open ends: acamSawCUT_ON, acamSawCUT_PAST or acamSawCUT_TO
+
+SawResetElementAngles (Boolean) If True, 
+ element angles set by the element property SawAngle will be reset, so 
+ the MillData SawAngle property will be used for every element.
+
+SideAngle - (float) Side angle of sloping side
+
+Sides - (short) Sides for RoughFinish or Pocket, acamSidesVERTICAL 
+ = 0, acamSidesSLOPING = 1, acamSidesPROFILED = 2
+
+SideTiltAngle - (double) Angle for polyline machining, 
+ relative to surface normal
+
+SlopeMaxError - (float) Maximum error for sloping side
+
+SpindleSpeed - (float) Spindle speed
+
+StartAngle - (double) Start angle for Radial surface 
+ machining
+
+StartCutting - (short) Start cutting at, for pocketing, 
+ acamStartINSIDE = 0, acamStartOUTSIDE = 1
+
+StepAngle - (double) Angle step for Radial surface machining
+
+StepLength - (float) StepLength for Engrave
+
+Stock - (float) Stock allowance
+
+StockXY - (float) XY Stock for Z-Contour roughing
+
+StockZ - (float) Z Stock for Z-Contour roughing
+
+SurfaceMC5AxisAngle - (double) Angle between tool and 
+ surface normal for 5-axis surface machining
+
+SurfaceMCAction - (AcamSurfaceMCAction) Surface machining 
+ action, acamSurfaceMCActionMCSURFACES = 0, acamSurfaceMCActionTOOLSIDE 
+ = 1, acamSurfaceMCActionROUGHING = 2, acamSurfaceMCActionINTERSECTION 
+ = 3
+
+SurfaceMCAxisType - (AcamToolAngleType) Type of surface 
+ machining, acamAxis3 = 0, acamAxis4XZ = 1, acamAxis4YZ = 2, acamAxis5 
+ = 3, acamAxis3HELICAL = 4, acamAxis4XY = 5
+
+SurfaceMCCutInnerSurfaces - (boolean) True to cut the 
+ inner rather than outer surfaces in Z-Finishing
+
+SurfaceMCCW - (boolean) True for CW tool paths in eg 
+ Projected Contours surface machining
+
+SurfaceMCLeadAndLinks - (boolean) True to add lead-in/out 
+ and links to surface machining
+
+SurfaceMCLeadArcRadius - (double) Arc radius for lead 
+ and links in surface machining
+
+SurfaceMCLeadExtensionLength - (double) Extension length 
+ for lead and links in surface machining
+
+SurfaceMCLeadRampAngle - (double) Ramp angle for lead 
+ and links in surface machining
+
+SurfaceMCLeadRampLength - (double) Ramp length for lead 
+ and links in surface machining
+
+SurfaceMCLeadSmoothLinks - (boolean) True to make the 
+ links smooth in surface machining
+
+SurfaceMCLowerZ - (double) Lower Z level for Z-Finishing
+
+SurfaceMCMethod - (AcamSurfaceMCMethod) Surface machining 
+ method, acamSurfaceMCPARAMETER_LINES = 0, acamSurfaceMCZ_CONTOURS = 1, 
+ acamSurfaceMCXY = 2, acamSurfaceMCPROJECTED_CONTOURS = 3, acamSurfaceMCRADIAL 
+ = 4, acamSurfaceMCSPIRAL = 5, acamSurfaceMCREST_MACHINING = 6, acamSurfaceMCSINGLE_DRIVE_CURVE 
+ = 7, acamSurfaceMCPARALLEL_SHALLOWSLOPES = 8, acamSurfaceMCZ_CONTOURS_STEEPSLOPES 
+ = 9
+
+SurfaceMCRoughingUsePreviousMachining - (boolean) True 
+ to take account of previous machining in 3D Roughing
+
+SurfaceMCSideCheckFoulAtEdge - (boolean) True to check 
+ for fouling at edge of surface in 3D machining with tool-side
+
+SurfaceMCSideToolAxis - (AcamSideToolAxis) Tool axis 
+ for 3D machining with tool-side, acamToolAxisPERP_TO_PICKED_EDGE = 0, 
+ acamToolAxisPERP_TO_OTHER_EDGE = 1, acamToolAxisPARALLEL_TO_PARM_LINES 
+ = 2
+
+SurfaceMCToolCanUndercut - (boolean) True if the tool 
+ can undercut
+
+SurfaceMCUpperZ - (double) Upper Z level for Z-Finishing
+
+SurfaceMCUseFlatAreas - (boolean) True to find flat 
+ areas in Z-level machining
+
+SurfaceMCZOrder - (AcamSurfaceMCZOrder) Set order of 
+ tool paths created by Horizontal Z Finishing: acamSurfaceMCZOrderZONE 
+ = 0 or acamSurfaceMCZOrderDEPTH = 1
+
+SurfaceMillingType - (AcamSurfaceMillingType) Climb 
+ or Conventional Milling for Surface Z-Finishing. AcamMillingCLIMB = 0, 
+ acamMillingCONVENTIONAL = 1
+
+SurfaceRestMCPrevToolDia - (double) Diameter of previous 
+ tool for Rest Machining
+
+SurfaceRestMCType - (AcamRestMCType) Type of rest machining 
+ to do
+
+ThicknessFirstCut - (float) Z Thickness of first cut, 
+ if DepthsOfCutSpecified set
+
+ThicknessLastCut - (float) Z Thickness of last cut, 
+ if DepthsOfCutSpecified set
+
+ThreadPitch - (float) Pitch for tapping
+
+TiltAngle - (double) Tool Tilt angle eg for Machine 
+ Polyline
+
+ToolAngle - (double) Tool angle relative to path eg 
+ for Machine Polyline
+
+ToolAngleType - (AcamToolAngleType) Method to set tool 
+ angle for Machine Polyline, acamToolAngleSURFACE_NORMAL = 0, acamToolAnglePERP_TO_PATH 
+ = 1, acamToolAnglePERP_TO_XY = 2, acamToolAnglePARALLEL_TO_SURFACE = 3, 
+ acamToolAngleSET_ANGLES = 4 , acamToolAngleSET_VECTOR = 5
+
+ToolNumber - (long) Tool number
+
+ToolVectorX - (float) X component of Tool Vector eg 
+ for Machine Polyline
+
+ToolVectorY - (float) Y component of Tool Vector eg 
+ for Machine Polyline
+
+ToolVectorZ - (float) Z component of Tool Vector eg 
+ for Machine Polyline
+
+TopRadius - (float) Top radius of sloping side
+
+TraverseAtRPlane - (boolean) True to traverse at R-plane 
+ in drilling
+
+WhichHoles - (short) Holes for drilling, acamHolesCIRCLES 
+ = 0, acamHolesCROSSES = 1, acamHolesMATCH_DRILL = 2,  acamHolesGIVEN_DIA 
+ = 3
+
+WidthOfCut - (float) Width of cut for pocketing
+
+XYCorners - (short) Type of corners for RoughFinish, 
+ acamCornersROUND = 0, acamCornersSTRAIGHT = 1,  acamCornersLOOP 
+ = 2
+
+ZSubroutines - (boolean) True for subroutines for multiple 
+ Z levels
+
+================================================================================
+PLIK: NestData_AddSheet
+================================================================================
+
+NestData.AddSheet
+ 
+ 
+
+ NestData.AddSheet
+
+ Add a geometry to be used as a sheet.
+
+ Syntax
+
+ nest.AddSheet (Geometry, MaterialName, Thickness, Number)
+
+ Path Geometry geometry of sheet, as a Path object
+
+ String MaterialName Name of material
+
+ double Thickness Thickness of material
+
+ long Number  number of this sheet available
+
+================================================================================
+PLIK: NestData_DoNest
+================================================================================
+
+NestData.DoNest
+ 
+ 
+
+ NestData.DoNest
+
+ Nest parts on to sheet(s), added with AddSheet
+
+ Syntax
+
+ nest.DoNest
+
+ The example reads a previously saved nest list, creates two rectangular sheets, each of which can be used twice, and performs the nest.
+
+  Dim Drw As Drawing
+
+  Dim Sheet As Path
+
+  Dim Nest As NestData
+
+  Set Drw = App.ActiveDrawing
+
+  App.New
+
+  Set Nest = Drw.CreateNestData ("C:\apsnlist\ab toolpaths.anl")
+
+  Set Sheet = Drw.CreateRectangle(0, 0, 150, 100)
+
+  Nest.AddSheet Sheet, Drw.Materials(1).Name, 0.25, 2
+
+  Set Sheet = Drw.CreateRectangle(200, 0, 400, 150)
+
+  nest.AddSheet Sheet, Drw.Materials(1).Name, 0.25, 2
+
+  Drw.ZoomAll
+
+  Nest.DoNest
+
+  Drw.ZoomAll
+
+================================================================================
+PLIK: NestDataObject
+================================================================================
+
+NestData Object
+
+NestData Object
+
+Used for nesting. Only nest lists can be used at present. 
+ Use Drawing.CreateNestData to 
+ read a nest list. Use AddSheet to 
+ define the sheets, and DoNest to nest 
+ the items onto the sheet(s).
+
+This object (and other Nest objects) are defined in 
+ a separate Type Library. To use it in VBA you must add a reference to 
+ it. Use Tools | References and 
+ pick "AlphaCam Nesting v2.0 Type 
+ Library"
+
+More:
+
+NestData Properties
+
+================================================================================
+PLIK: NestDataProperties
+================================================================================
+
+NestData Properties
+
+NestData Properties
+
+Resolution - (double) Resolution for nesting
+
+Gap - (double) Minimum gap between shapes
+
+LeadGap - (double) Extra gap for lead-in/out
+
+Subroutines - (boolean) True to use subroutines for 
+ NC code
+
+Direction - (short) Nest Direction (0=Pack to left, 
+ 1=Pack to bottom, 2=Pack to right, 3=Pack to top)
+
+ToolPaths - (boolean) True if nesting tool paths, False 
+ if nesting geometries (read-only)
+
+================================================================================
+PLIK: ObjectModel
+================================================================================
+
+Object Model
+ 
+ 
+
+ Object Model
+
+================================================================================
+PLIK: Objects2
+================================================================================
+
+Objects - Objects
+
+Objects
+
+Objects have methods and properties. For help in accessing 
+ them see methods and properties. 
+ 
+
+To access an object you need an object variable. Usually 
+ you start with the Application object. In VBA inside AlphaCAM, the Application 
+ object is always available as App.
+
+In a program run outside AlphaCAM eg using Visual Basic 
+ or VBA inside Word or Excel etc first set a reference to the Type Library 
+ for the required AlphaCAM Module (eg AlphaCAM Mill), using the Tools 
+ | References command in the VBA or VB IDE. Then the Application 
+ object is found using:
+
+ Dim acam As AlphaCAMMill.App
+
+ Set acam = CreateObject("am5axaps.Application")
+
+This will run am5axaps.exe 
+ (5-axis Mill AlphaCAM). Replace am5axaps with the name of the AlphaCAM 
+ exe that is required. (If it supports Automation).
+
+The AlphaCAM Mill Type Library should be used for any 
+ Mill module eg Basic, Standard, Advanced, 3D. If an API method is not 
+ available in a module eg Involute in Basic a trappable run-time error 
+ will occur. See error-handling. 
+
+(This is not 
+ a path name, do not put directory names in this statement. Windows will 
+ find the exe using the Registry.)
+
+If the AlphaCAM module is already running this will 
+ attach to it, it will not startup the module again.
+
+This line is the main difference between a VBA macro 
+ inside AlphaCAM and a Visual Basic program outside AlphaCAM. Once you 
+ have got the Application object you can access other objects. For example:
+
+ Dim drw As Drawing
+
+ Set drw = App.ActiveDrawing
+
+will get a Drawing object. 
+ (Note: when using the AlphaCAM API from an external program it may be 
+ necessary to put the library name in front of the object name. For example, 
+ Excel also has a Drawing object, so in VBA in Excel you must use:
+
+ Dim drw As AlphaCAMMill.Drawing
+
+ Dim mc As MillData
+
+ Set mc = App.CreateMillData
+
+will get a MillData 
+ object.
+
+In Delphi, import the Type Library using Project 
+ | Import Type Library.
+
+In a Delphi EXE 
+ the Application object is found using:
+
+ var
+
+  disp: IDispatch;
+
+  acam: IAlphaCamApp;
+
+ begin
+
+  disp := CreateOleObject ('am5axaps.application');
+
+  acam := disp as IAlphaCamApp;
+
+In a Delphi DLL 
+ it is passed as the first parameter to the routine called from AlphaCAM, 
+ eg
+
+function InitAlphacamAddIn(vAcam:Variant; 
+ ver:Integer) : Integer; stdcall; 
+
+var 
+
+acam: IAlphaCamApp; 
+
+begin 
+
+acam := IDispatch(vAcam) as 
+ IAlphaCamApp; 
+
+See the Delphi samples.
+
+For C++ use #import, see the C++ samples.
+
+AlphaCAM objects are as follows:
+
+Application 
+  The top-level object, contains methods to open AlphaCAM and CAD 
+ files, and create tools and machining data.
+
+Drawing The drawing (or document) - contains 
+ the geometries and tool paths.
+
+DrawingOptions Options 
+ for display eg show tools.
+
+MillTool A Mill Tool.
+
+LatheTool A Lathe Tool.
+
+MillData Machining data for a Mill operation, 
+ eg Z levels, feeds and speeds.
+
+WireData Machining data for a Wire operation, 
+ eg Z levels, feeds and technology
+
+TurnData Machining data for a Turning operation, 
+ eg stock, feeds and technology
+
+LaserData Machining data for a Laser or 
+ Flame operation, eg stock, feeds and technology
+
+Path A single geometry or tool path 
+ - contains a list of line and arc elements.
+
+Paths A Collection of Path 
+ objects.
+
+Element A 
+ line or arc in a Path.
+
+Layer A User or AlphaCAM layer.
+
+WorkPlane A work plane.
+
+PolyLine A 3D polyline.
+
+Geo2D An object used to create a 2D 
+ Geometry using individual lines and arcs.
+
+FastGeometry An object used to create a 2D 
+ Geometry using AlphaCAM Fast Geometry.
+
+CadInputSettings 
+ Settings for CAD input.
+
+CircleProperties An object used to extract circle 
+ information from a geometry.
+
+Frame The main frame, used to add menu 
+ items, read the text file, show a progress box etc.
+
+GeoCad An object used to add 3D geometry 
+ consisting of 3D lines and arcs in any plane, trying to join them into 
+ paths in work planes..
+
+NestData An object used to do nesting.
+
+Material A material eg from eg MMAT.DAT
+
+Spline A spline curve.
+
+Splines A 
+ Collection of Spline objects.
+
+Surface  A surface.
+
+Surfaces  A 
+ Collection of Surface objects
+
+TrimBoundary  A trim boundary for a surface.
+
+TrimBoundarys  A 
+ Collection of TrimBoundary objects.
+
+MillManualToolPath An object used to create a manual 
+ tool path in Mill.
+
+TurnManualToolPath An object used to create a manual 
+ turning tool path in Lathe.
+
+Operation An operation.
+
+Operations A Collection of Operation 
+ objects.
+
+SubOperation A sub-operation, within an Operation.
+
+SubOperations A Collection of SubOperation 
+ objects.
+
+RectangleProperties An object used to extract rectangle 
+ information from a geometry.
+
+Dimension An object used to add dimensions 
+ to the drawing.
+
+TurnProgrammingPoint A programming point on a multi-programming 
+ point Turning Tool
+
+TurnProgrammingPoints 
+ A Collection of TurnProgrammingPoint 
+ objects
+
+Text A text object, contains a Collection 
+ of TextLine objects
+
+Texts A 
+ Collection of Text objects
+
+TextLine A single line of text
+
+TextLines A 
+ Collection of TextLine objects
+
+MachiningDefaults Default values for some machining 
+ settings
+
+ThreadDefinition An object representing a defined 
+ thread
+
+TurnThreadData An object used to define the properties 
+ for a Thread operation
+
+LeadData 
+ An object used to set lead-in/out for a machining style
+
+MillStyle 
+ A machining style
+
+MillStyles A Collection 
+ of MillStyles
+
+MillSubStyle 
+ A single operation in a MillStyle
+
+MillSubStyles 
+ A Collection of MillSubStyles
+
+================================================================================
+PLIK: Operation_Delete
+================================================================================
+
+Operation.Delete
+
+Operation.Delete
+
+Delete the operation.
+
+Syntax
+
+Op.Delete
+
+================================================================================
+PLIK: OperationObject
+================================================================================
+
+Operation Object
+
+Operation Object
+
+An operation.
+
+More:
+
+Operation Properties
+
+================================================================================
+PLIK: OperationProperties
+================================================================================
+
+Operation Properties
+
+Operation Properties
+
+Number - (Long) Operation Number (read-only)
+
+OriginalNumber - (Long) Original operation number (read-only)
+
+SubOperations - (SubOperations) Collection of the sub-operations 
+ in this operation (read-only)
+
+Tool - (MillTool) The tool used (read-only)
+
+Visible - (boolean) True if the tool paths are visible
+
+================================================================================
+PLIK: Operations_Item
+================================================================================
+
+Operations.Item
+ 
+ 
+
+ Operations.Item
+
+ Return a member of the Collection. It is the default member of the object so VBA can use it without specifing the word Item.
+
+ Syntax
+
+ ops.Item(Index)
+
+ OR
+
+ ops(Index)
+
+ Long Index Index of required Operation, 1 to Count
+
+================================================================================
+PLIK: Operations_OrderAll
+================================================================================
+
+Operations.OrderAll
+ 
+ 
+
+ Operations.OrderAll
+
+ Order the tool paths so that the operations are in the correct order. Call after changing operation numbers using the Path.OpNo property, or the Path.SetMillData method.
+
+ Syntax
+
+ ops.OrderAll
+
+================================================================================
+PLIK: Operations_Renumber
+================================================================================
+
+Operations.Renumber
+ 
+ 
+
+ Operations.Renumber
+
+ Renumber an operation.
+
+ Syntax
+
+ ops.Renumber (OperationNumber, NewNumber, Action)
+
+ Long OperationNumber Number of op to renumber
+
+ Long NewNumber  New number for this operation
+
+ AcamOpRenumberAction
+
+  Action   What to do if operation already exists.
+
+ Remarks
+
+ If an operation already exists with number NewNumber, the Action parameter determines what happens. It is either: acamOpADD_TO_OPERATION which means add the paths for op OperationNumber on to the end of paths for op NewNumber (if the tools are the same), or acamOpINSERT_IN_FRONT which means insert op OperationNumber in front of op NewNumber. The Operations object is invalid after using this method once. It must be recreated as in the example below.
+
+ Example
+
+ Renumber operations with the same tool. The Operations object is invalid after each renumber method call, so the function ReNumberOneOp is used. When it renumbers an operation it returns, destroying the object. It is then recreated in the Do While Loop.The loop is repeated until no more could be renumbered.
+
+ Public Sub ReNumber()
+
+ Dim Drw As Drawing 
+
+ Set Drw = App.ActiveDrawing 
+
+  
+
+ Do While ReNumberOneOp(Drw.Operations) ' recreate Operations 
+
+ Loop 
+
+ End Sub
+
+ ' Helper function for ReNumber
+
+ Private Function ReNumberOneOp(Ops As Operations) As Boolean
+
+ Dim I As Integer, J As Integer 
+
+ For I = 1 To Ops.Count 
+
+ For J = I + 1 To Ops.Count 
+
+ If Ops(I).tool.Number = Ops(J).tool.Number Then 
+
+ ' MsgBox "Trying to renumber " & I & " and " & J
+
+ Ops.ReNumber J, I, acamOpADD_TO_OPERATION 
+
+ ReNumberOneOp = True 
+
+ Exit Function 
+
+ End If 
+
+ Next J 
+
+ Next I 
+
+ ReNumberOneOp = False 
+
+ End Function
+
+================================================================================
+PLIK: Operations_StartResquence
+================================================================================
+
+Operations.StartResequence
+ 
+ 
+
+Operations.StartResequence
+
+For Lathe only, start resequenceing the operations.
+
+Syntax
+
+ops.StartResequence
+
+Remarks
+
+For AlphaV7 Lathe uses a different method from the other modules to determine the order of operations. Each operation has a sequence number, operations are ordered in the order of the sequence numbers. This allows operations in different turrets to be done in any order unlike previous versions which ordered the operations by turret. Call StartResequence then set the NewSequenceNumber property of each operation, then call FinishResequence.
+
+Example
+
+Assuming that there are at least two operations in the current drawing, this example swaps the first two. They can be in any turret/station.
+
+Public Sub SwapOps1And2()
+
+ Dim Drw As Drawing 
+
+ Set Drw = App.ActiveDrawing 
+
+ Dim Ops As Operations
+
+ Set Ops = Drw.Operations
+
+ Ops.StartResequence
+
+ Ops(1).NewSequenceNumber = 2
+
+ Ops(2).NewSequenceNumber = 1
+
+ Ops.FinishResequence
+
+End Sub
+
+================================================================================
+PLIK: OperationsObject
+================================================================================
+
+Operations Object
+
+Operations Object
+
+A Collection of Operation 
+ objects.
+
+This is the top-level operation object. Start with this 
+ to access the operation list. Use the Drawing.Operations property to get 
+ the Operations object.
+
+Example
+
+Show tool for each operation and name of each sub-operation, 
+ and highlight the tool paths
+
+Public Sub ShowOperations()
+
+Dim Drw As Drawing 
+
+Set Drw = App.ActiveDrawing 
+
+ 
+
+Dim Ops As Operations 
+
+Set Ops = Drw.Operations 
+
+ 
+
+Dim Op As Operation 
+
+For Each Op In Ops 
+
+MsgBox "Op No. " 
+ & Op.Number & vbCr & "Tool = " & Op.Tool.Name 
+
+Dim SubOp As SubOperation 
+
+For Each SubOp In Op.SubOperations 
+
+SubOp.ToolPaths.Selected = 
+ True 
+
+Drw.Redraw 
+
+MsgBox "Sub-op Name: 
+ " & SubOp.Name 
+
+SubOp.ToolPaths.Selected = 
+ False 
+
+Drw.Redraw 
+
+Next SubOp 
+
+Next Op 
+
+End Sub
+
+More:
+
+Operations Properties
+
+================================================================================
+PLIK: OperationsProperties
+================================================================================
+
+Operations Properties
+
+Operations Properties
+
+Count - (long) Number of items in the collection (read-only)
+
+================================================================================
+PLIK: ProgrammingLanguages
+================================================================================
+
+Programming Languages
+ 
+ 
+
+ Programming Languages
+
+ Which programming language should I use?
+
+ The advantages and disadvantages of the programming languages can be summarised as follows:
+
+ Marks out of 10, the higher the better
+
+ 
+ 
+ 
+  
+
+ 
+ Execution
+
+ Speed
+
+ 
+ Ease of 
+
+ Programming
+
+ 
+ User Interface
+
+ Design
+
+ 
+ 
+ VBA inside AlphaCAM 
+
+ 
+ 7
+
+ 
+ 8
+
+ 
+ 9
+
+ 
+ 
+ Visual Basic EXE
+
+ 
+ 2
+
+ 
+ 7
+
+ 
+ 9
+
+ 
+ 
+ Delphi DLL
+
+ 
+ 9
+
+ 
+ 4
+
+ 
+ 7
+
+ 
+ 
+ Delphi EXE
+
+ 
+ 4
+
+ 
+ 5
+
+ 
+ 8
+
+ 
+ 
+ C++ DLL
+
+ 
+ 9
+
+ 
+ 2
+
+ 
+ 6
+
+ 
+ 
+ C++ EXE
+
+ 
+ 4
+
+ 
+ 3
+
+ 
+ 7
+
+ 
+ Note: that if you are calling a lot of AlphaCAM methods, an external EXE will be much slower than an internal DLL or VBA macro inside AlphaCAM.
+
+ Note: A DLL or VBA Project can handle AlphaCAM events, and add commands to the AlphaCAM menu. An external EXE can not.
+
+================================================================================
+PLIK: Properties
+================================================================================
+
+Properties
+ 
+ 
+
+ Properties
+
+ AlphaCAM API objects have Properties. Properties are numbers or text strings which may be read (and written if not read-only). For example, a Path object has a property called Closed which will be True if the geometry or toolpath is closed. This is a read-only property as AlphaCAM will set this when the path is created or edited - the script can not set it.
+
+ To read a property eg Name in the Layer object:
+
+ Basic
+
+  lname = layer.Name
+
+ C++ (Using Smart Pointers)
+
+  lname = layer->Name;
+
+ Delphi
+
+  lname := layer.Name; 
+
+ To set a property eg ConeAngle in the MillTool object:
+
+ Basic
+
+  tool.ConeAngle = 118
+
+ C++ (Using Smart Pointers)
+
+  tool->ConeAngle = 118;
+
+ Delphi
+
+  tool.ConeAngle := 118;
+
+ A property may be set if it is not marked as read-only in its description.
+
+================================================================================
+PLIK: RectanglePropertiesObject
+================================================================================
+
+RectangleProperties Object
+ 
+ 
+
+ RectangleProperties Object
+
+ Object used to get the properties of a rectangle if a geometry represents a rectangle, parallel to the X-axis.
+
+ Use Path.GetRectangleProperties to get the object. If the geometry is a rectangle then this object will be returned and its properties may be read (not written). If it is not a rectangle the special value Nothing will be returned.
+
+ More:
+
+ RectangleProperties Properties
+
+================================================================================
+PLIK: RectanglePropertiesProperties
+================================================================================
+
+RectangleProperties Properties
+
+RectangleProperties Properties
+
+Bottom - (double) Minimum Y coordinate (read-only)
+
+Height - (double) Top - Bottom (read-only)
+
+Left (double) Minimum X coordinate (read-only)
+
+Right - (double) Maximum X coordinate (read-only)
+
+Top - (double) Maximum Y coordinate (read-only)
+
+Width - (double) Right - Left (read-only)
+
+================================================================================
+PLIK: Release_Notes_for_AlphaCAM_V5
+================================================================================
+
+Release Notes for AlphaCAM V5
+
+Release Notes for AlphaCAM V5
+
+For AlphaCAM V5 new objects have been added for ViewWindow 
+ and ViewWindows
+
+and various new properties and methods.
+
+New Properties and 
+ Methods
+
+Application Object
+
+CloseGeometryMacro
+
+OpenGeometryMacro
+
+RunGeometryMacro
+
+SetGeometryMacroVariable
+
+ 
+
+DrawingObject
+
+STLFacets
+
+SolidFacets
+
+UserSelectOneAddinObject
+
+SnapMode
+
+UserSelectOneGeoOrSpline
+
+DrawToArc
+
+SetXORAnyColorMode
+
+HideEditBoxes
+
+DrawSolidAsWireFrame
+
+UserGet3DPointWithCallBack
+
+Id
+
+ZoomToElement
+
+ZoomToPath
+
+EnableSnap
+
+ColorRGB
+
+SaveObjectForUndo
+
+ViewWindows
+
+UserSelectMultiGeosCollection2
+
+SaveStlFile
+
+ 
+
+Element Object
+
+Name
+
+BreakAtPoint
+
+Redraw
+
+ 
+
+Frame Object
+
+ExitNewMessageLoop
+
+InNewMessageLoop
+
+PostCommand
+
+AddCommand
+
+GetMenuItemID
+
+SetEvaluateParameter
+
+ClearEvaluateParameters
+
+ 
+
+MillData Object
+
+AutoZ
+
+AutoZMaxDepthOfCut
+
+AutoZStockZ
+
+AutoZMinDepthOfCut
+
+AutoZRampAngle
+
+StockXY
+
+StockZ
+
+ 
+
+MillStyle Object
+
+ShowProgressBox
+
+ 
+
+MillTool Object
+
+DepthOfCut
+
+Taper
+
+TaperFrustumLength
+
+TaperAngle
+
+TaperHalfLength
+
+TaperEndDia
+
+ 
+
+Path Object
+
+ReplaceElements
+
+SaveForUndo
+
+GetWireData
+
+Temp
+
+OffsetSimple
+
+Drawing
+
+Set3DLeadInOutAuto
+
+ 
+
+WorkPlane Object
+
+Move
+
+================================================================================
+PLIK: Release_Notes_for_AlphaCAM_V6
+================================================================================
+
+Release Notes for AlphaCAM V6
+
+Release Notes for AlphaCAM V6
+
+New Properties and 
+ Methods
+
+ 
+
+Drawing Object
+
+CreateSurfaceFlat
+
+CreateSurfaceFlat2
+
+MirrorSelectedInWorkPlane
+
+RedrawShadedViews
+
+Refresh
+
+BackgroundColorShadingRGB
+
+AddInWillHandleSnap
+
+UserSelectMultiAddinObjects2
+
+ 
+
+Element Object
+
+SetStartToolVector
+
+SetEndToolVector
+
+ 
+
+Frame Object
+
+SaveWindowLayout
+
+LoadWindowLayout
+
+CallEventFunction
+
+ 
+
+GeoCad Object
+
+Finish2DLinesOnly
+
+ 
+
+LaserData Object
+
+ManualToolPath
+
+ 
+
+MillData Object
+
+MachineSolid
+
+HelicalInterpolation
+
+SurfaceMCToolCanUndercut
+
+SurfaceMCCutInnerSurfaces
+
+SurfaceMCUseFlatAreas
+
+SetStlOrSolidAsMaterial
+
+SideTiltAngle
+
+DirectionAngle
+
+ 
+
+MillSubStyle Object
+
+LayerGeometry
+
+ 
+
+Path Object
+
+FilletBubble
+
+ShowGhostTool
+
+ 
+
+Surface Object
+
+Extend
+
+UnTrim
+
+SplinesFromEdges
+
+ 
+
+WorkPlane Object
+
+SetTmat
+
+================================================================================
+PLIK: Release_Notes_for_AlphaCAM_V7.5
+================================================================================
+
+Release Notes for AlphaCAM V7.5
+
+Release Notes for AlphaCAM V7.5
+
+ 
+
+The version number passed to InitAlphacamAddIn is frozen at 20070810. 
+ Add-in DLLs and VBA projects should use the VersionInformation object 
+ if they need to restrict the versions of Alphacam that they can run with. 
+ First test that the Version is >= 20070810, then get the VersionInformation 
+ object using the App.AlphacamVersion property. You can either restrict 
+ the add-in to work with a particular version by testing the Major and 
+ Minor properties, currently 7 and 5 for version 7.5 or test Major * 1000 
+ + Minor * 100 >= 7500. Then if necessary test the build number, which 
+ will always increment until the Major or Minor numbers change.
+
+ 
+
+You can also get the version information for loaded DLLs eg:
+
+    Dim 
+ VerInfo As VersionInformation
+
+    Set 
+ VerInfo = App.FileVersion("feature.dll")
+
+ 
+
+Because no path is specified this will get the information for the version 
+ of feature.dll which is loaded by Alphacam. A path can be specified if 
+ you want to get information about a DLL that is not loaded by Alphacam.
+
+ 
+
+Dependencies
+
+An add-in DLL can now specify that another add-in DLL must be loaded 
+ before this one. For example, AcamNest.dll must be loaded before AdvNest.dll, 
+ so AdvNest exports the following function:
+
+ 
+
+ACAMAPIFUN(BSTR) GetDependencies()
+
+{
+
+AFX_MANAGE_STATE(AfxGetStaticModuleState());
+
+CString str("AcamNest.dll");
+
+return str.AllocSysString();
+
+}
+
+ 
+
+Alphacam will look in the registry for DLLs to load in the same way 
+ as before, starting with: HKEY_LOCAL_MACHINE\SOFTWARE\LicomSystems\aroutaps\Applications7500 
+ where "aroutaps" is replaced by the name of the equivalent pre-V7.5 
+ executable. Note that on 64bit XP or Vista the 32bit node must be used, 
+ either by running regedit and going to :
+
+HKEY_LOCAL_MACHINE\SOFTWARE\Wow6432Node or by running: %systemroot%\syswow64\regedit 
+ using the Start | Run box.
+
+ 
+
+Interfaces
+
+In AlphaV7, properties were added to the Drawing object to get the interface 
+ for the Parametric, Solid and STL add-ins, as a safer alternative to using 
+ New or CreateObject or CoCreateInstance. In AlphaV7.5 these properties 
+ must be used, the old ways will not work. This ensures that the correct 
+ version of the add-in is used, rather than the most recently-registered 
+ one.
+
+ 
+
+Nesting Macros and Extensions
+
+ 
+
+For the same reason as in the above paragraph, AcamNest.dll has a new 
+ type library and new methods in the Nesting object:
+
+ 
+
+method
+
+CreateEventHandler
+
+ 
+
+Use n.CreateEventHandler instead of New ACAMNESTLib.NestEvents
+
+ 
+
+Dim WithEvents OrderEvent As ACAMNESTLib.NestEvents
+
+Public Sub Init(n As Nesting)
+
+    'Set 
+ OrderEvent = New ACAMNESTLib.NestEvents
+
+    Set 
+ OrderEvent = n.CreateEventHandler
+
+    n.RegisterEventHandler 
+ OrderEvent
+
+ 
+
+method
+
+CreateExtensionHandler
+
+Use n.CreateExtensionHandler instead of New ACAMNESTLib.NestingExtension
+
+ 
+
+Dim WithEvents OrderExt As ACAMNESTLib.NestingExtension
+
+Public Sub Init(n As Nesting, name As String)
+
+    'Set 
+ OrderExt = New ACAMNESTLib.NestingExtension
+
+    Set 
+ OrderExt = n.CreateExtensionHandler
+
+    n.RegisterExtensionHandler 
+ OrderExt
+
+ 
+
+Drawing Object
+
+ 
+
+StartDrawToQuick/DrawToQuick/FinishDrawToQuick now use an OpenGL display 
+ list
+
+in shaded modes. DrawTo uses OpenGL with no display list and will be 
+ very slow
+
+for multiple points. StartDrawToQuick/DrawToQuick/FinishDrawToQuick 
+ should be
+
+used instead.
+
+ 
+
+New Properties and 
+ Methods
+
+Application
+
+Properties
+
+AlphacamVersion, FileVersion, License
+
+Methods
+
+GetCurrentToolInLatheTurret 
+ (Lathe only)
+
+SelectPostModuleInThisVBAProject
+
+SetProcessAffinityMask
+
+Drawing
+
+Properties
+
+App
+
+Methods
+
+ClampsSetInitialPositions
+
+CreateWorkPlaneSubSpindle
+
+GetSubSpindleWorkPlane
+
+SaveAsEx
+
+SetSubSpindleShift
+
+Element
+
+Properties
+
+SawAngle
+
+Frame
+
+Property
+
+PathOfThisAddin2
+
+Layer
+
+Property
+
+Drawing
+
+MillData
+
+Properties
+
+SawInternalCorners
+
+SawExternalCorners
+
+SawHeadPosition
+
+SawInternalCornerDistance
+
+SawExternalCornerDistance
+
+SawAngle
+
+SawResetElementAngles
+
+OverlapOnOpenElements
+
+Method
+
+Saw
+
+Path
+
+Methods
+
+GetFeedExtentXYG
+
+GetSawNestPath
+
+GetSawPlacePath
+
+SaveForUndoAdded
+
+Paths
+
+Methods
+
+GetExtentXYG
+
+GetSawNestPaths
+
+GetSawPlacePaths
+
+Spline
+
+Property
+
+Drawing
+
+Surface
+
+Property
+
+Drawing
+
+Text
+
+Properties
+
+Drawing
+
+IsDimension
+
+TurnData
+
+Properties
+
+LiftOff
+
+RetractAmount
+
+RoughMethod
+
+ToolCanReEnterProfile
+
+PartOffSpeedPerCent
+
+PartOffUsePartCatcher
+
+WorkPlane
+
+Property
+
+Drawing
+
+Method
+
+IntersectPath
+
+New Objects
+
+License
+
+VersionInformation
+
+ 
+
+New Events
+
+ 
+
+BeforeCutBetweenTwoGeometries, AfterCutBetweenTwoGeometries
+
+ 
+
+Running Alphacam from other programs
+
+ 
+
+Alphacam can be run from other programs using COM as before, with one 
+ difference: the level that is run will depend on the license available, 
+ not the name specified in the CreateObject call.
+
+ 
+
+For example, in VB6/VBA:
+
+ 
+
+Dim Acam As AlphaCAMRouter.App
+
+Set Acam = CreateObject("aroutaps.application")
+
+ 
+
+will run the highest level of Router available, eg ar5axaps (5-axis 
+ Router) if a license is available.
+
+ 
+
+Dim Acam As New AlphaCAMRouter.App
+
+ 
+
+is not recommended. (Can cause problems on 
+ Windows Vista)
+
+ 
+
+If a level lower than the license is required, 
+ set the registry entry:
+
+ 
+
+ProgramLevel
+
+ 
+
+under the key:
+
+ 
+
+HKEY_CURRENT_USER\Software\LicomSystems\Acam\COM
+
+ 
+
+to a numeric (DWORD) value:
+
+ 
+
+1 = Basic
+
+2 = Standard
+
+3 = Advanced
+
+4 = Advanced 3D 3 Axis
+
+5 = Advanced 3D 5 Axis
+
+6 = AlphaViewPlus
+
+ 
+
+Alphacam will set it to zero (use default 
+ level) after reading it.
+
+ 
+
+For example, from VB.Net:
+
+Imports Microsoft.Win32
+
+        Dim 
+ Rk As RegistryKey
+
+        Rk 
+ = Registry.CurrentUser.CreateSubKey("SOFTWARE\LicomSystems\Acam\COM", 
+ RegistryKeyPermissionCheck.ReadWriteSubTree)
+
+        Rk.SetValue("ProgramLevel", 
+ AlphaCAMRouter.AcamLevel.acamLevelPROUTAPS, RegistryValueKind.DWord)
+
+ 
+
+See \ApiV7.5\VB.Net\RunAcam on the CD for an example program.
+
+ 
+
+For a C++ example, see \ApiV7.5\VisualCPP\RunAcam on the CD
+
+ 
+
+Calling from .Net
+
+ 
+
+When calling Alphacam from .Net the Alphacam exe may be left in memory 
+ due to the way the .Net Garbage Collector works.
+
+To avoid this add the following when the Alphacam object (eg Acam) is 
+ finished with:
+
+ 
+
+        ' 
+ The following 4 lines make .Net release the Alphacam object, otherwise 
+ Alphacam stays in memory
+
+        Acam 
+ = Nothing
+
+        System.GC.Collect()
+
+        System.GC.WaitForPendingFinalizers()
+
+        System.GC.Collect()
+
+================================================================================
+PLIK: Release_Notes_for_AlphaCAM_V7
+================================================================================
+
+Release Notes for AlphaCAM V7
+
+Release Notes for AlphaCAM V7
+
+ 
+
+In AlphaV7, DLL add-ins are loaded before VBA add-ins. Previous versions 
+ loaded VBA add-ins before DLLs.
+
+ 
+
+Properties have been added to the Drawing object to get the interface 
+ for the Parametric, Solid and STL add-ins.
+
+If you use these properties instead of CreateObject or CoCreateInstance 
+ you will always get the object that is already loaded in AlphaCAM. Otherwise 
+ in some circumstances a different object will be loaded and will cause 
+ a crash.
+
+ 
+
+In VBA use:
+
+Dim SF As SolidFeatures
+
+Set SF = App.ActiveDrawing.SolidInterface
+
+SF.Import "C:\parasolid\parts\arcs.x_b", 
+ FeatureImportVisibleSolidModel
+
+ 
+
+In C++ use:
+
+IAlphaCamAppPtr pApp(var_acam.pdispVal); 
+ // pApp is pointer to Application object
+
+using namespace AlphaCAMFeatureExtraction;
+
+CComPtr<ISolidFeatures> pSF;
+
+CComPtr<IDispatch> IDP = pApp->ActiveDrawing->SolidInterface;
+
+HRESULT hr = IDP->QueryInterface(IID_ISolidFeatures, 
+ (void **) &pSF);
+
+if(!SUCCEEDED(hr)) return; 
+
+pSF->Import("C:\\parasolid\\parts\\route.x_b", 
+ FeatureImportVisibleSolidModel);
+
+ 
+
+ 
+
+The Spline object can now have Attributes
+
+ 
+
+A Delete method has been added to various objects eg Path, Spline, Text
+
+ 
+
+New Objects (and their Collection equivalents) have been added:
+
+Clamp - A clamp or fixture, may be moveable
+
+SolidPart - A Solid eg Parasolid or STL
+
+Workpiece - A material
+
+ 
+
+New Properties and 
+ Methods
+
+Application
+
+Methods
+
+OpenVBAProject
+
+OpenVBAPost
+
+Drawing Object
+
+Properties
+
+Clamps
+
+CurrentViewWindow
+
+ParametricInterface
+
+ShowSelection
+
+SolidInterface
+
+SolidParts
+
+STLInterface
+
+Workpiece
+
+Workpieces
+
+Methods
+
+GetClosestSurfacePoint
+
+GetNextGroupNumberForSurfaces
+
+ProjectGeometriesToSurfaces2
+
+SurfaceFromGeoSections2
+
+UserSelectOneElement
+
+Element
+
+Properties
+
+SurfaceNormalX, Y, Z
+
+ContactPointX, Y, Z
+
+ContactPointValid
+
+Methods
+
+GetDirection
+
+GeoCad
+
+Methods
+
+AddLineWithAttribute
+
+AddArcWithAttribute
+
+MillData
+
+Properties
+
+AutoZRapidLevelIsAbsolute
+
+OpGroup
+
+OpSequenceNo
+
+PocketUsePreviousMachining
+
+RoughFinishUsePreviousMachining
+
+RoughFinishPreMCOverlap
+
+MillTool
+
+Properties
+
+HolderWidth
+
+InsertWidth
+
+TaperAngle
+
+TaperEndDia
+
+TaperFrustumLength
+
+TaperHalfLength
+
+Path
+
+Property
+
+LatheOtherSide
+
+Method
+
+Delete
+
+GetTurnData
+
+MatchGeometry
+
+ProjectGeometryToParallelWorkPlane
+
+Paths
+
+Methods
+
+BreakPath
+
+Delete
+
+JoinGeosQuick
+
+Spline
+
+Attributes 
+ added
+
+Method
+
+Delete
+
+Surface
+
+Property
+
+Group
+
+Methods
+
+Delete
+
+GetClosestPoint
+
+Offset
+
+Text
+
+Method
+
+Delete
+
+TurnData
+
+Method
+
+GetToolChangePointForTurret
+
+ViewWindow
+
+Property
+
+CanRotateView
+
+Methods
+
+GetRotationPoint
+
+HideRotationPoint
+
+PixelsToWorld
+
+SetRotationPoint
+
+TranslateView
+
+WorldToPixels
+
+ZoomIn
+
+ZoomOut
+
+WorkPlanes
+
+Methods
+
+DeleteEmpty
+
+Order
+
+================================================================================
+PLIK: Release_Notes_for_AlphaCAM_V8
+================================================================================
+
+Release Notes for AlphaCAM V8
+
+Release Notes for AlphaCAM V8
+
+ 
+
+New Properties and 
+ Methods
+
+Application
+
+Method
+
+OpenStepFileEx
+
+Dimension
+
+Method
+
+UpdateGUISettings
+
+Drawing
+
+Properties
+
+GeoUtilitiesInterface
+
+LatheMachineConfiguration
+
+MachineComponents
+
+MachineConfiguration
+
+SimulationType
+
+SnapData
+
+SolidSimulationInterface
+
+SolidSimulationStatus
+
+Methods
+
+CreateSplineCollection
+
+GetNextOpGroupNumber
+
+DrawingOptions
+
+Property
+
+ShowToolHolder
+
+Element
+
+Property
+
+Path
+
+Frame
+
+Methods
+
+RegisterImportFunction2
+
+GetProjectBarPage
+
+RegisterExportFunction
+
+MillData
+
+Properties
+
+SawOpenEnds
+
+SawOpenEndsDistance
+
+OpGroup (Made writable)
+
+MillTool
+
+Property
+
+ToolTipToGaugeLine
+
+Method
+
+SelectInLatheTurret
+
+Path
+
+Properties
+
+DontInvalidate
+
+Temp (Made writable)
+
+Methods
+
+CopyPartial
+
+GetBitmap
+
+Paths
+
+Method
+
+Append
+
+PostConfigure
+
+Properties
+
+LatheRapidApproach
+
+LatheRapidRetract
+
+LatheRapidSecurityZ
+
+LatheRapidSecurityX
+
+Suppress5AxisFeedCalculation
+
+PostData
+
+Methods
+
+Format2
+
+CreateFormat
+
+Splines
+
+Methods
+
+Add
+
+Remove
+
+Delete
+
+SubOperation
+
+Property
+
+OpGroup
+
+Text
+
+Method
+
+UpdateGUISettings
+
+TurnData
+
+Properties
+
+AutoLeadLengthIn
+
+AutoLeadLengthOut
+
+RapidApproach
+
+RapidApproachSecurityZ
+
+RapidApproachSecurityX
+
+RapidRetract
+
+RapidRetractSecurityZ
+
+RapidRetractSecurityX
+
+OpGroup
+
+Workpiece
+
+Property
+
+ColorRGB
+
+WorkPlane
+
+Methods
+
+ConvertCylinderCoords
+
+MakeLocalAxisHorizontalEx
+
+ 
+
+New Objects
+
+GeoBitmap
+
+LatheMachineConfiguration
+
+MachineConfiguration
+
+MachineComponent
+
+MachineComponents
+
+SnapData
+
+================================================================================
+PLIK: Release_Notes_for_AlphaCAM_V9
+================================================================================
+
+Release Notes for AlphaCAM V9
+
+Release Notes for AlphaCAM V9
+
+ 
+
+New Properties and 
+ Methods
+
+ 
+
+MillData
+
+Properties
+
+MillDataMachiningEngine
+
+ 
+
+New Object
+
+MillDataMachiningEngine
+
+ 
+
+AlphaV9 has new 3D Surface/Solid Roughing using the Planit Machining 
+ Engine. To use it in the API a new object has been added, MillDataMachiningEngine, 
+ which has extra properties and methods. Existing macros will use the old 
+ roughing.
+
+================================================================================
+PLIK: ReleaseNotesforAlphaCAM01
+================================================================================
+
+Release Notes for AlphaCAM 01
+ 
+ 
+
+ Release Notes for AlphaCAM 01
+
+ AlphaCAM 01 includes VBA 6.2, which gives more language features and other advantages.
+
+ For AlphaCAM 01 several new objects have been added, and various new properties and methods. The main difference is the change to the way that text is handled in AlphaCAM. Text is now stored as a text object, not as geometry lines and arcs. Text in the drawing is represented as a Collection of Text objects, accessed by the Text property of the Drawing object. Each Text object contains a Lines property which is a Collection of TextLine objects, one for each line of text in the object. the Text object also contains many properties eg Font.
+
+ Text may be created as before using Drawing.CreateText, which for compatibility still creates text as geometry and returns it as a Paths object. A new method, Drawing.CreateText2, creates text as text and returns a Text object. Similarly for CreateTextAlongPath and CreateTextAlongPath2.
+
+ A new object, MachiningDefaults, has been added to give access to the settings set by the user in Configure.
+
+ For Lathe modules, a new object, TurnProgrammingPoint, gives access to multiple programming points for Turning tools.
+
+ More objects can now have Attributes (Drawing, Element, MillTool, WorkPlane).
+
+ Frame.RegisterImportFunction allows an Add-In to inform AlphaCAM that it can import a type of file.
+
+ New Properties and Methods
+
+ Application Object
+
+ MachiningDefaults
+
+ SpecialKey
+
+ OpenExternalFile
+
+ Drawing Object
+
+ Attribute
+
+ Text
+
+ CreateText2
+
+ CreateTextAlongPath2
+
+ HatchPath
+
+ HatchPoint
+
+ UserGet2DPointWithRubberBand
+
+ Element Object
+
+ Attribute
+
+ Frame Object
+
+ RegisterImportFunction
+
+ Layer Object
+
+ Splines
+
+ Text
+
+ LineWidth 
+
+ ColorRGB 
+
+ MillData Object
+
+ EndFaceMethod
+
+ MillTool Object
+
+ Attribute
+
+ Path Object
+
+ Erase
+
+ FitLines
+
+ FitLinesAndArcs
+
+ Spline Object
+
+ RotateL
+
+ MoveL
+
+ ScaleL
+
+ ScaleL2
+
+ MirrorL
+
+ WorkPlane Object
+
+ Attribute
+
+ Splines
+
+ Text
+
+================================================================================
+PLIK: ReleaseNotesforAlphaCAM02
+================================================================================
+
+Release Notes for AlphaCAM 02
+ 
+ 
+
+ Release Notes for AlphaCAM 02
+
+ For AlphaCAM 02 two new objects have been added for Lathe, TurnThreadData and ThreadDefinition, and various new properties and methods.
+
+ The Text object can now have Attributes.
+
+ All objects that have Attributes now have DeleteAttribute, GetAttributeCount and GetAttributeName methods.
+
+ Methods are added to the Frame object to support the ProjectBar user interface.
+
+ The system for registering add-in DLLs has been enhanced, so that a DLL can be registered to be loaded only by Alpha02 and later. See the comments in addin1.cpp in \API02\VisualCpp\Addin1-2002 on the CD.
+
+ New Properties and Methods
+
+ Application Object
+
+ GetPostAttributeCount 
+
+ GetPostAttributeName 
+
+ GetPostAttributeNumber 
+
+ GetPostUserVariable 
+
+ MaxNumberOfUndos 
+
+ SetUndoPoint 
+
+ DisableUndo 
+
+ SetUndoCommandName 
+
+ CreateThreadDefinition 
+
+ CreateTempDrawing 
+
+ Drawing Object
+
+ DrawingLineStyle 
+
+ PickTolerance 
+
+ Undo 
+
+ StartDrawingInDC 
+
+ StopDrawingInDC 
+
+ AddToRecentFileList 
+
+ Modified 
+
+ DrawingColorRGB 
+
+ BackgroundColorRGB 
+
+ CreateTextCollection 
+
+ Element Object
+
+ Feed 
+
+ LeadExtra 
+
+ Frame Object
+
+ AddProjectBarPage 
+
+ RemoveProjectBarPage 
+
+ ShowProjectBarPage 
+
+ ProjectBarUpdating 
+
+ ProjectBarVisible 
+
+ MillData Object
+
+ PocketOrder 
+
+ CalculateFeedsAndSpeed 
+
+ MillTool Object
+
+ DefineTurnProgrammingPoint 
+
+ FeedPerRevX 
+
+ FeedPerRevXZ 
+
+ FeedPerRevZ 
+
+ TurretOffsetX  
+
+ TurretOffsetZ 
+
+ DiameterAndLengthSet 
+
+ DiameterLineStartX 
+
+ DiameterLineStartY 
+
+ DiameterLineEndX 
+
+ DiameterLineEndY 
+
+ ZCircleCenterX 
+
+ ZCircleCenterY 
+
+ ZCircleRadius 
+
+ ShankDiameter 
+
+ FixedDownFeed 
+
+ ColorRGB 
+
+ Path Object
+
+ CompOnRapid 
+
+ Disabled 
+
+ STL 
+
+ MoveToDrawing 
+
+ Name 
+
+ IsDrillSub 
+
+ ColorRGB 
+
+ TurnData Object
+
+ ThreadData 
+
+ ThreadFileName 
+
+ Thread 
+
+ SubOperation Object
+
+ GetLaserData 
+
+ SetLaserData 
+
+ Time 
+
+ FeedDistance 
+
+ Tool 
+
+ Text Object
+
+ CharacterWidthScale 
+
+ ItalicAngle 
+
+ SaveForUndo 
+
+ MoveToDrawing 
+
+ CopyTemporary 
+
+ StoreTemporary 
+
+ Spline Object
+
+ MoveToDrawing
+
+ Surface Object
+
+ MoveToDrawing 
+
+ Texts Object
+
+ Selected 
+
+ Add 
+
+ Remove 
+
+ MoveL 
+
+ Redraw 
+
+ Duplicate
+
+================================================================================
+PLIK: ReleaseNotesforAlphaCAM03
+================================================================================
+
+Release Notes for AlphaCAM 03
+
+Release Notes for AlphaCAM 03
+
+For AlphaCAM 03 various new objects have been added 
+ for Machining Styles: LeadData, MillStyle, MillStyles, MillSubStyle, MillSubStyles, 
+ and various new properties and methods.
+
+New Properties and 
+ Methods
+
+Application Object
+
+IsAlphaCad
+
+IsAlphaNest
+
+MillMachiningStyles
+
+PreviewFlag
+
+CreateLeadData
+
+CreateMillStyle
+
+EnableAddIn
+
+LoadAddIn
+
+ 
+
+DrawingObject
+
+OutputNCStatus
+
+ThreeDViewsDividerX
+
+ThreeDViewsDividerY
+
+ 
+
+Element Object
+
+IsRapidTag
+
+ 
+
+Frame Object
+
+ClearBeforeCadInput
+
+OutputNcVisibleOnly
+
+ViewWindowHandle
+
+WindowHandle
+
+ 
+
+LeadData Object
+
+Angle
+
+LeadIn
+
+LeadOut
+
+LengthIn
+
+LengthOut
+
+LineArcInTangential
+
+LineArcOutTangential
+
+Radius
+
+SlopeIn
+
+SlopeOut
+
+ 
+
+MillData Object
+
+ProcessType2
+
+SurfaceRestMCPrevToolDia
+
+ 
+
+MillStyle Object
+
+FileName
+
+LayerGeometry
+
+MillSubStyles
+
+AddOp
+
+Apply
+
+SaveAs
+
+ 
+
+MillSubStyle Object
+
+LayerBoundary
+
+LayerPoints
+
+Tool
+
+GetMillData
+
+SetMillData
+
+ 
+
+MillTool Object
+
+DiskGuardBottomZ
+
+DiskGuardTopZ
+
+DiskMinRadius
+
+MaximumDepth
+
+GetDiskGuardGeometry
+
+SetDiskGuardGeometry
+
+ 
+
+Operation Object
+
+Delete
+
+OrderToolPaths
+
+================================================================================
+PLIK: ReleaseNotesforAlphaCAM99
+================================================================================
+
+Release Notes for AlphaCAM 99
+ 
+ 
+
+ Release Notes for AlphaCAM 99
+
+ Differences between the API in AlphaCAM 98 and AlphaCAM 99 are documented here.
+
+ AlphaCAM 98 had the first version of the API, with the Enable Basic script interpreter. AlphaCAM 99 replaces Enable with Microsoft VBA (Visual Basic for Applications) which gives you a complete programming environment built-in to AlphaCAM Advanced modules. (Standard and Basic modules can run VBA Macros, but not create or edit them).
+
+ Due to the extra features of VBA, some API functions have been modified. In particular, any method which returned a list of Path objects by returning the first Path object and the number of paths in a parameter, have been changed to return a Paths object, which is a Collection of Path objects. For example, Drawing.CreateText and Path.BreakWithCuttingGeos have changed. See Method Changes and Collections.
+
+ Object variables should now be declared with the correct type. For example:
+
+ Dim Drw As Object
+
+ should be replaced with:
+
+ Dim Drw As Drawing
+
+ This will run faster and help you to write the code because when you type "Drw." a popup window will appear with the methods and properties for this object. Typing the first few letters of the required one and pressing space will complete it.
+
+ VBA is more strict than Enable about the use of parentheses () in method calls, the following rule must be followed:
+
+ For VBA, the parentheses () must be used if the return value will be used. They must NOT be used if the return value is not used or the method does not return a value.
+
+ For example (where Drw is a Drawing object, Line is a Path object):
+
+ ' Use return value, must have ()
+
+ Set Line = Drw.Create2DLine(0, 0, 100, 0) ' OK
+
+ Set Line = Drw.Create2DLine 0, 0, 100, 0 ' NOT OK
+
+ ' Ignore return value, must not have ()
+
+ Drw.Create2DLine 0, 0, 100, 0 ' OK
+
+ Drw.Create2DLine(0, 0, 100, 0) ' NOT OK
+
+ Events may now be handled by more than one VBA Project. The only rule is that the event routines must be in a VBA Module called Events. Any number of VBA Projects may be loaded at the same time, each may have an Events module. If there is more than one event handler for an event they will all be called. (Unless a non-zero return value is returned, if a return value is expected.) Any event that returned a file name eg BeforeOpenFile, may return 2 to cancel the command. See Events.
+
+ There are three ways to load VBA Projects automatically. Loaded projects (except in SysMacro) will be shown in the Utils | Add-Ins dialog box, and may be turned on or off with a check-box. They do not have to be called AutoLoad, they can be any name, and there can be more than one.
+
+ 1) VBA Projects of the correct type (eg *.AMB for Mill) in the StartUp folder in VBMacros in the default Licomdir will be loaded automatically. . The name of the file will appear in the Add-Ins dialog box.
+
+ 2) VBA Projects of the correct type in StartUp in the Alpha01 folder. They will appear in the Add-Ins dialog box.
+
+ 3) VBA Projects of the correct type in SysMacro in the Alpha01 folder. They will NOT appear in the Add-Ins dialog box - they will always be loaded.
+
+ 4) DLLs are loaded using the registry (see the samples), so can be anywhere. They will also appear in the Add-Ins dialog box.
+
+ VBA Projects can add menu items when loaded, and/or may contain macros which can be run using the Utils | VBA Macros | Macros command. For a macro to appear in the dialog box it must be a Public Sub with no parameters.
+
+ For programmers using other languages, the Type Library is now embedded into each AlphaCAM executable.
+
+ AlphaCAM functions may now return errors, which may be trapped using VBA error handling. See Errors.
+
+ Functions have been added to the API to add Attributes to paths. See Attributes.
+
+ Many new objects and functions have been added.
+
+================================================================================
+PLIK: SnapData_Object
+================================================================================
+
+SnapData Object
+
+SnapData Object
+
+An object storing the data about the last snapped point. 
+ (All properties are read-only)
+
+ 
+
+Properties
+
+Element (Element) The element snapped to
+
+Path (Path) The path snapped to
+
+SnapMode (AcamSnap) The snap mode
+
+XLocal, YLocal (double) Local coordinates of point snapped 
+ to
+
+XGlobal, YGlobal, ZGlobal (double) Global coordinates 
+ of point snapped to
+
+================================================================================
+PLIK: SubOperation_Delete
+================================================================================
+
+SubOperation.Delete
+ 
+ 
+
+ SubOperation.Delete
+
+ Delete the sub-operation and the tool paths.
+
+ Syntax
+
+ SubOp.Delete
+
+================================================================================
+PLIK: SubOperation_GetMillData
+================================================================================
+
+SubOperation.GetMillData
+ 
+ 
+
+ SubOperation.GetMillData
+
+ Get the machining data for this sub-operation. An object of type MillData will be returned.
+
+ Syntax
+
+ SubOp.GetMillData
+
+ [Return] MillData  MillData object 
+
+ Remarks
+
+ The properties of the MillData object may be read and/or written. If any are written, use SubOperation.SetMillData to regenerate the tool paths.
+
+ See SubOperation.SetMillData for an example.
+
+================================================================================
+PLIK: SubOperation_SetMillData
+================================================================================
+
+SubOperation.SetMillData
+ 
+ 
+
+ SubOperation.SetMillData
+
+ Set the machining data for this sub-operation. The associated tool paths will be deleted and regenerated, using the associated geometries.
+
+ Syntax
+
+ SubOp.SetMillData (MD)
+
+ MillData MD MillData object
+
+ Remarks
+
+ The MillData object MUST be one returned by SubOperation.GetMillData.
+
+ Examples
+
+ The following examples assume that the referenced drawing file is available.
+
+ It is part of the standard release cdrom installed in English (UK).
+
+ Example 1, Change stock for operation 1 and regenerate tool paths
+
+ Public Sub EditOperation1()
+
+ App.OpenDrawing App.LicomdirPath & "licomdir\Tutorial\Mill Simple Shape + tool paths.amd" 
+
+ Dim Drw As Drawing 
+
+ Set Drw = App.ActiveDrawing 
+
+  
+
+ Dim SubOp As SubOperation 
+
+ Set SubOp = Drw.Operations(1).SubOperations(1) 
+
+  
+
+ Dim MD As MillData 
+
+ Set MD = SubOp.GetMillData 
+
+  
+
+ MD.Stock = 2 
+
+  
+
+ SubOp.SetMillData MD 
+
+ End Sub
+
+ Example 2, Change operation 2 from Drilling to Pecking
+
+ Public Sub EditOperation2()
+
+ ' App.OpenDrawing App.LicomdirPath & "licomdir\Tutorial\Mill Simple Shape + tool paths.amd"
+
+ Dim Drw As Drawing 
+
+ Set Drw = App.ActiveDrawing 
+
+  
+
+ Dim SubOp As SubOperation 
+
+ Set SubOp = Drw.Operations(2).SubOperations(1) 
+
+  
+
+ Dim MD As MillData 
+
+ Set MD = SubOp.GetMillData 
+
+  
+
+ MD.DrillType = acamPECK 
+
+ MD.PeckDistance = 1 
+
+  
+
+ SubOp.SetMillData MD 
+
+ End Sub
+
+ Example3, Change the geometry for operation 3 and regenerate the tool paths
+
+ Public Sub EditOperation3()
+
+ ' App.OpenDrawing App.LicomdirPath & "licomdir\Tutorial\Mill Simple Shape + tool paths.amd"
+
+ Dim Drw As Drawing 
+
+ Set Drw = App.ActiveDrawing 
+
+  
+
+ Dim SubOp As SubOperation 
+
+ Set SubOp = Drw.Operations(3).SubOperations(1) 
+
+  
+
+ Dim P As Path 
+
+ Set P = SubOp.Geometries(1) 
+
+ P.ScaleL 1.5, P.Elements(1).CenterXL, P.Elements(1).CenterYL 
+
+  
+
+ ' To regenerate the tool paths after the geometries are changed 
+
+ ' just get and set the MillData object 
+
+  
+
+ Dim MD As MillData 
+
+ Set MD = SubOp.GetMillData 
+
+ SubOp.SetMillData MD 
+
+ End Sub
+
+================================================================================
+PLIK: SubOperationObject
+================================================================================
+
+SubOperation Object
+
+SubOperation Object
+
+A sub-operation, within an Operation.
+
+More:
+
+SubOperation 
+ Properties
+
+================================================================================
+PLIK: SubOperationProperties
+================================================================================
+
+SubOperation Properties
+
+SubOperation Properties
+
+FeedDistance - (Double) The feed distance for this sub-operation 
+ (read-only)
+
+Geometries - (Paths) The geometries associated within 
+ this sub-operation (read-only)
+
+Name - (String) The name of this sub-operation, as in 
+ the Operation List dialog box (read-only)
+
+Number - (Long) Operation Number (read-only)
+
+OpGroup - (Long) Operation Group Number
+
+Time - (Double) The time in seconds taken for this sub-operation 
+ (read-only)
+
+Tool - (MillTool) The tool used in this sub-operation
+
+ToolPaths - (Paths) The tool paths in this sub-operation 
+ (read-only)
+
+Visible - (Boolean) True if the tool paths are visible
+
+================================================================================
+PLIK: SubOperationsObject
+================================================================================
+
+SubOperations Object
+
+SubOperations Object
+
+A Collection of SubOperation 
+ objects.
+
+More:
+
+SubOperations 
+ Properties
+
+================================================================================
+PLIK: SubOperationsProperties
+================================================================================
+
+SubOperations Properties
+
+SubOperations Properties
+
+Count - (long) Number of items in the collection (read-only)
+
+================================================================================
+PLIK: Surface_Copy
+================================================================================
+
+Surface.Copy
+ 
+ 
+
+ Surface.Copy
+
+ Copy the surface and return a Surface object for the new surface.
+
+ Syntax
+
+ surface.Copy
+
+ [Return] Surface  Surface object.
+
+ Remarks
+
+ The surface will be added to the end of the list of surfaces.
+
+================================================================================
+PLIK: Surface_Evaluate
+================================================================================
+
+Surface.Evaluate
+
+Surface.Evaluate
+
+Evaluate the surface at the given point. The coordinates 
+ will be returned, and, optionally, the normal and derivative values.
+
+Syntax
+
+surface.Evaluate (S, T, Flags)
+
+double S S parameter value
+
+double T T parameter value
+
+AcamSurfaceEvaluate Flags acamEvaluateCOORDS, 
+ acamEvaluateCOORDS_AND_NORMAL or acamEvaluateALL
+
+[Return] Variant  Returned array of doubles, 
+ see remarks
+
+Remarks
+
+If Flags is acamEvaluateCOORDS the returned array will 
+ contain the X, Y and Z coordinates. For example, the following code will 
+ display the XYZ coordinates at the point on the surface where the parameter 
+ values are 0.5 (Usually the middle, but not always eg if the surface came 
+ from another CAD system):
+
+ Dim V
+
+ V = surface.Evaluate (.5, .5, acamEvaluateCOORDS)
+
+ MsgBox "X=" & V(0) & ", 
+ Y=" & V(1) & ", Z=" & V(2)
+
+If Flags is acamEvaluateCOORDS_AND_NORMAL, the XYZ components 
+ of the unit normal will also be returned, in V(3), V(4) and V(5)
+
+See example Surface Example
+
+If Flags is acamEvaluateALL, the array will also contain 
+ the derivative values:
+
+ V(6) dx/ds
+
+ V(7) dy/ds
+
+ V(8) dz/ds
+
+ V(9) dx/dt
+
+ V(10) dy/dt
+
+ V(11) dz/dt
+
+ V(12) d2x/ds2
+
+ V(13) d2y/ds2
+
+ V(14) d2z/ds2
+
+ V(15) d2x/dt2
+
+ V(16) d2y/dt2
+
+ V(17) d2z/dt2
+
+ V(18) d2x/dsdt
+
+ V(19) d2y/dsdt
+
+ V(20) d2z/dsdt
+
+================================================================================
+PLIK: Surface_Extend
+================================================================================
+
+Surface.Extend
+
+Surface.Extend
+
+Add surfaces to extend the surface by the given amount.
+
+Syntax
+
+Surface.Extend (Distance)
+
+double Distance Amount to extend by
+
+================================================================================
+PLIK: Surface_GenerateFacets
+================================================================================
+
+Surface.GenerateFacets
+ 
+ 
+
+ Surface.GenerateFacets
+
+ Generate the facets for this surface.
+
+ Syntax
+
+ surface.GenerateFacets (Tolerance, Type)
+
+ double  Tolerance Tolerance for facets
+
+ AcamFacetType  Type Type of facets, acamFacetSHADING or acamFacetMACHINING
+
+================================================================================
+PLIK: Surface_GetLayer
+================================================================================
+
+Surface.GetLayer
+ 
+ 
+
+ Surface.GetLayer
+
+ Get the layer for the surface. An object of type Layer will be returned.
+
+ Syntax
+
+ surface.GetLayer
+
+ [Return] Layer  Layer object
+
+================================================================================
+PLIK: Surface_MirrorG
+================================================================================
+
+Surface.MirrorG
+ 
+ 
+
+ Surface.MirrorG
+
+ Mirror the surface using a work plane.
+
+ Syntax
+
+ surface.MirrorG (WP)
+
+ WorkPlane WP Work plane to mirror in
+
+ Remarks
+
+ The surface will be mirrored in global XYZ, using the given work plane as the plane to mirror in.
+
+================================================================================
+PLIK: Surface_MoveG
+================================================================================
+
+Surface.MoveG
+ 
+ 
+
+ Surface.MoveG
+
+ Move the surface.
+
+ Syntax
+
+ surface.MoveG (X, Y, Z)
+
+ double X Distance to move in global X
+
+ double Y Distance to move in global Y
+
+ double Z Distance to move in global Z
+
+================================================================================
+PLIK: Surface_Redraw
+================================================================================
+
+Surface.Redraw
+ 
+ 
+
+ Surface.Redraw
+
+ Redraw this surface.
+
+ Syntax
+
+ surface.Redraw
+
+================================================================================
+PLIK: Surface_Reverse
+================================================================================
+
+Surface.Reverse
+ 
+ 
+
+ Surface.Reverse
+
+ Reverse the tool side of the surface.
+
+ Syntax
+
+ surface.Reverse
+
+================================================================================
+PLIK: Surface_RotateG
+================================================================================
+
+Surface.RotateG
+ 
+ 
+
+ Surface.RotateG
+
+ Rotate the surface about a specified axis.
+
+ Syntax
+
+ geo.RotateG (Angle, X1, Y1, Z1, X2, Y2, Z2)
+
+ double Angle Angle in degrees to rotate by, CW -ve. 
+
+ double X1
+
+ double Y1 XYZ coordinates of first point on axis to rotate about.
+
+ double Z1
+
+ double X2
+
+ double Y2 XYZ coordinates of second point on axis to rotate about.
+
+ double Z2
+
+ Remarks
+
+ The surface will be rotated about the axis given by the 3D line from (X1, Y1, Z1) to (X2, Y2, Z2).
+
+================================================================================
+PLIK: Surface_ScaleG
+================================================================================
+
+Surface.ScaleG
+ 
+ 
+
+ Surface.ScaleG
+
+ Scale the surface 
+
+ Syntax
+
+ geo.ScaleG (FactorX, FactorY, factorZ, BaseX, BaseY, BaseZ)
+
+ double FactorX X Scale factor
+
+ double FactorY Y Scale factor
+
+ double FactorZ Z Scale factor
+
+ double BaseX X coordinate of point to scale about.
+
+ double BaseY Y coordinate of point to scale about.
+
+ double BaseZ Z coordinate of point to scale about.
+
+================================================================================
+PLIK: Surface_SetLayer
+================================================================================
+
+Surface.SetLayer
+ 
+ 
+
+ Surface.SetLayer
+
+ Set the layer for the surface.
+
+ Syntax
+
+ surface.SetLayer (layer)
+
+ Layer layer layer object
+
+================================================================================
+PLIK: Surface_UnTrim
+================================================================================
+
+Surface.UnTrim
+
+Surface.UnTrim
+
+Remove all trimming boundaries from a surface.
+
+Syntax
+
+Surface.UnTrim
+
+================================================================================
+PLIK: SurfaceAdded
+================================================================================
+
+SurfaceAdded
+ 
+ 
+
+ SurfaceAdded
+
+ Sub SurfaceAdded (S As Surface)
+
+ Called when a single surface object is added.
+
+================================================================================
+PLIK: SurfaceExample
+================================================================================
+
+Surface Example
+ 
+ 
+
+ Surface Example
+
+ The following routine draws a "Porcupine Map", that is, 3D polylines along the surface normal at points on the surface.
+
+ Note:
+
+ MinS, MaxS, MinT and MaxT are used to find the range for the parametric variables S and T. Surfaces created in AlphaCAM use the range 0 to 1, but surfaces imported from other systems can use any range.
+
+ IsPointTrimmed is used to suppress drawing where the surface is trimmed.
+
+ Public Sub SurfaceNormalVectors()
+
+ Dim Drw As Drawing 
+
+ Dim SF As Surface 
+
+ Set Drw = App.ActiveDrawing 
+
+ Set SF = Drw.UserSelectOneSurface("Pick a Surface") 
+
+ Dim S As Double, T As Double, L As Double 
+
+ L = 5 
+
+ Dim V 
+
+ For S = SF.MinS To SF.MaxS Step 0.05 
+
+ For T = SF.MinT To SF.MaxT Step 0.05 
+
+ If Not SF.IsPointTrimmed(S, T) Then 
+
+ V = SF.Evaluate(S, T, acamEvaluateCOORDS_AND_NORMAL) 
+
+ Dim P As PolyLine 
+
+ Set P = Drw.Create3DPolyline(V(0), V(1), V(2)) 
+
+ P.AddLine V(0) + V(3) * L, V(1) + V(4) * L, V(2) + V(5) * L 
+
+ P.Finish 
+
+ End If 
+
+ Next T 
+
+ Next S 
+
+ End Sub
+
+================================================================================
+PLIK: SurfaceFacets
+================================================================================
+
+Surface Facets
+ 
+ 
+
+ Surface Facets
+
+ The facets for the surface can be accessed using the properties FacetsForShading or FacetsForMachining. The facets for shading are usually created using a larger tolerance than those for machining. The tolerance used for the machining facets is the property McFacetsTolerance.
+
+ The facets can be read by storing the property in a Variant, and then accessing it as an array of doubles. The VBA function UBound gives the size of the array. The lower bound is zero. Each facet is given as 9 numbers, that is, XYZ for 3 points: X1, Y1, Z1, X2, Y2, Z2, X3, Y3, Z3.
+
+ The example extracts the facets and draws them as 3D polylines.
+
+ Public Sub CopyFacetsToPolylines(V As Variant) ' array of doubles
+
+ Dim I As Long, N As Long 
+
+ N = UBound(V) 
+
+ For I = 0 To N Step 9 
+
+ Dim P As PolyLine 
+
+ Set P = App.ActiveDrawing.Create3DPolyline(V(I), V(I + 1), V(I + 2)) 
+
+ P.AddLine V(I + 3), V(I + 4), V(I + 5) 
+
+ P.AddLine V(I + 6), V(I + 7), V(I + 8) 
+
+ P.AddLine V(I), V(I + 1), V(I + 2) 
+
+ P.Finish 
+
+ Next I 
+
+ End Sub
+
+ Public Sub MachineFacetsToPolyline()
+
+ Dim Drw As Drawing 
+
+ Dim SF As Surface 
+
+ Set Drw = App.ActiveDrawing 
+
+ Set SF = Drw.UserSelectOneSurface("Pick a Surface") 
+
+ CopyFacetsToPolylines SF.FacetsForMachining 
+
+ End Sub
+
+ The facets can be set by creating an array in the same format and assigning it to the property.
+
+================================================================================
+PLIK: SurfaceObject
+================================================================================
+
+Surface Object
+
+Surface Object
+
+A 3D surface.
+
+More:
+
+Surface Properties
+
+Surface Example
+
+Surface Facets
+
+================================================================================
+PLIK: SurfaceProperties
+================================================================================
+
+Surface Properties
+
+Surface Properties
+
+Attribute - See Attributes
+
+CheckFoul - (boolean) True to check for fouling this 
+ surface while machining other surfaces. (write-only)
+
+DegreeS - (short) Degree in S direction eg 3 for cubic 
+ spline surface (read-only)
+
+DegreeT - (short) Degree in T direction eg 3 for cubic 
+ spline surface (read-only)
+
+Drawing - (Drawing) The drawing for this surface if 
+ it is in the main drawing then the existing drawing object will be returned 
+ otherwise a temporary one will be created (read-only)
+
+FacetsForMachining (see Facets) 
+ - (Variant / Double array) The facets for machining
+
+FacetsForShading (see Facets) 
+ - (Variant / Double array) The facets for shading
+
+KnotsS - (Variant / Double (0 to NumberKnotsS - 1)) 
+ The parameter values of the S knots (read-only)
+
+KnotsT - (Variant / Double (0 to NumberKnotsS - 1)) 
+ The parameter values of the T knots (read-only)
+
+MaxS - (double) Maximum value of S parameter (read-only)
+
+MaxT - (double) Maximum value of T parameter (read-only)
+
+MaxX - (double) Maximum X coordinate (read-only)
+
+MaxY - (double) Maximum Y coordinate (read-only)
+
+MaxZ - (double) Maximum Z coordinate (read-only)
+
+McFacetsTolerance (see Facets) 
+ - (double) Tolerance for facets for machining
+
+MinS - (double) Minimum value of S parameter (read-only)
+
+MinT - (double) Minimum value of T parameter (read-only)
+
+MinX - (double) Minimum X coordinate (read-only)
+
+MinY - (double) Minimum Y coordinate (read-only)
+
+MinZ - (double) Minimum Z coordinate (read-only)
+
+NumberKnotsS - (short) Number of knots in S direction 
+ (read-only)
+
+NumberKnotsT - (short) Number of knots in T direction 
+ (read-only)
+
+NumberVerticesS - (short) Number of vertices (control 
+ points) in S direction (read-only)
+
+NumberVerticesT - (short) Number of vertices (control 
+ points) in T direction (read-only)
+
+PeriodicS - (boolean) True if surface is periodic in 
+ the S direction (read-only)
+
+PeriodicT - (boolean) True if surface is periodic in 
+ the T direction (read-only)
+
+Rational - (boolean) True if surface is rational (some 
+ weights are not 1) (read-only)
+
+Selected - (boolean) True if surface is selected
+
+Target - (boolean) True if surface was used for machining 
+ (read-only)
+
+TrimBoundarys - (TrimBoundarys) Collection of trim boundaries 
+ for the surface (read-only)
+
+Trimmed - (boolean) True if surface is trimmed (read-only)
+
+VerticesX - (Variant / Double (0 to NumberVerticesS 
+ * NumberVerticesT - 1)) The X coordinates of the vertices (control points) 
+ (read-only)
+
+VerticesY - (Variant / Double (0 to NumberVerticesS 
+ * NumberVerticesT - 1)) The Y coordinates of the vertices (control points) 
+ (read-only)
+
+VerticesZ - (Variant / Double (0 to NumberVerticesS 
+ * NumberVerticesT - 1)) The Z coordinates of the vertices (control points) 
+ (read-only)
+
+Visible - (boolean) True if surface is visible, ie not 
+ hidden
+
+Weights - (Variant / Double (0 to NumberVerticesS * 
+ NumberVerticesT - 1)) The weights (read-only)
+
+================================================================================
+PLIK: Syntax
+================================================================================
+
+Syntax
+ 
+ 
+
+ Syntax
+
+ Methods
+
+ Properties
+
+ Constants
+
+================================================================================
+PLIK: Text_AddText
+================================================================================
+
+Text.AddText
+ 
+ 
+
+ Text.AddText
+
+ Add a line of text to a text object.
+
+ Syntax
+
+ Text.AddText (Str)
+
+ String Str The text string to add
+
+================================================================================
+PLIK: Text_Copy
+================================================================================
+
+Text.Copy
+ 
+ 
+
+ Text.Copy
+
+ Copy the text.
+
+ Syntax
+
+ Text.Copy
+
+ [Return] Text The new text.
+
+================================================================================
+PLIK: Text_CopyTemporary
+================================================================================
+
+Text.CopyTemporary
+ 
+ 
+
+ Text.CopyTemporary
+
+ Copy text and do not add it to the AlphaCAM database.
+
+ Syntax
+
+ Text.CopyTemporary
+
+ See Text.StoreTemporary
+
+================================================================================
+PLIK: Text_Erase
+================================================================================
+
+Text.Erase
+ 
+ 
+
+ Text.Erase
+
+ Erase the text from the screen by drawing it in the screen background colour. The text will not be deleted. This is useful when a property of the text is to be changed, and you want to show the change without redrawing the whole screen.
+
+ Syntax
+
+ Text.Erase
+
+ In the example the text is erased before the Font property is changed, the Redraw method then draws the text in the new font.
+
+ Public Sub ChangeFont()
+
+ Dim Drw As Drawing 
+
+ Set Drw = App.ActiveDrawing 
+
+ Drw.Font = "AStencil" 
+
+ Dim T As Text 
+
+ Set T = Drw.CreateText2("AlphaCAM", 0, 0, 10) 
+
+ MsgBox "Stencil Font" 
+
+ T.Erase 
+
+ T.Font = "TArial" 
+
+ T.Redraw 
+
+ MsgBox "Arial Font" 
+
+ End Sub
+
+================================================================================
+PLIK: Text_GetLayer
+================================================================================
+
+Text.GetLayer
+ 
+ 
+
+ Text.GetLayer
+
+ Get the layer for the text. An object of type Layer will be returned.
+
+ Syntax
+
+ Text.GetLayer
+
+ [Return] Layer  Layer object
+
+================================================================================
+PLIK: Text_GetWorkPlane
+================================================================================
+
+Text.GetWorkPlane
+ 
+ 
+
+ Text.GetWorkPlane
+
+ Get the work plane for the text. An object of type WorkPlane will be returned. If the text is not in a work plane the special value Nothing will be returned, which may be used in tests.
+
+ Syntax
+
+ Text.GetWorkPlane
+
+ [Return] WorkPlane  WorkPlane object
+
+================================================================================
+PLIK: Text_MoveG
+================================================================================
+
+Text.MoveG
+ 
+ 
+
+ Text.MoveG
+
+ Move the text in the 3D Global coordinate system.
+
+ Syntax
+
+ Text.MoveG (X, Y, Z)
+
+ double X Distance to move in global X
+
+ double Y Distance to move in global Y
+
+ double Z Distance to move in global Z
+
+ Remarks
+
+ If the text is in a work plane it will be moved to a new work plane if necessary. If it is not in a work plane it will be moved in global XYZ by the specified distances.
+
+ See also
+
+ Text.MoveL
+
+================================================================================
+PLIK: Text_MoveL
+================================================================================
+
+Text.MoveL
+ 
+ 
+
+ Text.MoveL
+
+ Move the text in its 2D Local coordinate system.
+
+ Syntax
+
+ Text.MoveL (X, Y)
+
+ double X Distance to move in local X
+
+ double Y Distance to move in local Y
+
+ Remarks
+
+ If the text is in a work plane it will be moved in that plane by the specified distances. If it is not in a work plane it will be moved in global XY by the specified distances.
+
+ See also
+
+ Text.MoveG
+
+================================================================================
+PLIK: Text_Redraw
+================================================================================
+
+Text.Redraw
+ 
+ 
+
+ Text.Redraw
+
+ Redraw this text.
+
+ Syntax
+
+ Text.Redraw
+
+================================================================================
+PLIK: Text_RotateG
+================================================================================
+
+Text.RotateG
+ 
+ 
+
+ Text.RotateG
+
+ Rotate the text in the 3D Global coordinate system, about a specified axis.
+
+ Syntax
+
+ Text.RotateG (Angle, X1, Y1, Z1, X2, Y2, Z2)
+
+ double Angle Angle in degrees to rotate by, CW -ve. 
+
+ double X1
+
+ double Y1 Global XYZ coordinates of first point on axis to rotate about.
+
+ double Z1
+
+ double X2
+
+ double Y2 Global XYZ coordinates of second point on axis to rotate about.
+
+ double Z2
+
+ Remarks
+
+ The text (which may be any text, in a work plane or 2D flat land) will be rotated in global XYZ about the axis given by the 3D line from (X1, Y1, Z1) to (X2, Y2, Z2).
+
+ See also
+
+ Text.RotateL
+
+================================================================================
+PLIK: Text_RotateL
+================================================================================
+
+Text.RotateL
+ 
+ 
+
+ Text.RotateL
+
+ Rotate the text in its 2D Local coordinate system.
+
+ Syntax
+
+ Text.RotateL (Angle, BaseX, BaseY)
+
+ double Angle Angle in degrees to rotate by, CW -ve. 
+
+ double BaseX Local X coordinate of point to rotate about
+
+ double BaseY Local Y coordinate of point to rotate about
+
+ Remarks
+
+ If the text is in a work plane it will be rotated in that plane. If it is not in a work plane it will be rotated in global XY.
+
+ See also
+
+ Text.RotateG
+
+================================================================================
+PLIK: Text_SaveForUndo
+================================================================================
+
+Text.SaveForUndo
+ 
+ 
+
+ Text.SaveForUndo
+
+ Save the text in the undo list after changing its properties.
+
+ Syntax
+
+ Text.SaveForUndo
+
+================================================================================
+PLIK: Text_ScaleL
+================================================================================
+
+Text.ScaleL
+ 
+ 
+
+ Text.ScaleL
+
+ Scale the text in its 2D Local coordinate system, by a single factor.
+
+ Syntax
+
+ Text.ScaleL (Factor, BaseX, BaseY)
+
+ double Factor Scale factor
+
+ double BaseX Local X coordinate of point to scale about.
+
+ double BaseY Local Y coordinate of point to scale about.
+
+ Remarks
+
+ If the text is in a work plane it will be scaled in that plane. If it is not in a work plane it will be scaled in global XY.
+
+================================================================================
+PLIK: Text_SetLayer
+================================================================================
+
+Text.SetLayer
+ 
+ 
+
+ Text.SetLayer
+
+ Set the layer for the text.
+
+ Syntax
+
+ Text.SetLayer (layer)
+
+ Layer layer layer object
+
+================================================================================
+PLIK: Text_SetWorkPlane
+================================================================================
+
+Text.SetWorkPlane
+ 
+ 
+
+ Text.SetWorkPlane
+
+ Set the current work plane for the text.
+
+ Syntax
+
+ Text.SetWorkPlane (wp)
+
+ WorkPlane  wp WorkPlane object
+
+================================================================================
+PLIK: Text_StoreTemporary
+================================================================================
+
+Text.StoreTemporary
+ 
+ 
+
+ Text.StoreTemporary
+
+ Store a text object created with CopyTemporary in the AlphaCAM database.
+
+ Syntax
+
+ Text.StoreTemporary
+
+================================================================================
+PLIK: Text_UpdateGUISettings
+================================================================================
+
+Text.UpdateGUISettings
+ 
+ 
+
+ Text.UpdateGUISettings
+
+ In Alphacam versions before V8, changing the settings in the API would change the GUI ones,
+ which was often not desired. This routine was added so it can still be done. After setting the properties of this object call this method to make the user-interface default to the same settings.
+
+ Syntax
+
+ Text.UpdateGUISettings
+
+================================================================================
+PLIK: TextAdded
+================================================================================
+
+TextAdded
+ 
+ 
+
+ TextAdded
+
+ Sub TextAdded (T As Text)
+
+ Called when a single text object is added.
+
+================================================================================
+PLIK: TextObject
+================================================================================
+
+Text Object
+
+Text Object
+
+An object representing some text in the AlphaCAM drawing. 
+ The text may have one or more lines. Each line is represented by an item 
+ in the Collection of TextLine objects, given by the Lines property. The 
+ text in the drawing is found using the Text property of the Drawing object, 
+ which returns a Collection of Text objects.
+
+The example shows how to search the text in the drawing 
+ for a string:
+
+Public Sub SearchForString(SearchStr As String)
+
+Dim T As Text 
+
+For Each T In App.ActiveDrawing.Text 
+
+Dim L As TextLine 
+
+For Each L In T.Lines 
+
+Dim S As String 
+
+S = L.Text 
+
+If StrComp(S, SearchStr) = 
+ 0 Then 
+
+T.Selected = True 
+
+T.Redraw 
+
+MsgBox S 
+
+T.Selected = False 
+
+T.Redraw 
+
+End If 
+
+Next L 
+
+Next T 
+
+End Sub
+
+More:
+
+Text Properties
+
+================================================================================
+PLIK: TextProperties
+================================================================================
+
+Text Properties
+
+Text Properties
+
+Attribute - See Attributes
+
+BaseLine - (Path) The base-line for the text if it has 
+ one (read-only)
+
+Bold - (boolean) True if the text is bold, if TrueType 
+ font used
+
+CharacterWidthScale - (double) Scale factor in X direction
+
+Drawing - (Drawing) The drawing for this text if it 
+ is in the main drawing then the existing drawing object will be returned 
+ otherwise a temporary one will be created (read-only)
+
+Font - (String) Font name for text. Starts with A for 
+ AlphaCAM font eg AStencil, or T for TrueType font eg TArial
+
+Group - (short) Number of group containing this text, 
+ 0 if none
+
+Height - (double) Height of text
+
+Italic - (boolean) True if the text is italic
+
+ItalicAngle - (short) Slant angle for italic text
+
+Justify - (AcamJustifyType) How the text is justified 
+ relative to the location point or base-line.acamJustifyCENTER, acamJustifyLEFT, 
+ acamJustifyRIGHT or acamJustifySCALED
+
+Lines - (TextLines) The lines of text in the text object
+
+LineSpacing - (double) Line spacing as a multiple of 
+ the height
+
+LocationX - (double) X coordinate of base-point of text
+
+LocationY - (double) Y coordinate of base-point of text
+
+MaxXL  -(double) 
+ Maximum X Local coordinate (read-only)
+
+MaxYL - (double) Maximum Y Local coordinate (read-only)
+
+MinXL - (double) Minimum X Local coordinate (read-only)
+
+MinYL - (double) Minimum Y Local coordinate (read-only)
+
+Reverse - (boolean) True if the text is reversed
+
+Rotation - (double) Rotation of text
+
+Selected - (boolean) True if text is selected
+
+SpaceWidth - (double) Width of a space
+
+Visible - (boolean) True if text is marked as visible 
+ (not hidden)
+
+Spacing - (double) Character  spacing 
+ as a multiple of the height
+
+================================================================================
+PLIK: Texts_Add
+================================================================================
+
+Texts.Add
+ 
+ 
+
+ Texts.Add
+
+ Add a Text object to the Collection. Only permitted if the Collection was created with Drawing.CreateTextCollection or Texts.Duplicate.
+
+ Syntax
+
+ ts.Add(Text)
+
+ Text Text Text object to add
+
+================================================================================
+PLIK: Texts_Duplicate
+================================================================================
+
+Texts.Duplicate
+ 
+ 
+
+ Texts.Duplicate
+
+ Duplicate the collection. The text objects are not copied - this method just creates a new Texts collection referencing the same objects. The Add and Remove methods may be used on the new collection.
+
+ Syntax
+
+ ts.Duplicate
+
+ [Return] Texts Returned new collection
+
+================================================================================
+PLIK: Texts_Item
+================================================================================
+
+Texts.Item
+ 
+ 
+
+ Texts.Item
+
+ Return a member of the Collection. It is the default member of the object so VBA can use it without specifing the word Item.
+
+ Syntax
+
+ ts.Item(Index)
+
+ OR
+
+ ts(Index)
+
+ Long Index Index of required Text object, 1 to Count
+
+ See Collections.
+
+================================================================================
+PLIK: Texts_MoveL
+================================================================================
+
+Texts.MoveL
+ 
+ 
+
+ Texts.MoveL
+
+ See Text.MoveL.
+
+================================================================================
+PLIK: Texts_Redraw
+================================================================================
+
+Texts.Redraw
+ 
+ 
+
+ Texts.Redraw
+
+ See Text.Redraw.
+
+================================================================================
+PLIK: Texts_Remove
+================================================================================
+
+Texts.Remove
+ 
+ 
+
+ Texts.Remove
+
+ Remove a Text object from the Collection. Only permitted if the Collection was created with Drawing.CreateTextCollection or Texts.Duplicate. The text is not deleted.
+
+ Syntax
+
+ ts.Remove(Text)
+
+ Text Text Text object to remove
+
+================================================================================
+PLIK: TextsObject
+================================================================================
+
+Texts Object
+
+Texts Object
+
+A Collection of Text 
+ objects.
+
+More:
+
+Texts Properties
+
+================================================================================
+PLIK: TextsProperties
+================================================================================
+
+Texts Properties
+
+Texts Properties
+
+Count - (long) Number of items in the collection (read-only)
+
+Selected - (boolean) Set to True to select all Text 
+ objects in the collection, set to False to deselect all Text objects (write-only)
+
+================================================================================
+PLIK: TheAdd_InsManager
+================================================================================
+
+The Add-Ins Manager
+ 
+ 
+
+ The Add-Ins Manager
+
+ The Add-Ins Manager (Utils | Add-Ins) is a dialog box which shows the name and path of any VBA Projects in StartUp folders (in Alpha01 and Licomdir\VBMacros) and any registered DLLs. A check box next to each add-in lets the user load or unload the add-in. Clicking on the name of the add-in shows the full path of the DLL or VBA Project and gives a message if the file does not exist.
+
+ If a VBA Project or DLL is unloaded, any menu items that it added will be removed, as will any event handlers.
+
+================================================================================
+PLIK: ThreadDefinitionObject
+================================================================================
+
+ThreadDefinition Object
+
+ThreadDefinition Object
+
+An object representing a defined thread, equivalent 
+ to a .ATH file in the threads.alp folder. It is used to define a thread 
+ which is written to a file.
+
+More:
+
+ThreadDefinition 
+ Properties
+
+================================================================================
+PLIK: ThreadDefinitionProperties
+================================================================================
+
+ThreadDefinition Properties
+
+ThreadDefinition Properties
+
+Angle - (float) Angle of thread
+
+Depth - (float) Depth of thread
+
+Diameter - (float) Diameter that thread should be used 
+ at
+
+Pitch - (float) Pitch of thread
+
+TPI - (float) Threads per Inch
+
+================================================================================
+PLIK: TrimBoundaryObject
+================================================================================
+
+TrimBoundary Object
+ 
+ 
+
+ TrimBoundary Object
+
+ A trim boundary on a surface.
+
+ A trimmed surface can have any number of trim boundaries. Each trim boundary consists of a Collection of Path objects (Paths), or a Collection of Spline objects (Splines), which form a continuous closed boundary. A trimmed surface has a Collection of trim boundaries (TrimBoundarys). The reason that it may be Path or Spline objects is to preserve the boundary exactly as it was created, for example, an Iges file may use Splines, AlphaCAM will use Paths.
+
+ More:
+
+ TrimBoundary Properties
+
+================================================================================
+PLIK: TrimBoundaryProperties
+================================================================================
+
+TrimBoundary Properties
+
+TrimBoundary Properties
+
+Paths - (Paths) The trim boundary as a Paths object, 
+ may be empty (read-only)
+
+Splines - (Splines) The trim boundary as a Splines object, 
+ may be empty (read-only)
+
+================================================================================
+PLIK: TurnThreadDataObject
+================================================================================
+
+TurnThreadData Object
+
+TurnThreadData Object
+
+An object used to define the properties for a Thread 
+ operation. They should be set before TurnData.Thread 
+ is called.
+
+More:
+
+TurnThreadData 
+ Properties
+
+================================================================================
+PLIK: TurnThreadDataProperties
+================================================================================
+
+TurnThreadData Properties
+
+TurnThreadData Properties
+
+AccelerationDistance - (float) Acceleration Distance
+
+CutType - (AcamThreadCutType) acamThreadCutTypePLUNGE, 
+  acamThreadCutTypeFLANK 
+ or acamThreadCutTypeZIGZAG
+
+Direction - (AcamThreadDirection) acamThreadDirectionAS_LONGEST_LINE 
+ or acamThreadDirectionFOLLOW_PROFILE
+
+Hand - (AcamThreadHand) acamThreadHandRIGHT or acamThreadHandLEFT
+
+InFeed - (AcamThreadInFeed) acamThreadInFeedVARIABLE_DEPTH 
+ or acamThreadInFeedCONSTANT_DEPTH
+
+LeadIn - (AcamThreadLead) acamThreadLeadHORIZONTAL, 
+ acamThreadLeadVERTICAL or acamThreadLeadTHREADANGLE
+
+LeadOut - (AcamThreadLead) acamThreadLeadHORIZONTAL, 
+ acamThreadLeadVERTICAL or acamThreadLeadTHREADANGLE
+
+NumberOfPasses - (long) Number of passes
+
+NumberOfSpringPasses - (long) Number of spring passes
+
+NumberOfStarts - (long) Number of starts
+
+================================================================================
+PLIK: VersionInformation_Object
+================================================================================
+
+VersionInformation Object
+
+VersionInformation Object
+
+An object storing version information for the Alphacam 
+ exe or DLLs, introduced with V7.5.
+
+The version number passed to InitAlphacamAddIn is frozen 
+ at 20070810. Add-in DLLs and VBA projects should use the this object if 
+ they need to restrict the versions of Alphacam that they can run with. 
+ First test that the Version is >= 20070810, then get the VersionInformation 
+ object using the App.AlphacamVersion property. You can either restrict 
+ the add-in to work with a particular version by testing the Major and 
+ Minor properties, currently 7 and 5 for version 7.5 or test Major * 1000 
+ + Minor * 100 >= 7500. Then if necessary test the build number, which 
+ will always increment until the Major or Minor numbers change.
+
+ 
+
+Properties
+
+Major - (long) Major version eg 7 for 7.5, 8 for 8.0
+
+Minor - (long) Minor version eg 5 for 7.5, 0 for 8.0
+
+Revision - (long) Revision number
+
+Build - (long) Build number, incremented for each internal 
+ or released build
+
+String - (String) Major.Minor.Revision.Build as a string 
+ eg 7.5.0.140
+
+================================================================================
+PLIK: ViewWindow_Object
+================================================================================
+
+ViewWindow Object
+
+ViewWindow Object
+
+A ViewWindow object represents a window pane which contains 
+ a view onto the AlphaCAM drawing, not a Project Manager page.
+
+Use Drawing.ViewWindows to get the view windows as a 
+ Collection.
+
+================================================================================
+PLIK: ViewWindow_Properties
+================================================================================
+
+ViewWindow Properties
+
+ViewWindow Properties
+
+Tmat(i) - (double) Element of view transformation array 
+ (I = 0 to 11) (read-only)
+
+QuickShading - (boolean) True if Quick Shading is on
+
+View - (AcamView) Type of view eg acamViewISO
+
+ViewPort(i) - (double ) Pixel coordinates of viewport 
+ for this window 0 = X1, 1 = Y1, 2 = X2, 3 = Y2 (read-only)
+
+ViewWindowHandle  - 
+ (Long) The window handle for this view window (read-only)
+
+================================================================================
+PLIK: ViewWindow_Redraw
+================================================================================
+
+ViewWindow.Redraw
+
+ViewWindow.Redraw
+
+Redraw the view
+
+Syntax
+
+vw.Redraw
+
+================================================================================
+PLIK: ViewWindow_RotateViewX
+================================================================================
+
+ViewWindow.RotateViewX
+
+ViewWindow.RotateViewX
+
+Rotate the view about the X axis
+
+Syntax
+
+vw.RotateViewX (Angle)
+
+double Angle Angle in degrees to rotate about
+
+================================================================================
+PLIK: ViewWindow_RotateViewY
+================================================================================
+
+ViewWindow.RotateViewY
+
+ViewWindow.RotateViewY
+
+Rotate the view about the Y axis
+
+Syntax
+
+vw.RotateViewY (Angle)
+
+double Angle Angle in degrees to rotate about
+
+================================================================================
+PLIK: ViewWindow_RotateViewZ
+================================================================================
+
+ViewWindow.RotateViewZ
+
+ViewWindow.RotateViewZ
+
+Rotate the view about the Z axis
+
+Syntax
+
+vw.RotateViewZ (Angle)
+
+double Angle Angle in degrees to rotate about
+
+================================================================================
+PLIK: ViewWindow_SetViewDirection
+================================================================================
+
+ViewWindow.SetViewDirection
+
+ViewWindow.SetViewDirection
+
+Set view direction for this window
+
+Syntax
+
+vw.SetViewDirection (X, Y, Z)
+
+double  X component of view vector
+
+double  Y component of view vector
+
+double  Z component of view vector
+
+================================================================================
+PLIK: WorkPlane_ConvertCylinderCoords
+================================================================================
+
+WorkPlane.ConvertCylinderCoords
+
+WorkPlane.ConvertCylinderCoords
+
+If the work plane is an unfolded work plane (property UnFolded = True), convert local coordinates to global.
+
+Syntax
+
+wp.ConvertCylinderCoords (XLocal, YLocal, ZLocal, XGlobal, YGlobal, ZGlobal)
+
+double  XLocal X local coordinate
+
+double  YLocal Y local coordinate
+
+double  ZLocal Z local coordinate
+
+double  XGlobal X global coordinate
+
+double  YGlobal Y global coordinate
+
+double  ZGlobal Z global coordinate
+
+================================================================================
+PLIK: WorkPlane_CreateParallel
+================================================================================
+
+WorkPlane.CreateParallel
+ 
+ 
+
+ WorkPlane.CreateParallel
+
+ Create a new work plane parallel to this one.
+
+ Syntax
+
+ wp.CreateParallel (dist)
+
+ double  dist Distance to offset work plane by
+
+ [Return] WorkPlane  Pointer to WorkPlane Dispatch object for new work plane
+
+================================================================================
+PLIK: WorkPlane_MakeLocalAxisHorizontal
+================================================================================
+
+WorkPlane.MakeLocalAxisHorizontal
+
+WorkPlane.MakeLocalAxisHorizontal
+
+Do what the command "Make Local Axis Horizontal" 
+ does.
+
+Syntax
+
+WorkPlane.MakeLocalAxisHorizontal (LocalX, ClockwiseTilt)
+
+Bool  LocalX True to make the local X axis 
+ horizontal, false for Y
+
+Bool  ClockwiseTilt 
+ True for clockwise tilt
+
+================================================================================
+PLIK: WorkPlane_MakeLocalAxisHorizontalEx
+================================================================================
+
+WorkPlane.MakeLocalAxisHorizontalEx
+
+WorkPlane.MakeLocalAxisHorizontalEx
+
+As MakeLocalAxisHorizontal but allow extra types in typeAcamPostLocalXorYAxis (5 and 6)
+
+Do what the command "Make Local Axis Horizontal" does.
+
+Syntax
+
+WorkPlane.MakeLocalAxisHorizontalEx (Type)
+
+AcamPostLocalXorYAxis  Type Type to convert to
+
+================================================================================
+PLIK: WorkPlane_Move
+================================================================================
+
+WorkPlane.Move
+
+WorkPlane.Move
+
+Move the work plane by a relative amount
+
+Syntax
+
+wp.Move (X, Y, Z)
+
+double  X X amount to move by
+
+double  Y Y amount to move by
+
+double  Z Z amount to move by
+
+================================================================================
+PLIK: WorkPlane_SetOrigin
+================================================================================
+
+WorkPlane.SetOrigin
+ 
+ 
+
+ WorkPlane.SetOrigin
+
+ Set local origin for this work plane.
+
+ Syntax
+
+ wp.SetOrigin (XG, YG, ZG)
+
+ double  XG Global X coordinate of new origin
+
+ double  YG Global Y coordinate of new origin
+
+ double  ZG Global Z coordinate of new origin
+
+ Remarks
+
+ XG, YG, ZG must be the global coordinates of a point on the work plane.
+
+================================================================================
+PLIK: WorkPlane_SetTmat
+================================================================================
+
+WorkPlane.SetTmat
+
+WorkPlane.SetTmat
+
+Set the transformation matrix for this work plane.
+
+Syntax
+
+wp.SetTmat (T0, T1, T2, T3, T4, T5, T6, T7, T8, 
+ T9, T10, T11)
+
+double  T0 - T11 Components of the matrix
+
+.
+
+================================================================================
+PLIK: WorkPlaneObject
+================================================================================
+
+WorkPlane Object
+
+WorkPlane Object
+
+A work plane defines a local coordinate system. The 
+ array Tmat(I), I = 0 to 11 gives the transformation matrix from local 
+ to global coordinates.
+
+XGlobal = wp.Tmat(0) * X + wp.Tmat(1) * Y + wp.Tmat(2) 
+ * Z + wp.Tmat(3)
+
+YGlobal = wp.Tmat(4) * X + wp.Tmat(5) * Y + wp.Tmat(6) 
+ * Z + wp.Tmat(7)
+
+ZGlobal = wp.Tmat(8) * X + wp.Tmat(9) * Y + wp.Tmat(10) 
+ * Z + wp.Tmat(11)
+
+Replace Tmat with Imat to transform from global to local.
+
+Use Drawing.CreateWorkPlane 
+ to create a new work plane or to find an existing one.
+
+Use Drawing.WorkPlanes to get the work planes as a Collection.
+
+More:
+
+WorkPlane Properties
+
+================================================================================
+PLIK: WorkPlaneProperties
+================================================================================
+
+WorkPlane Properties
+
+WorkPlane Properties
+
+Attribute See Attributes
+
+Code - (long) Offset Number
+
+Drawing - (Drawing) The drawing for this work plane, 
+ if it is in the main drawing then the existing drawing object will be 
+ returned otherwise a temporary one will be created (read-only)
+
+Flat - (boolean) True if work plane is for a flat panel 
+ (read-only)
+
+Geometries - (Paths) The geometries on this work plane, 
+ as a Paths Collection (read-only)
+
+Id - (long) ID number, unique for each work plane (read-only)
+
+Imat(i) - (double) Element of inverse transformation 
+ array (I = 0 to 11) (read-only)
+
+ImatFlat(i) - (double) Element of inverse transformation 
+ array for flat panel(I = 0 to 11) (read-only)
+
+IsIdentity - (boolean) True if work plane axes and origin 
+ are the same as global (read-only)
+
+IsGlobal - (boolean) True if work plane axes (but not 
+ origin) are the same as global (read-only)
+
+Name - (String) Name of work plane
+
+PartRad - (double) Radius of cylinder if this is an 
+ unfolded work plane (read-only)
+
+PartZ1 - (double) Start Z coordinate of cylinder if 
+ this is an unfolded work plane (read-only)
+
+PartZ2 - (double) End Z coordinate of cylinder if this 
+ is an unfolded work plane (read-only)
+
+Splines - (Splines) The splines on this work plane, 
+ as a Splines Collection (read-only)
+
+Text - (Texts) The text on this work plane, as a Texts 
+ Collection (read-only)
+
+Tmat(i) - (double) Element of transformation array (I 
+ = 0 to 11) (read-only)
+
+TmatFlat(i) - (double) Element of transformation array 
+ for flat panel (I = 0 to 11) (read-only)
+
+UnFolded - (boolean) True if this is an unfolded work 
+ plane (read-only)
+
+
+

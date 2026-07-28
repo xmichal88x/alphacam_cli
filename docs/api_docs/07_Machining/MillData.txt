@@ -1,0 +1,741 @@
+================================================================================
+SEKCJA: 07_Machining/MillData.txt
+Wygenerowano z acAPI.bas
+================================================================================
+
+PLIK: Example3_Roughallthesurfaces_
+================================================================================
+
+Example 3: Rough all the surfaces.
+ 
+ 
+
+ Example 3: Rough all the surfaces.
+
+ Public Sub ZContourRoughing()
+
+ App.SelectTool App.LicomdatPath & "licomdat\mtools.alp\flat - 5mm.amt" 
+
+ Dim MD As MillData 
+
+ Set MD = App.CreateMillData 
+
+  
+
+ ' Select all the surfaces 
+
+ Dim S As Surface 
+
+ For Each S In App.ActiveDrawing.Surfaces 
+
+ S.Selected = True 
+
+ Next S 
+
+  
+
+ MD.SurfaceMCAction = acamSurfaceMCActionROUGHING 
+
+ MD.PocketType = acamPocketCONTOUR 
+
+  
+
+ MD.SafeRapidLevel = 10 
+
+ MD.MaxDepthPerCut = 2.5 
+
+ MD.RapidDownTo = 5 
+
+ MD.WidthOfCut = 3 
+
+ MD.Stock = 0.5 
+
+ MD.MachineSurfaces 
+
+ End Sub
+
+================================================================================
+PLIK: Geo2D_CloseAndFinishTanArc
+================================================================================
+
+Geo2D.CloseAndFinishTanArc
+ 
+ 
+
+ Geo2D.CloseAndFinishTanArc
+
+ Finish 2D geometry with an arc tangential to last line or arc, to make a closed geometry.
+
+ Syntax
+
+ geo.CloseAndFinishTanArc
+
+ [Return] Path  Path object
+
+================================================================================
+PLIK: Geo2D_Finish
+================================================================================
+
+Geo2D.Finish
+ 
+ 
+
+ Geo2D.Finish
+
+ Finish 2D geometry.
+
+ Syntax
+
+ geo.Finish
+
+ [Return] Path  Path object
+
+================================================================================
+PLIK: GeoCad_Finish
+================================================================================
+
+GeoCad.Finish
+ 
+ 
+
+ GeoCad.Finish
+
+ Try to join the lines and arcs into paths in work planes. The paths will be added to the AlphaCAM geometry database.
+
+ Syntax
+
+ geo.Finish
+
+ [Return] Paths  Paths object (see remarks).
+
+ Remarks
+
+ The return value is a Collection of the produced paths. All the elements will be put into paths, which may be open or closed. Every path will be in a work plane (even if it is global XY). Paths will be put in the same work plane if possible.
+
+ The example adds lines and arcs which are sorted into 5 paths. The paths are then selected and a surface is fitted through them.
+
+ Dim drw As Drawing 
+
+ Dim geo As GeoCad 
+
+ Dim geos As Paths 
+
+ Dim p As Path 
+
+ Dim x As Double 
+
+ Set drw = App.ActiveDrawing 
+
+ App.New 
+
+ Set geo = drw.CreateCadGeometry 
+
+ For x = 0 To 100 Step 25 
+
+ geo.AddLine x, 0, 0, x, 0, 40 
+
+ geo.AddLine x, 50, 0, x, 50, 40 
+
+ geo.AddArc x, 20, 30, 1, 0, 0, x, 50, 40, x, 0, 40 
+
+ Next x 
+
+ Set geos = geo.Finish 
+
+ drw.ThreeDViews = True 
+
+ MsgBox "Number of paths = " & geos.Count 
+
+ geos.Selected = True 
+
+ drw.SurfaceFromGeoSections
+
+================================================================================
+PLIK: MillData_DrillTap
+================================================================================
+
+MillData.DrillTap
+ 
+ 
+
+ MillData.DrillTap
+
+ Do Drill / Tap operation on currently selected geometries, using properties set for this MillData object.
+
+ Syntax
+
+ mc.DrillTap
+
+ [Return] Paths  Returned Paths object
+
+ The example draws an array of circles, lets the user select ones to drill, and drills and taps them.
+
+ Public Sub DrillAndTapHoles()
+
+ App.New 
+
+  
+
+ Dim Drw As Drawing 
+
+ Set Drw = App.ActiveDrawing 
+
+  
+
+ ' Draw the circles 
+
+ Dim X As Double, Y As Double 
+
+ For X = 0 To 200 Step 32 
+
+ For Y = 0 To 100 Step 25 
+
+ Drw.CreateCircle 10, X, Y 
+
+ Next Y 
+
+ Next X 
+
+  
+
+ ' Let the user select some 
+
+ Dim Geos As Paths 
+
+ Set Geos = Drw.UserSelectMultiGeosCollection("Select circles to drill", 0) 
+
+ If Geos.Count = 0 Then 
+
+ End 
+
+ End If 
+
+  
+
+ ' Select the circles 
+
+ Geos.Selected = True 
+
+  
+
+ ' Select a drill 
+
+ App.SelectTool App.LicomdatPath & "LICOMDAT\MTOOLS.ALP\Drill - 10mm.amt" 
+
+  
+
+ ' Setup the machining data 
+
+ Dim MD As MillData 
+
+ Set MD = App.CreateMillData 
+
+  
+
+ MD.DrillType = acamDRILL 
+
+ MD.SafeRapidLevel = 20 
+
+ MD.RapidDownTo = 1 
+
+ MD.BottomOfHole = -15 
+
+  
+
+ ' Create the tool paths 
+
+ MD.DrillTap 
+
+ ' Select the circles again 
+
+ Geos.Selected = True 
+
+  
+
+ ' Select a tap 
+
+ App.SelectTool App.LicomdatPath & "LICOMDAT\MTOOLS.ALP\Tap - 10mm x 1mm pitch.amt" 
+
+  
+
+ MD.DrillType = acamTAP 
+
+ MD.SafeRapidLevel = 20 
+
+ MD.RapidDownTo = 1 
+
+ MD.BottomOfHole = -10 
+
+ MD.SpindleSpeed = 100 
+
+ MD.ThreadPitch = App.GetCurrentTool.Pitch 
+
+  
+
+ ' Create the tool paths 
+
+ MD.DrillTap 
+
+ End Sub
+
+================================================================================
+PLIK: MillData_Engrave
+================================================================================
+
+MillData.Engrave
+ 
+ 
+
+ MillData.Engrave
+
+ Do Engrave operation on currently selected geometries or constructions, using properties set for this MillData object.
+
+ Syntax
+
+ mc.Engrave
+
+ [Return] Paths  Returned Paths object
+
+ Remarks
+
+ If property EngraveType is acamEngraveGEOMETRIES then the currently selected geometries will be engraved. If it is acamEngraveGUIDE_LINES_APPROX or acamEngraveGUIDE_LINES_EXACT the currently selected constructions will be used to control the tool. See the AlphaCAM help file for details.
+
+ The properties EngraveCornerAngleLimit, ChordError and StepLength control the engraving, they can be left at default values if desired.
+
+ The example will draw a rectangle and engrave it:
+
+ Public Sub EngraveRectangle()
+
+ App.New 
+
+  
+
+ Dim Drw As Drawing 
+
+ Set Drw = App.ActiveDrawing 
+
+ GetMillTool "User - Cone - 10mm x 45 deg" 
+
+  
+
+ ' Draw the geometry, set the tool side and select it 
+
+ Dim Geo As Path 
+
+ Set Geo = Drw.CreateRectangle(0, 0, 100, 100) 
+
+ Geo.SetStartPoint 50, 100 
+
+ Geo.ToolInOut = acamINSIDE 
+
+ Geo.Selected = True 
+
+  
+
+ ' Setup the machining data 
+
+ Dim MD As MillData 
+
+ Set MD = App.CreateMillData 
+
+  
+
+ MD.EngraveType = acamEngraveGEOMETRIES 
+
+ MD.XYCorners = acamCornersSTRAIGHT 
+
+  
+
+ MD.SafeRapidLevel = 20 
+
+ MD.RapidDownTo = 1 
+
+ MD.FinalDepth = -4 
+
+ MD.EngraveCornerAngleLimit = 120 
+
+  
+
+ ' MD.ChordError = 0.01
+
+ ' MD.StepLength = 0.1
+
+  
+
+ ' Create the tool path 
+
+ Dim Tps As Paths 
+
+ Set Tps = MD.Engrave 
+
+ Drw.ThreeDViews = True 
+
+ End Sub
+
+================================================================================
+PLIK: MillData_Pocket
+================================================================================
+
+MillData.Pocket
+ 
+ 
+
+ MillData.Pocket
+
+ Do Pocket operation on currently selected geometries, using properties set for this MillData object.
+
+ Syntax
+
+ mc.Pocket
+
+ [Return] Paths  Returned Paths object
+
+ The example draws a rectangle with filleted corners, puts the ghost tool on the inside, draws a circle inside it with the ghost tool on the outside, selects both geometries, selects a tool and pockets it.
+
+  Sub PocketRectangle()
+
+  Dim drw As Drawing
+
+  Set drw = App.ActiveDrawing
+
+  Dim width As Double
+
+  Dim height As Double
+
+  Dim corner_rad As Double
+
+  width = 150
+
+  height = 100
+
+  corner_rad = 10
+
+  Dim geo As Geo2D
+
+  Dim p1 As Path, p2 As Path
+
+  Set geo = drw.Create2DGeometry (-width / 2, 0)
+
+  geo.AddLine -width / 2, height
+
+  geo.AddLine width / 2, height
+
+  geo.AddLine width / 2, 0
+
+  Set p1 = geo.CloseAndFinishLine
+
+  p1.Fillet corner_rad
+
+  p1.ToolInOut = acamINSIDE
+
+  p1.Selected = True
+
+  set p2 = drw.CreateCircle (height * .6, 0, height / 2)
+
+  p2.ToolInOut = acamOUTSIDE
+
+  p2.Selected = True
+
+  drw.ZoomAll
+
+  App.SelectTool App.LicomdatPath & "licomdat\mtools.alp\Flat - 10mm.amt"
+
+  Dim mc As MillData
+
+  Set mc = App.CreateMillData
+
+  mc.PocketType = acamPocketCONTOUR
+
+  mc.SafeRapidLevel = 20
+
+  mc.RapidDownTo = 1
+
+  mc.FinalDepth = -8
+
+  mc.WidthOfCut = 7.5
+
+  mc.Stock = 1
+
+  mc.Pocket
+
+  End Sub
+
+================================================================================
+PLIK: MillData_RoughFinish
+================================================================================
+
+MillData.RoughFinish
+ 
+ 
+
+ MillData.RoughFinish
+
+ Do Rough / Finish operation on currently selected geometries, using properties set for this MillData object.
+
+ Syntax
+
+ mc.RoughFinish
+
+ [Return] Paths  Returned Paths object
+
+ The example draws a rectangle and creates a finish path with lead-in/out.
+
+ Public Sub FinishPath()
+
+ Dim Drw As Drawing 
+
+ Set Drw = App.ActiveDrawing 
+
+ App.SelectTool App.LicomdatPath & "LICOMDAT\MTOOLS.ALP\Flat - 10mm.amt" 
+
+  
+
+ ' Draw the geometry, set the tool side and select it 
+
+ Dim Geo As Path 
+
+ Set Geo = Drw.CreateRectangle(0, 0, 100, 100) 
+
+ Geo.SetStartPoint 50, 100 
+
+ Geo.ToolInOut = acamOUTSIDE 
+
+ Geo.Selected = True 
+
+  
+
+ ' Setup the machining data 
+
+ Dim MD As MillData 
+
+ Set MD = App.CreateMillData 
+
+  
+
+ MD.XYCorners = acamCornersSTRAIGHT 
+
+ MD.SafeRapidLevel = 20 
+
+ MD.RapidDownTo = 1 
+
+ MD.FinalDepth = -10 
+
+  
+
+ ' Create the tool path, storing the returned Paths 
+
+ ' object so lead-in/out can be added 
+
+ Dim Tps As Paths 
+
+ Set Tps = MD.RoughFinish 
+
+  
+
+ ' Add lead-in/out 
+
+ Tps(1).SetLeadInOutAuto acamLeadARC, acamLeadLINE, 1.5, 1.5, 45, False, False, 0 
+
+  
+
+ Drw.ZoomAll 
+
+ End Sub
+
+================================================================================
+PLIK: MillData_Saw
+================================================================================
+
+MillData.Saw
+
+MillData.Saw
+
+Do Saw operation on currently selected geometries, using 
+ properties set for this MillData 
+ object.
+
+Syntax
+
+mc.Saw
+
+[Return] Paths  Returned Paths object
+
+The example defines and selects a Saw tool, then draws 
+ a rectangle, puts the ghost tool on the outside, selects it and saws it.
+
+Public Sub CutWithSaw()
+
+    Dim 
+ Drw As Drawing
+
+    Set 
+ Drw = App.ActiveDrawing
+
+    
+
+    Dim 
+ ToolName As String
+
+    ToolName 
+ = DefineSaw
+
+    App.SelectTool 
+ ToolName
+
+    
+
+    Dim 
+ P2 As Path
+
+    Set 
+ P2 = Drw.CreatePolygon(100, 6, True, 200, 0)
+
+    P2.ToolInOut 
+ = acamOUTSIDE
+
+    P2.Selected 
+ = True
+
+    Dim 
+ MD As MillData
+
+    Set 
+ MD = App.CreateMillData
+
+    
+
+    MD.SawInternalCorners 
+ = acamSawCUT_ON
+
+    MD.SawExternalCorners 
+ = acamSawCUT_PAST
+
+    MD.SawExternalCornerDistance 
+ = 10
+
+    MD.SawHeadPosition 
+ = acamSawHeadLEFT
+
+    MD.SawAngle 
+ = 0
+
+    
+
+    MD.SafeRapidLevel 
+ = 20
+
+    MD.RapidDownTo 
+ = 2
+
+    MD.MaterialTop 
+ = 0
+
+    MD.FinalDepth 
+ = -20
+
+    MD.NumberOfCuts 
+ = 3
+
+    
+
+    MD.Stock 
+ = 2
+
+    Dim 
+ PS As Paths
+
+    Set 
+ PS = MD.Saw
+
+    MsgBox 
+ PS.Count
+
+End Sub
+
+ 
+
+Public Function DefineSaw() As String
+
+    Dim 
+ Tool As MillTool
+
+    Set 
+ Tool = App.CreateTool
+
+    With 
+ Tool
+
+        .Type 
+ = acamToolWHEEL   ' 
+ = Saw
+
+        .Name 
+ = "Saw 100mm(API)"
+
+        .Number 
+ = 85
+
+        .Diameter 
+ = 100
+
+        .Length 
+ = 10    ' 
+ = Width of Saw
+
+        .FixedFeed 
+ = 10
+
+        .FixedDownFeed 
+ = 3
+
+        .FixedSpeed 
+ = 100
+
+        .Units 
+ = 0
+
+        DefineSaw 
+ = App.LicomdatPath + "licomdat\rtools.alp\Saw 100mm(API).art"
+
+        .SaveAs 
+ DefineSaw
+
+    End 
+ With
+
+End Function
+
+================================================================================
+PLIK: Operations_FinishResequence
+================================================================================
+
+Operations.FinishResequence
+
+Operations.FinishResequence
+
+Finish resequencing the Operations.
+
+Syntax
+
+ops.FinishResequence
+
+See StartResequence
+
+================================================================================
+PLIK: Surface_FinishTrimming
+================================================================================
+
+Surface.FinishTrimming
+
+Surface.FinishTrimming
+
+Call this when all trimming paths have been applied 
+ to the surface using TrimWithPath.
+
+Syntax
+
+Surface.FinishTrimming
+
+================================================================================
+
+

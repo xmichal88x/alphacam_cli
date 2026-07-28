@@ -1,0 +1,63 @@
+================================================================================
+SEKCJA: 02_Application/Lathe_Methods.txt
+Wygenerowano z acAPI.bas
+================================================================================
+
+PLIK: Application_GetCurrentToolInLatheTurret
+================================================================================
+
+Application.GetCurrentToolInLatheTurret
+ 
+ 
+
+ Application.GetCurrentToolInLatheTurret
+
+ Return an object representing the currently selected tool in the specfied Turret/Station (Lathe only). Return value will be Nothing if there is no tool.
+
+Syntax
+
+ App.GetCurrentToolInLatheTurret (Turret, Station)
+
+ AcamLatheTurret Turret acamTurretABOVE_CL or acamTurretBELOW_CL
+
+ AcamLatheStation Station acamStationFRONT or acamStationBACK
+
+ [Return] MillTool  MillTool object for tool.
+
+================================================================================
+PLIK: Application_SelectToolInLatheTurret_Latheonly_
+================================================================================
+
+Application.SelectToolInLatheTurret (Lathe only)
+
+Application.SelectToolInLatheTurret (Lathe only)
+
+Select a Mill or Lathe tool to use for machining, given 
+ file name (or let user select it).
+
+This method is the same as SelectTool, but, in the Lathe 
+ module, allows the turret to be specified.
+
+New for 
+ AlphaV7.5: An empty string ("") 
+ can be used to de-select the tool, so there is no current tool.
+
+Syntax
+
+App.SelectToolInLatheTurret (Name, Turret, Station)
+
+String  Name Full path name of tool file to 
+ open, "$USER" to let user select it from normal dialog box
+
+AcamLatheTurret Turret acamTurretABOVE_CL 
+ or acamTurretBELOW_CL
+
+AcamLatheStation Station acamStationFRONT 
+ or acamStationBACK
+
+[Return] MillTool  MillTool object for selected 
+ tool.
+
+================================================================================
+
+

@@ -1,0 +1,234 @@
+================================================================================
+SEKCJA: 04_Drawing/Drawing_Properties.txt
+Wygenerowano z acAPI.bas
+================================================================================
+
+PLIK: DrawingOptionsProperties
+================================================================================
+
+DrawingOptions Properties
+
+DrawingOptions Properties
+
+(All are read-write)
+
+DrawToolPathRapidsInWhite - (boolean) True to show tool 
+ path rapids in white, False to show in tool colour
+
+ShowBothSides - (boolean) True to show the below-center-line 
+ geometries in Lathe
+
+ShowBreaks - (boolean) True to show ends of geometries
+
+ShowGhostTools - (boolean) True to show the ghost tools
+
+ShowMaterialCut - (boolean) True to show the material 
+ cut by the tool paths
+
+ShowRapids - (boolean) True to show rapids
+
+ShowToolHolder - (boolean) True to show tool holder
+
+ShowToolPathArrows - (boolean) True to show arrows on 
+ tool paths
+
+ShowSyncPoints - (boolean) True to show sync points 
+ in multi-turret Lathe
+
+ShowTools - (boolean) True to show tools
+
+================================================================================
+PLIK: DrawingProperties
+================================================================================
+
+Drawing Properties
+
+Drawing Properties
+
+Attribute - See Attributes
+
+BackgroundColor - (AcamColor) Background colour for 
+ AlphaCAM window, as a standard colour. Use Redraw method to see the change
+
+BackgroundColorRGB - (OLE_COLOR) Background colour for 
+ non-shaded AlphaCAM windows, as an RGB colour. Use Redraw method to see 
+ the change
+
+BackgroundColorShadingRGB - (OLE_COLOR) Background colour 
+ for shaded AlphaCAM windows, as an RGB colour. Use Redraw method to see 
+ the change
+
+Bold - (boolean) True to create bold text, if TrueType 
+ font used
+
+Clamps - (Clamps) Collection of the clamps in the drawing 
+ (read-only)
+
+ColorRGB - (OLE_COLOR) RGB Colour used for various items 
+ in AlphaCAM, as in File | Configure | Colours
+
+syntax ColorRGB(AcamColorIndex i)
+
+Construction - (boolean) True if in Construction mode 
+ ie geometries created will be Construction geometries
+
+CurrentViewWindow (ViewWindow) - The current view window 
+ (read-only)
+
+Dimension - (Dimension) Dimension object, for creating 
+ dimensions
+
+DrawingColor - (AcamColor) Colour for drawing with DrawTo, 
+ the 16 standard colours
+
+DrawingColorRGB - (OLE_COLOR) Colour for drawing with 
+ DrawTo,as an RGB colour
+
+DrawingLineStyle - (AcamLineStyle) Line style for drawing 
+ with DrawTo: acamLineStyleSOLID or acamLineStyleDOT
+
+EnableSnap - (boolean) False to disable snap eg in UserGet2DPoint 
+ (write-only)
+
+FindXYTolerance - (double) Tolerance for Find XY methods 
+ eg FindGeoAtPointL (Default is based on number of decimal places set in 
+ Post)
+
+Font - (String) Font name for text. Must start with 
+ A for AlphaCAM font eg AStencil, or T for TrueType font eg TArial
+
+FullName - (String) Complete path name of drawing file 
+ (read-only)
+
+Geometries - (Paths) Collection of the geometries in 
+ the drawing (read-only)
+
+GeoUtilitiesInterface - (IDispatch) Interface for GeoUtilities
+
+HideEditBoxes (boolean) True to hide the edit boxes 
+ in UserGet2DPointWithCallBack and UserGet3DPointWithCallBack
+
+Id - (int) number identifying this drawing, 0 = the 
+ main drawing, > 0 = temporary drawings (read-only)
+
+Italic - (boolean) True to create italic text, if TrueType 
+ font used
+
+Layers - (Layers) Collection of the layers in the drawing 
+ (read-only)
+
+LatheMachineConfiguration - (LatheMachineConfiguration) LatheMachineConfiguration object (read-only)
+
+MachineComponents - (MachineComponents) Collection of the machine components in the drawing 
+ (read-only)
+
+MachineConfiguration - (MachineConfiguration) MachineConfiguration object (read-only)
+
+Materials - (Materials) Collection of the materials 
+ in the drawing (read-only)
+
+Modified - (boolean) True if the drawing has been modified 
+ and not saved
+
+Name - (String) File name of drawing file only, no path 
+ or extension (read-only)
+
+Operations - (Operations) Collection of the operations 
+ in the drawing (read-only)
+
+OperationsForTurret - (Operations) Collection of the 
+ operations in the drawing, for a given Lathe Turret, specified by Turret 
+ and Station parameters (read-only)
+
+Options - (DrawingOptions) Options eg Show Tool (read-only)
+
+OutputNCStatus - Non-zero if Last OutputNC call failed
+
+ParametricInterface (IDispatch) See AlphaV7 Release 
+ notes
+
+Path - (String) Path of drawing file, no name or extension 
+ or trailing "\" (read-only)
+
+PickTolerance - (double) Tolerance used for picking 
+ (read-only)
+
+QuickShading - (boolean) True if Quick Shading is on
+
+ScreenUpdating - (boolean) False to disable drawing 
+ of geometries created by Drawing.Create methods
+
+ShowSelection - (boolean) True to show the current selection. 
+ (Applies to shaded mode only) (write-only)
+
+SimulationType - (AcamSimulationType) the type of the current simulation,
+acamSimulationTypeNONE, acamSimulationTypeSHADE, acamSimulationTypeSOLID, acamSimulationTypeLATHERZ, acamSimulationTypeMILL_SINGLE_STEP_WP (read-only)
+
+SnapData - (SnapData) snap data (read-only)
+
+SnapMode - (AcamSnap) the current snap mode (read-only)
+
+SolidFacets - (Variant) array of facets for the objects 
+ of given type in the drawing, formatted as for surfaces 
+ (read-only)
+
+syntax: SolidFacets(SolidName, Tolerance), 
+ eg SolidFacets("Parasolid", .1)
+
+SolidInterface (IDispatch) See AlphaV7 Release 
+ notes
+
+SolidParts (SolidParts) Collection of the SolidParts 
+ in the drawing (read-only)
+
+SolidSimulationInterface (IDispatch) interface for solid simulation (read-only)
+
+SolidSimulationStatus (AcamSolidSimulationStatus) status for solid simulation,
+acamSimulationStatusNONE = solid simulation is not active, acamSimulationStatusSIMULATING = solid simulation is currently running,
+acamSimulationStatusDISPLAY = solid simulation has finished and the resulting solid model is being displayed.
+(read-only)
+
+Splines - (Splines) Collection of the splines in the 
+ drawing (read-only)
+
+STLFacets - (Variant) array of facets for the STL objects 
+ in the drawing, formatted as for surfaces 
+ (read-only)
+
+STLInterface (IDispatch) See AlphaV7 Release 
+ notes
+
+Surfaces - (Surfaces) Collection of the surfaces in 
+ the drawing (read-only)
+
+Text - (Texts) Collection of the text in the drawing 
+ (read-only)
+
+Temp (Boolean) True if this is a temporary drawing (read-only)
+
+ThreeDViews - (boolean) True if in 3D Views
+
+ThreeDViewsDividerX - X Pixel of dividers in 3D views
+
+ThreeDViewsDividerY - Y Pixel of dividers in 3D views
+
+ToolPaths - (Paths) Collection of the tool paths in 
+ the drawing (read-only)
+
+UserAction - (AcamUser) Exit code for last user selection 
+ (read-only)
+
+ViewWindows - (ViewWindows) Collection of the View Windows 
+ (read-only)
+
+Workpiece - (Workpiece) The main work piece (read-only)
+
+Workpieces - (Workpieces) Collection of the work pieces 
+ in the drawing (read-only)
+
+WorkPlanes - (WorkPlanes) Collection of the work planes 
+ in the drawing (read-only)
+
+================================================================================
+
+

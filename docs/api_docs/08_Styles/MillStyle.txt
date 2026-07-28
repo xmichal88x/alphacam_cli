@@ -1,0 +1,210 @@
+================================================================================
+SEKCJA: 08_Styles/MillStyle.txt
+Wygenerowano z acAPI.bas
+================================================================================
+
+PLIK: MillStyle_AddOp
+================================================================================
+
+MillStyle.AddOp
+
+MillStyle.AddOp
+
+Add an operation to the style.
+
+Syntax
+
+Style.AddOp (McData, Tool, Lead)
+
+MillData McData Machining data for this operation
+
+MillTool Tool The tool for this operation
+
+LeadData Lead The lead-in/out for this operation
+
+================================================================================
+PLIK: MillStyle_Apply
+================================================================================
+
+MillStyle.Apply
+
+MillStyle.Apply
+
+Apply the style to the selected geometries.
+
+Syntax
+
+Style.Apply
+
+================================================================================
+PLIK: MillStyle_Object
+================================================================================
+
+MillStyle Object
+
+MillStyle Object
+
+An object representing a Mill Machining Style.
+
+ 
+
+See Application.CreateMillStyle 
+ for an example.
+
+ 
+
+Properties
+
+ 
+
+FileName - (String) The name of the file for this style
+
+ 
+
+LayerGeometry - (String) If not empty, the name of the layer containing 
+ the geometries to be used for this style
+
+ 
+
+MillSubStyles - (MillSubStyles) The machining operations in this style
+
+ 
+
+Name - (String) The name of the style
+
+ 
+
+ShowProgressBox - (Boolean) True to show the progress box while applying 
+ the style
+
+================================================================================
+PLIK: MillStyle_SaveAs
+================================================================================
+
+MillStyle.SaveAs
+
+MillStyle.SaveAs
+
+Save the style to given file name.
+
+Syntax
+
+Style.SaveAs (Name)
+
+String Name Complete path name to save to
+
+================================================================================
+PLIK: MillSubStyle_GetMillData
+================================================================================
+
+MillSubStyle.GetMillData
+
+MillSubStyle.GetMillData
+
+Get the machining data for this operation. An object 
+ of type MillData will be returned.
+
+Syntax
+
+SubStyle.GetMillData
+
+[Return] MillData  MillData object 
+
+ 
+
+This can be used to enumerate the styles to find one 
+ that matches requirements, eg find styles which use surface machining:
+
+ 
+
+Public Sub EnumSurfaceMc()
+
+    Dim 
+ S As MillStyle
+
+    For 
+ Each S In App.MillMachiningStyles
+
+        Dim 
+ SS As MillSubStyle
+
+        For 
+ Each SS In S.MillSubStyles
+
+            Dim 
+ MD As MillData
+
+            Set 
+ MD = SS.GetMillData
+
+            If 
+ MD.ProcessType2 = acamProcessMACHINE_SURFACE And MD.SurfaceMCMethod <> 
+ acamSurfaceMCPARAMETER_LINES Then
+
+                MsgBox 
+ "Surface MC"
+
+            End 
+ If
+
+        Next 
+ SS
+
+    Next 
+ S
+
+End Sub
+
+================================================================================
+PLIK: MillSubStyle_Object
+================================================================================
+
+MillSubStyle Object
+
+MillSubStyle Object
+
+An object representing an operation in a Mill Machining Style.
+
+ 
+
+Properties
+
+ 
+
+LayerBoundary - (String) If not empty, the name of the layer containing 
+ the boundaries to be used for this operation, if it is Surface Machining
+
+ 
+
+LayerGeometry - (String) If not empty, the name of the layer containing 
+ the geometries to be used for this operation
+
+ 
+
+LayerPoints - (String) If not empty, the name of the layer containing 
+ a circle representing the start point to be used for this operation, if 
+ it is Surface Machining
+
+ 
+
+Tool - (MillTool) The tool used for this operation
+
+================================================================================
+PLIK: MillSubStyle_SetMillData
+================================================================================
+
+MillSubStyle.SetMillData
+
+MillSubStyle.SetMillData
+
+Set the machining data for this operation.
+
+Syntax
+
+SubStyle.SetMillData (MD)
+
+MillData MD MillData object
+
+================================================================================
+
+

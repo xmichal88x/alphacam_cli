@@ -1,0 +1,297 @@
+================================================================================
+SEKCJA: 07_Machining/WireData.txt
+Wygenerowano z acAPI.bas
+================================================================================
+
+PLIK: WireData_Cut2AxisShape
+================================================================================
+
+WireData.Cut2AxisShape
+ 
+ 
+
+ WireData.Cut2AxisShape
+
+ Do 2-axis cuts on currently selected geometries using properties set for this WireData object.
+
+ Syntax
+
+ wd.Cut2AxisShape
+
+ Example:
+
+  Sub CutShape
+
+  Dim drw As Drawing
+
+  Set drw = App.ActiveDrawing
+
+  Dim width As Double
+
+  Dim height As Double
+
+  width = 100
+
+  height = 50
+
+  Dim geo As Path
+
+  App.New
+
+  Set geo = drw.CreateRectangle (-width / 2, 0, width / 2, height)
+
+  geo.SetStartPoint 0,0
+
+  geo.Selected = True
+
+  geo.ToolInOut = acamOUTSIDE
+
+  Dim mc As WireData
+
+  Set mc = App.CreateWireData
+
+  mc.XYCorners = acamCornersSTRAIGHT
+
+  mc.McComp = acamCompMC
+
+  mc.ProgramingZ = 0
+
+  mc.AuxiliaryZ = 15
+
+  mc.WireAngle = 10
+
+  mc.WireDiameter = .5
+
+  mc.NumberOfCuts = 1
+
+  mc.CutFeed = 200
+
+  mc.LeadInLength = 10
+
+  mc.LeadOutLength = 5
+
+  mc.TagLength = 4
+
+  mc.SupportTags = acamTagLEAVE_TAG
+
+  mc.Cut2AxisShape 
+
+  drw.ThreeDViews = true
+
+  End Sub
+
+================================================================================
+PLIK: WireData_Cut4AxisShape
+================================================================================
+
+WireData.Cut4AxisShape
+
+WireData.Cut4AxisShape
+
+Do 4-axis cuts using properties set for this WireData 
+ object.
+
+Syntax
+
+wd.Cut4AxisShape
+
+Example:
+
+Sub Cut4AxisShape
+
+Dim drw As Drawing
+
+Set drw = App.ActiveDrawing
+
+Dim width As Double, height As Double, corner_rad As Double
+
+width = 100
+
+height = 50
+
+corner_rad = 8
+
+Dim Geo1 As Path, Geo2 As Path
+
+Dim p1 As Path, p2 As Path
+
+App.New
+
+Set Geo1 = drw.CreateCircle(100, 0, 0)
+
+Geo1.SetStartPoint -20, 15
+
+Geo1.ToolInOut = acamINSIDE
+
+Geo1.CW = True
+
+Set Geo2 = drw.CreateRectangle(5, 5, 25, 25)
+
+Geo2.SetStartPoint -20, 15
+
+Geo2.ToolInOut = acamOUTSIDE
+
+Geo2.CW = True
+
+Dim mc As WireData
+
+Set mc = App.CreateWireData
+
+mc.SetProgrammingGeometry Geo1
+
+mc.SetAuxiliaryGeometry Geo2
+
+mc.XYCorners = acamCornersROUND
+
+mc.McComp = acamCompTOOLCEN
+
+mc.ProgramingZ = 0
+
+mc.AuxiliaryZ = 25
+
+mc.WireDiameter = 0.5
+
+mc.NumberOfCuts = 3
+
+mc.OffsetNumber(1) = 10
+
+mc.OffsetNumber(2) = 20
+
+mc.OffsetNumber(3) = 30
+
+mc.Stock(1) = 2.5
+
+mc.Stock(2) = 0.5
+
+mc.Stock(3) = 0
+
+mc.Generator(1) = 77
+
+mc.Generator(2) = 88
+
+mc.Generator(3) = 34
+
+mc.CutFeed = 200
+
+mc.LeadInLength = 10
+
+mc.LeadOutLength = 5
+
+'mc.BiDirectional = true
+
+mc.TagLength = 4
+
+mc.SupportTags = 1
+
+mc.CutNumberToCutTag = 3
+
+Dim circle1 As Path
+
+Set circle1 = drw.CreateCircle(5, -20, 15)
+
+mc.StartInMaterial = True
+
+mc.SetStartCircle circle1
+
+mc.SetStartElement Geo1.GetFirstElem
+
+mc.ControlPoints = acamWireControlPointsNONE
+
+'DrawConnectingLines Geo1, Geo2
+
+mc.Cut4AxisShape
+
+End Sub
+
+================================================================================
+PLIK: WireDataObject
+================================================================================
+
+WireData Object
+
+WireData Object
+
+Machining data for a Wire operation, eg Z levels, feeds 
+ and technology
+
+More:
+
+WireData Properties
+
+================================================================================
+PLIK: WireDataProperties
+================================================================================
+
+WireData Properties
+
+WireData Properties
+
+Most of these properties have the same name as the text 
+ in the dialog boxes in the English version of AlphaCAM, in the corresponding 
+ commands eg Cut Single Shape.
+
+Attribute - See Attributes
+
+AuxiliaryZ - (double) Auxiliary Z level
+
+BiDirectional - (boolean) True for bi-directional cuts
+
+ChordTolerance - (float) Chord tolerance for Cut4AxisShape
+
+ControlPoints - (AcamWireControlPoints) type of contorl 
+ points to use for Cut4AxisShape,  acamWireControlPointsCONS_OR_POLYLINES 
+ = 1, acamWireControlPointsMATCHING_ELEMENTS = 2,  acamWireControlPointsNONE 
+ = 3
+
+CutFeed - (float) Feed
+
+CutNumberToCutTag - (short) Number of cut to cut the 
+ tag on if SupportTags = acamTagCUT_TAG. Value is cut number, 1 to NumberOfCuts
+
+Generator - (long) Generator(I)  I 
+ = 1 to NumberOfCuts, Generator value for cut I
+
+LeadInLength - (float) Length of Lead In
+
+LeadOutLength - (float) Length of Lead Out
+
+LoopRadius - (float) Radius of loop corners
+
+MakeLeadInPerp - (boolean) True if start point is to 
+ be moved to make the lead-in perpendicular
+
+McComp - (short) Machine compensation, acamCompTOOLCEN 
+ = 0, acamCompMC = 1, acamCompBOTH = 2
+
+NumberOfCuts - (short) Number of cuts
+
+OffsetNumber - (long) OffsetNumber(I) I = 1 to NumberOfCuts, 
+ OffsetNumber for cut I
+
+OpNo - (short) Operation Number
+
+ProgramingZ - (double) Programming Z level
+
+StartInMaterial - (boolean) True to start in material. 
+ SetStartCircle must be used to set the circle to start in
+
+Stock - (float) Stock(I) I = 1 to NumberOfCuts, Stock 
+ amount for cut I
+
+SupportTags - (short) Type of Support Tag, if TagLength 
+ not zero. acamTagBREAK_GEO = 0, acamTagCUT_TAG = 1, acamTagLEAVE_TAG = 
+ 2
+
+TagLength - (double) Length of tag, 0 for no tag
+
+WireAngle - (double) Angle of Wire, CCW angle is positive 
+ looking along the direction of cut
+
+WireDiameter - (double) Diameter of Wire
+
+XYCorners - (short) Type of corners. acamCornersROUND 
+ = 0, acamCornersSTRAIGHT = 1, acamCornersLOOP = 2
+
+================================================================================
+
+

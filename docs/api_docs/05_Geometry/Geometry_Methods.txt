@@ -1,0 +1,7490 @@
+================================================================================
+SEKCJA: 05_Geometry/Geometry_Methods.txt
+Wygenerowano z acAPI.bas
+================================================================================
+
+PLIK: Application_CloseGeometryMacro
+================================================================================
+
+Application.CloseGeometryMacro
+
+Application.CloseGeometryMacro
+
+Close an AlphaCAM geometry macro, opened by OpenGeometryMacro
+
+Syntax
+
+App.CloseGeometryMacro
+
+================================================================================
+PLIK: Application_OpenGeometryMacro
+================================================================================
+
+Application.OpenGeometryMacro
+
+Application.OpenGeometryMacro
+
+Open an AlphaCAM geometry macro, created in the Macro 
+ Recorder
+
+Syntax
+
+App.OpenGeometryMacro (Name)
+
+String  Name  Full path name of file 
+ to open
+
+================================================================================
+PLIK: Application_RunGeometryMacro
+================================================================================
+
+Application.RunGeometryMacro
+
+Application.RunGeometryMacro
+
+Run an AlphaCAM geometry macro, opened by OpenGeometryMacro
+
+Syntax
+
+App.RunGeometryMacro
+
+================================================================================
+PLIK: Application_SetGeometryMacroVariable
+================================================================================
+
+Application.SetGeometryMacroVariable
+
+Application.OpenGeometryMacro
+
+Set variable in macro opened by OpenGeometryMacro.
+
+Syntax
+
+App.SetGeometryMacroVariable (Name, Value)
+
+String  Name  name of variable
+
+Variant Value value for variable
+
+================================================================================
+PLIK: Application_SetUndoPoint
+================================================================================
+
+Application.SetUndoPoint
+ 
+ 
+
+ Application.SetUndoPoint
+
+ Set an "Undo Point". Commands in the macro following this one (up to the next call of SetUndoPoint) will be undone if the Undo command is used. If SetUndoPoint is not used the whole macro will be undone if Undo is used.
+
+ Syntax
+
+ App.SetUndoPoint
+
+ In the example, if the Undo command is used after the macro is run, only the circles will be removed. The next Undo command will remove the rectangles.
+
+ SetUndoCommandName is used to set the text in the confirmation message box when the Undo command is used.
+
+ Public Sub DemoSetUndoPoint()
+
+ Dim Drw As Drawing 
+
+ Set Drw = App.ActiveDrawing 
+
+  
+
+ App.SetUndoCommandName "Rectangles" 
+
+  
+
+ Drw.CreateRectangle 0, 0, 100, 100 
+
+ Drw.CreateRectangle 150, 0, 250, 100 
+
+  
+
+ App.SetUndoCommandName "Circles" 
+
+ App.SetUndoPoint 
+
+  
+
+ Drw.CreateCircle 50, 0, 100 
+
+ Drw.CreateCircle 75, 0, 100 
+
+ End Sub
+
+================================================================================
+PLIK: Clamp.AssignAdditionalGeometry
+================================================================================
+
+Clamp.AssignAdditionalGeometry
+
+Clamp.AssignAdditionalGeometry
+
+Associate a geometry with this clamp. The geometry will 
+ move with the clamp.
+
+Syntax
+
+Cl.AssignAdditionalGeometry (Geo)
+
+Path Geo The geometry to be associated
+
+================================================================================
+PLIK: Copy_of_MillDataMachiningEngine.AddDrillPoint
+================================================================================
+
+Copy of MillDataMachiningEngine.AddDrillPoint
+
+MillDataMachiningEngine.MachineSurfaces
+
+Machine currently selected surfaces, using properties 
+ set for this MillDataMachiningEngine object, using the Planit Machining 
+ Engine.
+
+Syntax
+
+mc.MachineSurfaces
+
+[Return] Paths  Returned Paths object
+
+See examples
+
+================================================================================
+PLIK: Dimension_CreateLeaderLine
+================================================================================
+
+Dimension.CreateLeaderLine
+ 
+ 
+
+ Dimension.CreateLeaderLine
+
+ Create a leader line by copying a path of line elements.
+
+ Syntax
+
+ dim.CreateLeaderLine (Path)
+
+ Path Path Path containing lines to be copied
+
+ [Return] Paths  Returned Paths object
+
+ Remarks
+
+ An arrow will be drawn at the first point, and lines to the remaining points.
+
+ Example:
+
+ Public Sub LeaderLine()
+
+ Dim Drw As Drawing 
+
+ Set Drw = App.ActiveDrawing 
+
+ Dim G As Geo2D 
+
+ Dim P As Path 
+
+ Set G = Drw.Create2DGeometry(50, 50) 
+
+ G.AddLine 100, 100 
+
+ G.AddLine 150, 100 
+
+ Set P = G.Finish 
+
+ With Drw.Dimension 
+
+ .ArrowLength = 3 
+
+ .CreateLeaderLine P 
+
+ End With 
+
+ P.Selected = True 
+
+ Drw.DeleteSelected 
+
+ Drw.ZoomAll 
+
+ End Sub
+
+================================================================================
+PLIK: Dimension_CreatePoint
+================================================================================
+
+Dimension.CreatePoint
+ 
+ 
+
+ Dimension.CreatePoint
+
+ Create a dimension for a point.
+
+ Syntax
+
+ dim.CreatePoint (X, Y, XPosition, YPosition)
+
+ double X  X coordinate of point to be dimensioned
+
+ double Y  Y coordinate of point to be dimensioned
+
+ double XPosition X coordinate of dimension position
+
+ double YPosition Y coordinate of dimension position
+
+ [Return] Paths  Returned Paths object
+
+ The example draws a line and dimensions the end-point:
+
+ Public Sub Point()
+
+ With App.ActiveDrawing 
+
+ Dim P As Path 
+
+ Set P = .Create2DLine(0, 0, 50, 0) 
+
+ .Font = "AStencil" 
+
+ With .Dimension 
+
+ .TextPosition = acamDimCENTER 
+
+ .TextAlignment = acamDimALIGNED 
+
+ .CreatePoint P.Elements(1).EndXL, P.Elements(1).EndYL, 200, 50 
+
+ End With 
+
+ .ZoomAll 
+
+ End With 
+
+ End Sub
+
+================================================================================
+PLIK: Element_AngleToElement
+================================================================================
+
+Element.AngleToElement
+ 
+ 
+
+ Element.AngleToElement
+
+ Find angle between this element and a given element.
+
+ Syntax
+
+ elem1.AngleToElement (Element2)
+
+ Element Element2 Element object for other element
+
+ [Return] double   Angle in degrees
+
+ Remarks
+
+ This is the same as PAC in the post. The angle is the angle that is turned through when going from this element to the given one. Positive if CCW.
+
+ The example will draw text giving the angle in degrees at the end of each element in the picked geometry:
+
+ Public Sub ElementAngle()
+
+ Dim Drw As Drawing 
+
+ Set Drw = App.ActiveDrawing 
+
+ Drw.Font = "TArial" 
+
+ Dim P1 As Path 
+
+ Do 
+
+ Set P1 = Drw.UserSelectOneGeo("ANGLES: Pick Geometry") 
+
+ If Not (P1 Is Nothing) Then 
+
+ Dim h As Double 
+
+ h = (P1.MaxXL - P1.MinXL + P1.MaxYL - P1.MinYL) / 80 
+
+ Dim E As Element 
+
+ For Each E In P1.Elements 
+
+ Dim Ang As Double 
+
+ Ang = E.AngleToElement(E.GetNext) 
+
+ ' Chr(176) is the degrees symbol in a TrueType font 
+
+ Dim S As String 
+
+ S = Format(Ang, "0.00") & Chr(176) 
+
+ ' Draw the text and loop for each path in the 
+
+ ' returned collection, marking it as dimension 
+
+ Dim P2 As Path 
+
+ For Each P2 In Drw.CreateText(S, E.EndXL + h, E.EndYL + h, h) 
+
+ P2.Dimension = True 
+
+ P2.Redraw 
+
+ Next P2 
+
+ Next E 
+
+ End If 
+
+ Loop Until (P1 Is Nothing) 
+
+ End Sub
+
+================================================================================
+PLIK: Element_BreakAtPoint
+================================================================================
+
+Element.BreakAtPoint
+
+Element.BreakAtPoint
+
+Break this element at the specified point.
+
+Syntax
+
+elem.BreakAtPoint (X, Y)
+
+Double X, X coordinate of point to break at
+
+Double Y, Y coordinate of point to break at
+
+[Return] Element  New element representing 
+ the section after the break point
+
+================================================================================
+PLIK: Element_Chamfer
+================================================================================
+
+Element.Chamfer
+ 
+ 
+
+ Element.Chamfer
+
+ Chamfer this element with another element.
+
+ Syntax
+
+ elem1.Chamfer (Element2, Start1, Start2, Dist1, Dist2)
+
+ Element Element2 Element object for other element
+
+ boolean Start1  True if pick point is at start of elem1, False if at end
+
+ boolean Start2  True if pick point is at start of elem2, False if at end
+
+ double  Dist1  First chamfer distance
+
+ double  Dist2  Second chamfer distance
+
+ [Return] boolean  True if OK
+
+ The example will draw a geometry and chamfer the 2 corners:
+
+  Dim drw As Drawing
+
+  Set drw = App.ActiveDrawing
+
+  Dim geo As Geo2D, p1 As Path, e1 As Element, e2 As Element
+
+  Set geo = drw.Create2DGeometry (0, 0)
+
+  geo.AddLine 0, 20
+
+  geo.AddLine 40, 20
+
+  geo.AddLine 40, 0
+
+  Set p1 = geo.Finish
+
+  Set e1 = p1.GetFirstElem
+
+  Set e2 = e1.GetNext
+
+  e1.Chamfer e1.GetNext, False, True, 2, 4
+
+  e2.Chamfer e2.GetNext, False, True, 4, 2
+
+================================================================================
+PLIK: Element_Fillet
+================================================================================
+
+Element.Fillet
+ 
+ 
+
+ Element.Fillet
+
+ Fillet this element with another element.
+
+ Syntax
+
+ elem1.Fillet (Element2, Start1, Start2, Radius)
+
+ Element Element2 Element object for other element
+
+ boolean Start1  True if pick point is at start of elem1, False if at end
+
+ boolean Start2  True if pick point is at start of elem2, False if at end
+
+ double  Radius  Fillet radius
+
+ [Return] boolean  True if OK
+
+ The example will draw 2 intersecting lines and fillet them. Start1 and Start2 are both True so the start of each line will be kept.
+
+  Dim drw As Drawing
+
+  Set drw = App.ActiveDrawing
+
+  Dim p1 As Path, p2 As Path
+
+  Set p1 = drw.Create2DLine (-10, -10, 10, 10)
+
+  Set p2 = drw.Create2DLine (10, -10, -10, 10)
+
+  p1.GetFirstElem.Fillet p2.GetFirstElem, True, True, 5
+
+================================================================================
+PLIK: Element_FilletBubble
+================================================================================
+
+Element.FilletBubble
+
+Element.FilletBubble
+
+Fillet this element with another element, using a bubble 
+ fillet.
+
+Syntax
+
+elem1.FilletBubble (Element2, Start1, Start2, Radius)
+
+Element Element2 Element object for other 
+ element
+
+boolean Start1  True if pick point is 
+ at start of elem1, False if at end
+
+boolean Start2  True if pick point is 
+ at start of elem2, False if at end
+
+double  Radius  Fillet radius
+
+[Return] boolean  True if OK
+
+================================================================================
+PLIK: Element_GetDirection
+================================================================================
+
+Element.GetDirection
+
+Element.GetDirection
+
+Find Local direction 
+ of element at given point.
+
+Syntax
+
+elem.GetDirection (XP, YP, XDir, YDir, ZDir)
+
+double XP  Local X coordinate
+
+double YP  Local Y coordinate
+
+double* XDir  Returned Local X direction
+
+double* YDir  Returned Local Y direction
+
+double* ZDir  Returned Local Z direction
+
+================================================================================
+PLIK: Element_GetNext
+================================================================================
+
+Element.GetNext
+ 
+ 
+
+ Element.GetNext
+
+ Get the next element in the path.
+
+ Syntax
+
+ elem.GetNext
+
+ [Return] Element  Element object
+
+================================================================================
+PLIK: Element_GetPrevious
+================================================================================
+
+Element.GetPrevious
+ 
+ 
+
+ Element.GetPrevious
+
+ Get the previous element in the path.
+
+ Syntax
+
+ elem.GetPrevious
+
+ [Return] Element  Element object
+
+================================================================================
+PLIK: Element_Intersect
+================================================================================
+
+Element.Intersect
+ 
+ 
+
+ Element.Intersect
+
+ Find intersection point (or points) with another element. The intersection points must lie on the elements. See Element.IntersectInfinite if they do not.
+
+ Syntax
+
+ elem.Intersect (Element2, X1, Y1, X2, Y2)
+
+ Element Element2 Element object for other element
+
+ X1  double *  X coordinate of first intersection point
+
+ Y1  double *  Y coordinate of first intersection point
+
+ X2  double *  X coordinate of second intersection point
+
+ Y2  double *  Y coordinate of second intersection point
+
+ [Return] long  Returned number of intersections found, 0, 1 or 2
+
+ Remarks
+
+ (X1, Y1) are only valid if the return value is > 0. (X2, Y2) are only valid if the return value is 2.
+
+ All coordinates are local coordinates.
+
+ The example draws 2 circles and draws a line between the intersection points.
+
+  Dim drw As Drawing
+
+  Set drw = App.ActiveDrawing
+
+  Dim p1 As Path, p2 As Path
+
+  Dim e1 As Element, e2 As Element
+
+  Set p1 = drw.CreateCircle (50, 10, 20)
+
+  Set p2 = drw.CreateCircle (80, 40, 30)
+
+  Set e1 = p1.GetFirstElem
+
+  Set e2 = p2.GetFirstElem
+
+  n = e1.Intersect (e2, x1#, y1#, x2#, y2#)
+
+  If n = 2 Then
+
+  drw.Create2DLine x1#, y1#, x2#, y2#
+
+  End If
+
+  drw.ZoomAll
+
+ Note: in Basic a variable name ending with # is a double precision variable, as required for this method. Alternatively, use:
+
+ Dim x1 As Double
+
+================================================================================
+PLIK: Element_IntersectInfinite
+================================================================================
+
+Element.IntersectInfinite
+ 
+ 
+
+ Element.IntersectInfinite
+
+ Find intersection point (or points) with another element. The intersection points do not need to be on the elements, the elements are assumed to be of infinite length. Arcs are assumed to be circles, lines are asumed to be infinite lines. See Element.Intersect.
+
+ Syntax
+
+ elem.IntersectInfinite (Element2, X1, Y1, X2, Y2)
+
+ Element Element2 Element object for other element
+
+ X1  double *  X coordinate of first intersection point
+
+ Y1  double *  Y coordinate of first intersection point
+
+ X2  double *  X coordinate of second intersection point
+
+ Y2  double *  Y coordinate of second intersection point
+
+ [Return] long  Returned number of intersections found, 0, 1 or 2
+
+ Remarks
+
+ (X1, Y1) are only valid if the return value is > 0. (X2, Y2) are only valid if the return value is 2.
+
+ All coordinates are local coordinates.
+
+ The example draws 2 lines and draws a circle at the imaginary intersection point.
+
+  Dim drw As Drawing
+
+  Set drw = App.ActiveDrawing
+
+  Dim p1 As Path, p2 As Path
+
+  Dim e1 As Element, e2 As Element
+
+  Set p1 = drw.Create2DLine (0, 0, 10, 10)
+
+  Set p2 = drw.Create2DLine (40, 0, 30, 10)
+
+  Set e1 = p1.GetFirstElem
+
+  Set e2 = p2.GetFirstElem
+
+  n = e1.IntersectInfinite (e2, x1#, y1#, x2#, y2#)
+
+  If n = 1 Then
+
+  drw.CreateCircle 5, x1#, y1#
+
+  End If
+
+  drw.ZoomAll
+
+ Note: in Basic a variable name ending with # is a double precision variable, as required for this method. Alternatively, use:
+
+ Dim x1 As Double
+
+================================================================================
+PLIK: Element_IsSame
+================================================================================
+
+Element.IsSame
+ 
+ 
+
+ Element.IsSame
+
+ See if two objects represent the same element. This is NOT a geometric comparison.
+
+ Syntax
+
+ elem.IsSame(Elem2)
+
+ Elem2 Element Element object to compare with
+
+ [Return] boolean  Return value, True if objects are the same
+
+================================================================================
+PLIK: Element_PointAtFractG
+================================================================================
+
+Element.PointAtFractG
+ 
+ 
+
+ Element.PointAtFractG
+
+ Find Global coordinates of point at a given fraction along the element.
+
+ See Element.PointAtFractL for local coordinates.
+
+ Syntax
+
+ elem.PointAtFractG (Fraction, X, Y, Z)
+
+ double  Fraction  Fraction along element, 0 = start, 1 = end
+
+ double* X  Returned Global X coordinate
+
+ double* Y  Returned Global Y coordinate
+
+ double* Z  Returned Global Z coordinate
+
+ Remarks
+
+ For example, the midpoint of the element is found by
+
+  Dim X As Double, Y As Double, Z As Double
+
+  elem.PointAtFractG (0.5, X, Y, Z)
+
+================================================================================
+PLIK: Element_PointAtFractL
+================================================================================
+
+Element.PointAtFractL
+ 
+ 
+
+ Element.PointAtFractL
+
+ Find Local coordinates of point at a given fraction along the element.
+
+ See Element.PointAtFractG for global coordinates.
+
+ Syntax
+
+ elem.PointAtFractL (Fraction, X, Y, Z)
+
+ double  Fraction  Fraction along element, 0 = start, 1 = end
+
+ double* X  Returned Local X coordinate
+
+ double* Y  Returned Local Y coordinate
+
+ double* Z  Returned Local Z coordinate
+
+ Remarks
+
+ For example, the midpoint of the element is found by
+
+  Dim X As Double, Y As Double, Z As Double
+
+  elem.PointAtFractL (0.5, X, Y, Z)
+
+================================================================================
+PLIK: Element_Redraw
+================================================================================
+
+Element.Redraw
+
+Element.Redraw
+
+Redraw this element, in normal or selected colour..
+
+Syntax
+
+elem.Redraw(Type)
+
+typeAcamDrawType Type acamDrawTypeSELECTED or acamDrawTypeNORMAL
+
+================================================================================
+PLIK: Element_SetEndToolVector
+================================================================================
+
+Element.SetEndToolVector
+
+Element.SetEndToolVector
+
+Set the end tool vector if this is a 5-axis element.
+
+Syntax
+
+elem.SetEndToolVector (X, Y, Z)
+
+Float X, X component of tool vector 
+
+Float Y, Y component of tool vector 
+
+Float Z, Z component of tool vector 
+
+Remarks
+
+The vector will be normalised.
+
+================================================================================
+PLIK: Element_SetStartToolVector
+================================================================================
+
+Element.SetStartToolVector
+
+Element.SetStartToolVector
+
+Set the start tool vector if this is a 5-axis element.
+
+Syntax
+
+elem.SetStartToolVector (X, Y, Z)
+
+Float X, X component of tool vector 
+
+Float Y, Y component of tool vector 
+
+Float Z, Z component of tool vector 
+
+Remarks
+
+The vector will be normalised.
+
+================================================================================
+PLIK: ElementObject
+================================================================================
+
+Element Object
+
+Element Object
+
+Element Properties
+
+================================================================================
+PLIK: Example1_2Dtoolpaths_
+================================================================================
+
+Example 1, 2D tool paths.
+ 
+ 
+
+ Example 1, 2D tool paths.
+
+ Note that because 2D methods are used the tool will rapid up to the safe rapid level automatically between each tool path.
+
+ Public Sub TestManualToolPath2D()
+
+ App.New 
+
+ App.SelectTool App.LicomdatPath & "LICOMDAT\MTOOLS.ALP\Flat - 10mm.amt" 
+
+ Dim MD As MillData 
+
+ Set MD = App.CreateMillData 
+
+ MD.SafeRapidLevel = 50 
+
+ MD.RapidDownTo = 2 
+
+ MD.FinalDepth = -8 
+
+ MD.Attribute("LicomUKDMBOperationName") = "2D TEST PATH" 
+
+ Dim MTP As MillManualToolPath 
+
+ Set MTP = MD.ManualToolPath(100, 100, 0) 
+
+  
+
+ MTP.Add2DLine 200, 100 
+
+ MTP.Add2DArcPointCenter 200, 200, 200, 150, False 
+
+ MTP.Add2DLine 150, 200 
+
+  
+
+ MTP.Add2DRapid 100, 200 
+
+  
+
+ MTP.Add2DLine 150, 250 
+
+ MTP.Add2DArcPointRadius 50, 250, 75, False, False 
+
+ MTP.Add2DLine 100, 200 
+
+  
+
+ Dim PS As Paths 
+
+ Set PS = MTP.Finish 
+
+  
+
+ Dim Drw As Drawing 
+
+ Set Drw = App.ActiveDrawing 
+
+ Drw.Options.ShowRapids = True 
+
+ Drw.ThreeDViews = True 
+
+  
+
+ MsgBox PS.Count & " Paths", vbInformation 
+
+ End Sub
+
+================================================================================
+PLIK: Example1_MachineSurfacesusingAlongLineinXYPlane_
+================================================================================
+
+Example 1: Machine Surfaces using Along Line in XY Plane.
+ 
+ 
+
+ Example 1: Machine Surfaces using Along Line in XY Plane.
+
+ Public Sub MachineXY()
+
+ App.SelectTool App.LicomdatPath & "licomdat\mtools.alp\ball end - 10mm.amt" 
+
+ Dim MD As MillData 
+
+ Set MD = App.CreateMillData 
+
+  
+
+ ' Select all the surfaces for machining 
+
+ Dim S As Surface 
+
+ For Each S In App.ActiveDrawing.Surfaces 
+
+ S.Selected = True 
+
+ Next S 
+
+ ' Select the boundary 
+
+ Dim P As Path 
+
+ Set P = App.ActiveDrawing.CreateRectangle(10, 10, 90, 90) 
+
+ Dim PS As Paths 
+
+ Set PS = App.ActiveDrawing.CreatePathCollection 
+
+ PS.Add P 
+
+ MD.SetSurfaceMCBoundary PS 
+
+  
+
+ MD.SafeRapidLevel = 50 
+
+ MD.ChordError = 0.1 
+
+ ' MD.WidthOfCut = 5
+
+ MD.CuspHeight = 0.1 
+
+ MD.SurfaceMCAction = acamSurfaceMCActionMCSURFACES 
+
+ MD.SurfaceMCMethod = acamSurfaceMCXY 
+
+ MD.CutDirection = 0 
+
+  
+
+ MD.MachineSurfaces 
+
+ End Sub
+
+================================================================================
+PLIK: Example2_MachineasurfaceusingParameterLines_checkingagainstanothersurface_
+================================================================================
+
+Example 2: Machine a surface using Parameter Lines, checking against another surface.
+ 
+ 
+
+ Example 2: Machine a surface using Parameter Lines, checking against another surface.
+
+ Public Sub MachineParameterLines()
+
+ App.SelectTool App.LicomdatPath & "licomdat\mtools.alp\ball end - 10mm.amt" 
+
+ Dim MD As MillData 
+
+ Set MD = App.CreateMillData 
+
+  
+
+ ' Select first surface for machining 
+
+ Dim S As Surface 
+
+ Set S = App.ActiveDrawing.Surfaces(1) 
+
+ S.Selected = True 
+
+  
+
+ ' Set second surface to be checked against 
+
+ Set S = App.ActiveDrawing.Surfaces(2) 
+
+ S.CheckFoul = True 
+
+  
+
+ ' Select the boundary 
+
+ Dim P As Path 
+
+ Set P = App.ActiveDrawing.CreateRectangle(10, 10, 140, 90) 
+
+ Dim PS As Paths 
+
+ Set PS = App.ActiveDrawing.CreatePathCollection 
+
+ PS.Add P 
+
+ MD.SetSurfaceMCBoundary PS 
+
+  
+
+ MD.ChordError = 0.1 
+
+ MD.WidthOfCut = 5 
+
+  
+
+ ' Set start and second point. They must be inside the boundary. 
+
+ MD.SetSurfaceMCPoints 20, 20, 0, 30, 20, 0 
+
+  
+
+ MD.SurfaceMCAction = acamSurfaceMCActionMCSURFACES 
+
+ MD.SurfaceMCMethod = acamSurfaceMCPARAMETER_LINES 
+
+  
+
+ MD.MachineSurfaces 
+
+ End Sub
+
+================================================================================
+PLIK: Example4_Simple3DLines
+================================================================================
+
+Example 4, Simple 3D Lines
+ 
+ 
+
+ Example 4, Simple 3D Lines
+
+ Public Sub TestManualToolPath3DLines()
+
+ App.New 
+
+ App.SelectTool App.LicomdatPath & "LICOMDAT\MTOOLS.ALP\User - Cone - 10mm x 45 deg.amt" 
+
+ Dim MD As MillData 
+
+ Set MD = App.CreateMillData 
+
+ MD.SafeRapidLevel = 150 
+
+ MD.RapidDownTo = 2 
+
+ MD.FinalDepth = -20 
+
+  
+
+ MD.Attribute("LicomUKDMBOperationName") = "3D TEST" 
+
+ Dim MTP As MillManualToolPath 
+
+ Set MTP = MD.ManualToolPath(0, 0, -20) 
+
+  
+
+ MTP.Add3DLine 100, 0, 50 
+
+ MTP.Add3DLine 100, 50, 50 
+
+ MTP.Add3DLine 0, 50, -20 
+
+  
+
+ MTP.Finish 
+
+  
+
+ Dim Drw As Drawing 
+
+ Set Drw = App.ActiveDrawing 
+
+ Drw.Options.ShowRapids = True 
+
+ Drw.ThreeDViews = True 
+
+ End Sub
+
+================================================================================
+PLIK: Example5_Manualtoolpathwithtoolcompensationonthemachine
+================================================================================
+
+Example 5, Manual tool path with tool compensation on the machine
+ 
+ 
+
+ Example 5, Manual tool path with tool compensation on the machine
+
+ Note that the ToolSide property must be set on the created tool paths, and lead-in/out moves must be specified. This example marks the first and last elements as lead-in/out. The first element of a path will be a rapid if it is not the first path in the drawing, this is tested for using the IsRapid property.
+
+ Alternatively, the path.SetLeadInOutAuto method could be used.
+
+ Public Sub TestManualToolPath2DMcComp()
+
+ App.New 
+
+ App.SelectTool App.LicomdatPath & "LICOMDAT\MTOOLS.ALP\Flat - 10mm.amt" 
+
+ Dim MD As MillData 
+
+ Set MD = App.CreateMillData 
+
+ MD.SafeRapidLevel = 50 
+
+ MD.RapidDownTo = 2 
+
+ MD.FinalDepth = -8 
+
+  
+
+ MD.McComp = acamCompMC 
+
+ MD.Attribute("LicomUKDMBOperationName") = "MANUAL WITH TOOL COMP" 
+
+  
+
+ Dim MTP As MillManualToolPath 
+
+ Set MTP = MD.ManualToolPath(100, 90, 0) 
+
+  
+
+ MTP.Add2DLine 100, 100 
+
+ MTP.Add2DLine 200, 100 
+
+ MTP.Add2DArcPointCenter 200, 200, 200, 150, False 
+
+ MTP.Add2DLine 150, 200 
+
+ MTP.Add2DLine 150, 210 
+
+  
+
+ Dim PS As Paths 
+
+ Set PS = MTP.Finish 
+
+  
+
+ Dim P As Path 
+
+ For Each P In PS 
+
+ P.ToolSide = acamRIGHT 
+
+ Dim E As Element 
+
+ Set E = P.GetFirstElem 
+
+ If E.IsRapid Then 
+
+ Set E = E.GetNext 
+
+ End If 
+
+ E.LeadIn = True 
+
+ P.GetLastElem.LeadOut = True 
+
+ Next P 
+
+  
+
+ Dim Drw As Drawing 
+
+ Set Drw = App.ActiveDrawing 
+
+ Drw.Options.ShowRapids = True 
+
+ Drw.ThreeDViews = True 
+
+ End Sub
+
+================================================================================
+PLIK: FastGeometry_ArcToArc
+================================================================================
+
+FastGeometry.ArcToArc
+ 
+ 
+
+ FastGeometry.ArcToArc
+
+ Add an Arc To Arc turn.
+
+ Syntax
+
+ Geo.ArcToArc (Radius, CW, Over180)
+
+ Double  Radius Blend radius
+
+ Boolean  CW True for CW, False for CCW
+
+ Boolean  Over180 True if blend arc is > 180 degrees
+
+================================================================================
+PLIK: FastGeometry_ArcToLine
+================================================================================
+
+FastGeometry.ArcToLine
+ 
+ 
+
+ FastGeometry.ArcToLine
+
+ Add an Arc To Line turn.
+
+ Syntax
+
+ Geo.ArcToLine (Radius, CW, Over180, LineDirection)
+
+ Double  Radius  Blend radius
+
+ Boolean  CW  True for CW, False for CCW
+
+ Boolean  Over180  True if blend arc is > 180 degrees
+
+ Double  LineDirection Direction of line in degrees
+
+================================================================================
+PLIK: FastGeometry_CloseAndFinish
+================================================================================
+
+FastGeometry.CloseAndFinish
+ 
+ 
+
+ FastGeometry.CloseAndFinish
+
+ Add a turn based on the first turn to close and finish the geometry.
+
+ Syntax
+
+ Geo.CloseAndFinish
+
+ [Return] Path  Path object
+
+================================================================================
+PLIK: FastGeometry_Finish
+================================================================================
+
+FastGeometry.Finish
+ 
+ 
+
+ FastGeometry.Finish
+
+ Finish the geometry. If the last turn is an arc with non-zero radius the EndDirection parameter should be specified to set the direction that the arc ends in. Otherwise it may be left out.
+
+ Syntax
+
+ Geo.Finish ([EndDirection])
+
+ Double EndDirection (Optional) Direction at end of arc in degrees
+
+ [Return] Path  Path object
+
+================================================================================
+PLIK: FastGeometry_KnownArc
+================================================================================
+
+FastGeometry.KnownArc
+ 
+ 
+
+ FastGeometry.KnownArc
+
+ Add a Known Arc turn.
+
+ Syntax
+
+ Geo.KnownArc (Radius, CW, [XCenter], [YCenter], [DirIn], [DirOut])
+
+ Double  Radius  Blend radius
+
+ Boolean  CW  True for CW, False for CCW
+
+ Double  XCenter  (Optional) X coordinate of centre
+
+ Double  YCenter  (Optional) Y coordinate of centre
+
+ Double  DirIn  (Optional) Direction into turn
+
+ Double  DirOut  (Optional) Direction out of turn
+
+================================================================================
+PLIK: FastGeometry_LineToArc
+================================================================================
+
+FastGeometry.LineToArc
+ 
+ 
+
+ FastGeometry.LineToArc
+
+ Add a Line To Arc turn.
+
+ Syntax
+
+ Geo.LineToArc (Radius, CW, Over180, LineDirection, XPointOnLine, YPointOnLine)
+
+ Double  Radius  Blend radius
+
+ Boolean  CW  True for CW, False for CCW
+
+ Boolean  Over180  True if blend arc is > 180 degrees
+
+ Double  LineDirection Direction of line in degrees
+
+ Double  XPointOnLine (Optional) X coordinate of point on line
+
+ Double  YPointOnLine (Optional) Y coordinate of point on line
+
+ Remarks
+
+ XPointOnLine and YPointOnLine are only needed if the previous turn is an ArcToLine. They give the coordinates of a point on the line between the two turns.
+
+================================================================================
+PLIK: FastGeometry_LineToLineBlend
+================================================================================
+
+FastGeometry.LineToLineBlend
+ 
+ 
+
+ FastGeometry.LineToLineBlend
+
+ Add a Line To Line turn with a blend radius.
+
+ Syntax
+
+ Geo.LineToLineBlend (Radius, [XIntersection], [YIntersection], [DirIn], [DirOut], [Length], [Choice])
+
+ Double Radius  Blend radius
+
+ Double XIntersection (Optional) X coordinate of intersection point
+
+ Double YIntersection (Optional) Y coordinate of intersection point
+
+ Double DirIn  (Optional) Direction of line into intersection, in degrees
+
+ Double DirOut  (Optional) Direction of line out of intersection, in degrees
+
+ Double Length  (Optional) Length of line to intersection point
+
+ Short Choice  (Optional) 1 or 2, see remarks
+
+ Remarks
+
+ If one of X and Y are given, and the Length is given, then there are two solutions. In this case (and only in this case) Choice should be 1 or 2 to choose between them.
+
+================================================================================
+PLIK: FastGeometry_LineToLineChamfer
+================================================================================
+
+FastGeometry.LineToLineChamfer
+ 
+ 
+
+ FastGeometry.LineToLineChamfer
+
+ Add a Line To Line turn with a chamfer.
+
+ Syntax
+
+ Geo.LineToLineChamfer (Dist1, Dist2, [XIntersection], [YIntersection], [DirIn], [DirOut], [Length], [Choice])
+
+ Double Dist1  First chamfer distance
+
+ Double Dist2  Second chamfer distance
+
+ Double XIntersection (Optional) X coordinate of intersection point
+
+ Double YIntersection (Optional) Y coordinate of intersection point
+
+ Double DirIn  (Optional) Direction of line into intersection, in degrees
+
+ Double DirOut  (Optional) Direction of line out of intersection, in degrees
+
+ Double Length  (Optional) Length of line to intersection point
+
+ Short Choice  (Optional) 1 or 2, see remarks
+
+ Remarks
+
+ If one of X and Y are given, and the Length is given, then there are two solutions. In this case (and only in this case) Choice should be 1 or 2 to choose between them.
+
+================================================================================
+PLIK: FastGeometry_Point
+================================================================================
+
+FastGeometry.Point
+ 
+ 
+
+ FastGeometry.Point
+
+ Add a Point turn. (Line To Line turn with zero blend radius.)
+
+ Syntax
+
+ Geo.Point ([XIntersection], [YIntersection], [DirIn], [DirOut], [Length], [Choice])
+
+ Double XIntersection (Optional) X coordinate of intersection point
+
+ Double YIntersection (Optional) Y coordinate of intersection point
+
+ Double DirIn  (Optional) Direction of line into intersection, in degrees
+
+ Double DirOut  (Optional) Direction of line out of intersection, in degrees
+
+ Double Length  (Optional) Length of line to intersection point
+
+ Short Choice  (Optional) 1 or 2, see remarks
+
+ Remarks
+
+ If one of X and Y are given, and the Length is given, then there are two solutions. In this case (and only in this case) Choice should be 1 or 2 to choose between them.
+
+================================================================================
+PLIK: FastGeometryObject
+================================================================================
+
+FastGeometry Object
+
+FastGeometry Object
+
+An object used to create a 2D Geometry using AlphaCAM 
+ Fast Geometry. Create it with Drawing.CreateFastGeometry, 
+ use FastGeometry methods to add turns, then finish with FastGeometry.Finish 
+ or FastGeometry.CloseAndFinish. 
+ The Finish methods will return 
+ a Path object.
+
+If you are not familiar with AlphaCAM Fast Geometry, 
+ see the AlphaCAM documentation and help.
+
+Most of the methods have optional parameters. This means 
+ that some of the parameters may be left blank. This is the same as pressing 
+ F1 (for Unknown) when using Fast Geometry interactively. VBA will indicate 
+ that a parameter is optional (in the Object Browser and prompts) by enclosing 
+ it in square brackets, for example, [XIntersection].
+
+For example:
+
+The EndDirection 
+ parameter is left blank:
+
+ Geo.Finish
+
+The XCenter 
+ parameter is left blank, the comma (,) must be used so VBA knows that 
+ the next parameter (10) is the value for YCenter. 
+ The remaining parameters DirIn 
+ and DirOut are also blank, commas 
+ are not needed because they are at the end.
+
+ Geo.KnownArc 50, True, , 10
+
+See Drawing.CreateFastGeometry 
+ for an example.
+
+================================================================================
+PLIK: Geo2D_AddArc2Point
+================================================================================
+
+Geo2D.AddArc2Point
+ 
+ 
+
+ Geo2D.AddArc2Point
+
+ Add an arc to 2D geometry, start point is end point of last line or arc, or point passed to Drawing.Create2DGeometry if this is the first line or arc.
+
+ Syntax
+
+ geo.AddArc2Point (X2, Y2, X3, Y3)
+
+ double  X2  X coordinate of second point
+
+ double  Y2  Y coordinate of second point
+
+ double  X3  X coordinate of end point
+
+ double  Y3  Y coordinate of end point
+
+================================================================================
+PLIK: Geo2D_AddArcPointCenter
+================================================================================
+
+Geo2D.AddArcPointCenter
+ 
+ 
+
+ Geo2D.AddArcPointCenter
+
+ Add an arc to 2D geometry, start point is end point of last line or arc, or point passed to Drawing.Create2DGeometry if this is the first line or arc.
+
+ Syntax
+
+ geo.AddArcPointCenter (X, Y, XCen, YCen, CW)
+
+ double  X  X coordinate of end point
+
+ double  Y  Y coordinate of end point
+
+ double  XCen  X coordinate of center point
+
+ double  YCen  Y coordinate of center point
+
+ boolean  CW  True for CW, False for CCW
+
+================================================================================
+PLIK: Geo2D_AddArcPointRadius
+================================================================================
+
+Geo2D.AddArcPointRadius
+ 
+ 
+
+ Geo2D.AddArcPointRadius
+
+ Add an arc to 2D geometry, start point is end point of last line or arc, or point passed to Drawing.Create2DGeometry if this is the first line or arc.
+
+ Syntax
+
+ geo.AddArcPointRadius (X, Y, Radius, CW, Over180)
+
+ double   X  X coordinate of end point
+
+ double   Y  Y coordinate of end point
+
+ double   Radius  Arc radius
+
+ boolean  CW  True for CW, False for CCW
+
+ boolean  Over180  True if included angle is more than 180 degrees
+
+================================================================================
+PLIK: Geo2D_AddLine
+================================================================================
+
+Geo2D.AddLine
+ 
+ 
+
+ Geo2D.AddLine
+
+ Add a line to a 2D geometry, start point is end point of last line or arc, or point passed to Drawing.Create2DGeometry if this is the first line or arc.
+
+ Syntax
+
+ geo.AddLine (X, Y)
+
+ double  X X coordinate of end point
+
+ double  Y Y coordinate of end point
+
+================================================================================
+PLIK: Geo2D_AddTanArcPoint
+================================================================================
+
+Geo2D.AddTanArcPoint
+ 
+ 
+
+ Geo2D.AddTanArcPoint
+
+ Add an arc to 2D geometry, tangential to last line or arc, start point is end point of last line or arc. Can not be the first line or arc in a geometry.
+
+ Syntax
+
+ geo.AddTanArcPoint (X, Y)
+
+ double  X  X coordinate of end point
+
+ double  Y  Y coordinate of end point
+
+================================================================================
+PLIK: Geo2D_CloseAndFinishLine
+================================================================================
+
+Geo2D.CloseAndFinishLine
+ 
+ 
+
+ Geo2D.CloseAndFinishLine
+
+ Finish 2D geometry with a line to make a closed geometry.
+
+ Syntax
+
+ geo.CloseAndFinishLine
+
+ [Return] Path  Path object
+
+================================================================================
+PLIK: GeoCad_AddLine
+================================================================================
+
+GeoCad.AddLine
+ 
+ 
+
+ GeoCad.AddLine
+
+ Add a 3D line. The start and end points must be given in 3D Global coordinates.
+
+ Syntax
+
+ geo.AddLine (X1, Y1, Z1, X2, Y2, Z2)
+
+ double X1 X coord of start point
+
+ double Y1 Y coord of start point
+
+ double Z1 Z coord of start point
+
+ double X2 X coord of end point
+
+ double Y2 Y coord of end point
+
+ double Z2 Z coord of end point
+
+================================================================================
+PLIK: GeoCad_AddLineWithAttribute
+================================================================================
+
+GeoCad.AddLine
+
+GeoCad.AddLineWithAttribute
+
+Add a 3D line with an attribute. The start and end points 
+ must be given in 3D Global coordinates.
+
+Syntax
+
+geo.AddLineWithAttribute (X1, Y1, Z1, X2, Y2, Z2, 
+ Index, newVal)
+
+double X1 X coord of start point
+
+double Y1 Y coord of start point
+
+double Z1 Z coord of start point
+
+double X2 X coord of end point
+
+double Y2 Y coord of end point
+
+double Z2 Z coord of end point
+
+String Index Name of attribute
+
+Variant newVal Value of attribute
+
+================================================================================
+PLIK: GeoCad_Finish2DLinesOnly
+================================================================================
+
+GeoCad.Finish2DLinesOnly
+
+GeoCad.Finish2DLinesOnly
+
+Simple version of Finish 
+ where the data is assumed to be just 2D lines. Lines are connected by 
+ finding the closest (within tolerance) rather than first one found within 
+ tolerance..
+
+Syntax
+
+geo.Finish2DLinesOnly (Tol)
+
+Double Tol Tolerance for joining lines
+
+[Return] Paths  Paths object (see remarks).
+
+================================================================================
+PLIK: GeometryAdded
+================================================================================
+
+GeometryAdded
+ 
+ 
+
+ GeometryAdded
+
+ Sub GeometryAdded(Geo As Path)
+
+ Called when a single geometry is added.
+
+================================================================================
+PLIK: GeometryforTurnDataExamples
+================================================================================
+
+Geometry for TurnData Examples
+ 
+ 
+
+ Geometry for TurnData Examples
+
+ Create the geometry for the billet and return the Path object.
+
+ Private Function CreateBilletGeo() As Path
+
+ Dim Drw As Drawing 
+
+ Set Drw = App.ActiveDrawing 
+
+ Dim G As Geo2D 
+
+ Set G = Drw.Create2DGeometry(10, 0) 
+
+ G.AddLine 10, 30 
+
+ G.AddLine -55, 30 
+
+ Set CreateBilletGeo = G.Finish 
+
+ CreateBilletGeo.Chamfer 4, 4 
+
+ End Function
+
+ Create the geometry for the part and return the Path object.
+
+ Private Function CreatePartGeo() As Path
+
+ Dim Drw As Drawing 
+
+ Set Drw = App.ActiveDrawing 
+
+ Dim G As Geo2D 
+
+ Set G = Drw.Create2DGeometry(-10, 0) 
+
+ G.AddLine -8, 5 
+
+ G.AddLine 0, 5 
+
+ G.AddLine 0, 10 
+
+ G.AddLine -15, 10 ' start of groove 
+
+ G.AddLine -15, 7 
+
+ G.AddLine -25, 7 
+
+ G.AddLine -25, 10 ' end of groove 
+
+ G.AddLine -30, 10 
+
+ G.AddArc2Point -35, 7, -40, 10 ' pocket 
+
+ G.AddLine -50, 20 
+
+ G.AddLine -55, 20 
+
+ Set CreatePartGeo = G.Finish 
+
+ ' Get the Element collection to do chamfer and fillet. 
+
+ ' The element numbers are not changed by the elements added by 
+
+ ' the chamfer and fillet, until the Elements property is read again. 
+
+ Dim Elems As Elements 
+
+ Set Elems = CreatePartGeo.Elements 
+
+ ' Chamfer the front end 
+
+ Elems(3).Chamfer Elems(4), False, True, 1, 1 
+
+ ' Fillet the groove 
+
+ Elems(4).Fillet Elems(5), False, True, 0.5 
+
+ Elems(5).Fillet Elems(6), False, True, 0.5 
+
+ Elems(6).Fillet Elems(7), False, True, 0.5 
+
+ Elems(7).Fillet Elems(8), False, True, 0.5 
+
+ End Function
+
+================================================================================
+PLIK: LaserData_CutPath
+================================================================================
+
+LaserData.CutPath
+ 
+ 
+
+ LaserData.CutPath
+
+ Do Cut Path on currently selected geometries using properties set for this LaserData object.
+
+ Syntax
+
+ ld.CutPath
+
+ [Return] Paths  Returned Paths object
+
+ Example:
+
+ Public Sub TestCutPath()
+
+ Dim Drw As Drawing 
+
+ Set Drw = App.ActiveDrawing 
+
+  
+
+ ' Draw ellipse 
+
+ Dim P As Path 
+
+ Set P = Drw.CreateEllipse(100, 75, 4, 4, 0, 0) 
+
+ P.ToolInOut = acamOUTSIDE 
+
+ P.Selected = True 
+
+  
+
+ ' Create tool path 
+
+ Dim LD As LaserData 
+
+ Set LD = App.CreateLaserData 
+
+  
+
+ With LD 
+
+ .McComp = acamCompTOOLCEN 
+
+ .XYCorners = acamCornersROUND 
+
+ .OffsetNumber = 66 
+
+ .BeamWidth = 0.5 
+
+ .CutFeed = 250 
+
+ Dim PS As Paths 
+
+ Set PS = .CutPath 
+
+ End With 
+
+  
+
+ ' Add lead-in/out 
+
+ For Each P In PS 
+
+ P.SetLeadInOutAuto acamLeadLINE, acamLeadARC, 2, 3, 90, False, False, 0 
+
+ Next P 
+
+  
+
+ Drw.ZoomAll 
+
+ End Sub
+
+================================================================================
+PLIK: LaserData_CutPolylines
+================================================================================
+
+LaserData.CutPolylines
+
+LaserData.CutPolylines
+
+Do Cut Polyline operation on currently selected geometries 
+ using properties set for this LaserData object.
+
+Syntax
+
+ld.CutPolylines
+
+[Return] Paths  Returned Paths object
+
+================================================================================
+PLIK: LaserData_ManualToolPath
+================================================================================
+
+LaserData.ManualToolPath
+
+LaserData.ManualToolPath
+
+Start a manual tool path, using properties set for this 
+ LaserData object. An object of type LaserManualToolPath will be returned. 
+ Its methods may then be used to build up one or more tool paths.
+
+Syntax
+
+mc.ManualToolPath (StartX, StartY, StartZ)
+
+double StartX X coordinate of start point
+
+double StartY Y coordinate of start point
+
+double StartZ Z coordinate of start point
+
+[Return] LaserManualToolPath returned LaserManualToolPath 
+ object
+
+Remarks
+
+The object LaserManualToolPath has identical properties 
+ and methods as MillManualToolPath
+
+================================================================================
+PLIK: LatheTool_DefineTurnProgrammingPoint
+================================================================================
+
+LatheTool.DefineTurnProgrammingPoint
+ 
+ 
+
+ LatheTool.DefineTurnProgrammingPoint
+
+ Define a programming point for a Turning tool.
+
+ Syntax
+
+ Tool.DefineTurnProgrammingPoint (I, PositionX, PositionY, RakeAngle, TNV, OffsetNumber, TipRadius)
+
+ Short I The number of the point, 1 = first point
+
+ Float PositionX See remarks
+
+ Float PositionY See remarks
+
+ Float RakeAngle Rake of Clearance angle
+
+ Long TNV  Tool Nose Vector as in TNV in the Post
+
+ Long OffsetNumber Offset number for this point
+
+ Float TipRadius Radius of tip
+
+ Remarks
+
+ PositionX and PositionY give the shift from the tip centre of the first programming point to the tip centre of this programming point. If I = 1, PositionX and PositionY must be 0.
+
+ TNV is a number between 1 and 8 as in the diagram in the AlphaEdit help file (search for TNV).
+
+ See the example. Text.StoreTemporary
+
+================================================================================
+PLIK: LatheTool_GetTurningToolGeometry
+================================================================================
+
+LatheTool.GetTurningToolGeometry
+ 
+ 
+
+ LatheTool.GetTurningToolGeometry
+
+ Get the geometry for a Turning tool. The first path is the insert, the rest are the holder.
+
+ Syntax
+
+ Tool.GetTurningToolGeometry
+
+ [Return] Paths   geometries representing tool cross-section, as a Paths object
+
+================================================================================
+PLIK: LatheTool_SetTurningToolGeometry
+================================================================================
+
+LatheTool.SetTurningToolGeometry
+ 
+ 
+
+ LatheTool.SetTurningToolGeometry
+
+ Set the geometry for a Turning tool. The first path is the insert, the rest are the holder.
+
+ Syntax
+
+ Tool.SetTurningToolGeometry Geo
+
+ Paths Geo   geometries representing tool cross-section, as a Paths object
+
+ See the example. Text.StoreTemporary
+
+================================================================================
+PLIK: LatheTool_SetTurnProgrammingPoint
+================================================================================
+
+LatheTool.SetTurnProgrammingPoint
+ 
+ 
+
+ LatheTool.SetTurnProgrammingPoint
+
+ Set the programming point to be used for a turning tool with multiple programming points.
+
+ Syntax
+
+ Tool.SetTurnProgrammingPoint I
+
+ Short I Index into TurnProgrammingPoints Collection of required point, 1 = first point
+
+================================================================================
+PLIK: MillData_CutPolylines
+================================================================================
+
+MillData.CutPolylines
+ 
+ 
+
+ MillData.CutPolylines
+
+ Do Cut polyline operation on currently selected polyline geometries, using properties set for this MillData object.
+
+ Syntax
+
+ mc.CutPolylines
+
+ [Return] Paths  Returned Paths object
+
+ The example draws two polylines and machines them.
+
+ Public Sub TestPolyline()
+
+ Dim Drw As Drawing 
+
+ Dim PLine As PolyLine 
+
+ Dim Geo As Path 
+
+  
+
+ Set Drw = App.ActiveDrawing 
+
+  
+
+ ' Draw and select a polyline 
+
+ Set PLine = Drw.Create3DPolyline(0, 0, 0) 
+
+ PLine.AddLine 10, 0, 5 
+
+ PLine.AddLine 20, 5, 10 
+
+ PLine.AddLine 40, 10, 5 
+
+ PLine.AddLine 50, 5, 0 
+
+  
+
+ Set Geo = PLine.Finish 
+
+ Geo.Selected = True 
+
+  
+
+ ' Draw and select another polyline 
+
+ Set PLine = Drw.Create3DPolyline(0, 50, 0) 
+
+ PLine.AddLine 10, 55, 10 
+
+ PLine.AddLine 20, 65, 15 
+
+ PLine.AddLine 40, 70, 10 
+
+ PLine.AddLine 50, 65, 0 
+
+  
+
+ Set Geo = PLine.Finish 
+
+ Geo.Selected = True 
+
+ App.SelectTool App.LicomdatPath & "licomdat\mtools.alp\Ball End - 10mm.amt" 
+
+ ' Machine the polylines 
+
+ Dim MD As MillData 
+
+ Set MD = App.CreateMillData 
+
+  
+
+ With MD 
+
+ .SafeRapidLevel = 20 
+
+  
+
+ .DepthOfCut = 5 
+
+ .FeedDownDistance = 2 
+
+  
+
+ .SurfaceMCAxisType = acamAxis5 
+
+ .PolylineToolSide = acamLEFT 
+
+ .ToolAngleType = acamToolAnglePERP_TO_PATH 
+
+ .ToolAngle = 15 
+
+ ' .ToolAngleType = acamToolAngleSET_ANGLES
+
+ ' .RotationAngle = 45
+
+ ' .TiltAngle = 10
+
+ ' .ToolAngleType = acamToolAngleSET_VECTOR
+
+ ' Set tool vector, AlphaCAM will convert to unit vector 
+
+ ' .ToolVectorX = 1
+
+ ' .ToolVectorY = 1
+
+ ' .ToolVectorZ = 1
+
+ ' .ToolAngleType = acamToolAnglePARALLEL_TO_SURFACE
+
+ ' .ToolAngleType = acamToolAngleSURFACE_NORMAL
+
+ Dim Ps As Paths 
+
+ Set Ps = .CutPolylines 
+
+ End With 
+
+ Drw.ThreeDViews = True 
+
+ End Sub
+
+================================================================================
+PLIK: MillData_ManualToolPath
+================================================================================
+
+MillData.ManualToolPath
+ 
+ 
+
+ MillData.ManualToolPath
+
+ Start a manual tool path, using properties set for this MillData object. An object of type MillManualToolPath will be returned. Its methods may then be used to build up one or more tool paths.
+
+ Syntax
+
+ mc.ManualToolPath (StartX, StartY, StartZ)
+
+ double StartX X coordinate of start point
+
+ double StartY Y coordinate of start point
+
+ double StartZ Z coordinate of start point
+
+ [Return] MillManualToolPath returned MillManualToolPath object
+
+ Remarks
+
+ If the Attribute with name "LicomUKDMBOperationName" is set for the MillData object it will be used as the name of the operation in the operation list and the NC code.
+
+ It should be read from the text file (if the macro has one) and should be upper-case because it will appear in the NC code.
+
+================================================================================
+PLIK: MillData_SetSurfaceMCPoints
+================================================================================
+
+MillData.SetSurfaceMCPoints
+
+MillData.SetSurfaceMCPoints
+
+Set the start points for machining using parameter lines 
+ or tool-side.
+
+Syntax
+
+mc.SetSurfaceMCPoints(X1, Y1, Z1, X2, Y2, Z2)
+
+double  X1
+
+double  Y1  Start point on surface
+
+double  Z1
+
+double  X2
+
+double  Y2  Point on surface to 
+ set direction of cut
+
+double  Z2
+
+Remarks
+
+The points should be on or close to a surface. This 
+ will also set the start surface.
+
+================================================================================
+PLIK: MillDataMachiningEngine.AddDrillPoint
+================================================================================
+
+MillDataMachiningEngine.AddDrillPoint
+
+MillDataMachiningEngine.AddDrillPoint
+
+Specify the coordinates of a hole that can be used for 
+ approach, if the property ApproachType = acamMEApproachPreDrilledHoles. 
+ This method may be called as many times as required, StartDrillPoints 
+ should be called first.
+
+Syntax
+
+mc.AddDrillPoint(X, Y, Z)
+
+ 
+
+double  X  X 
+ coordinate of centre of hole.
+
+double  Y Y coordinate of centre of hole.
+
+double  Z  Z coordinate of bottom 
+ of hole. The tool will not plunge lower than this.
+
+================================================================================
+PLIK: MillDataMachiningEngine.StartDrillPoints
+================================================================================
+
+MillDataMachiningEngine.StartDrillPoints
+
+MillDataMachiningEngine.StartDrillPoints
+
+Clear the list of drilled points. Should be called before 
+ calling AddDrillPoint for each drill point.
+
+Syntax
+
+mc.StartDrillPoints
+
+================================================================================
+PLIK: MillManualToolPath_Add2DArc2Point
+================================================================================
+
+MillManualToolPath.Add2DArc2Point
+ 
+ 
+
+ MillManualToolPath.Add2DArc2Point
+
+ Add a 2D arc, start point is end point of last line or arc, or point passed to MillData.ManualToolPath if this is the first line or arc.
+
+ Syntax
+
+ MTP.Add2DArc2Point (X2, Y2, X3, Y3)
+
+ double  X2  X coordinate of second point
+
+ double  Y2  Y coordinate of second point
+
+ double  X3  X coordinate of end point
+
+ double  Y3  Y coordinate of end point
+
+================================================================================
+PLIK: MillManualToolPath_Add2DArcCenterIncludedAngle
+================================================================================
+
+MillManualToolPath.Add2DArcCenterIncludedAngle
+ 
+ 
+
+ MillManualToolPath.Add2DArcCenterIncludedAngle
+
+ Add a 2D arc, start point is end point of last line or arc, or point passed to MillData.ManualToolPath if this is the first line or arc.
+
+ MTP.Add2DArcCenterIncludedAngle (XCen, YCen, Angle)
+
+ double  XCen  X coordinate of center point
+
+ double  YCen  Y coordinate of center point
+
+ double  Angle  Included angle in degrees, CW -ve
+
+================================================================================
+PLIK: MillManualToolPath_Add2DArcPointCenter
+================================================================================
+
+MillManualToolPath.Add2DArcPointCenter
+ 
+ 
+
+ MillManualToolPath.Add2DArcPointCenter
+
+ Add a 2D arc, start point is end point of last line or arc, or point passed to MillData.ManualToolPath if this is the first line or arc.
+
+ Syntax
+
+ MTP.Add2DArcPointCenter (X, Y, XCen, YCen, CW)
+
+ double  X  X coordinate of end point
+
+ double  Y  Y coordinate of end point
+
+ double  XCen  X coordinate of center point
+
+ double  YCen  Y coordinate of center point
+
+ boolean  CW  True for CW, False for CCW
+
+================================================================================
+PLIK: MillManualToolPath_Add2DArcPointRadius
+================================================================================
+
+MillManualToolPath.Add2DArcPointRadius
+ 
+ 
+
+ MillManualToolPath.Add2DArcPointRadius
+
+ Add a 2D arc, start point is end point of last line or arc, or point passed to MillData.ManualToolPath if this is the first line or arc.
+
+ Syntax
+
+ MTP.Add2DArcPointRadius (X, Y, Radius, CW, Over180)
+
+ double   X  X coordinate of end point
+
+ double   Y  Y coordinate of end point
+
+ double   Radius  Arc radius
+
+ boolean  CW  True for CW, False for CCW
+
+ boolean  Over180  True if included angle is more than 180 degrees
+
+================================================================================
+PLIK: MillManualToolPath_Add2DLine
+================================================================================
+
+MillManualToolPath.Add2DLine
+ 
+ 
+
+ MillManualToolPath.Add2DLine
+
+ Add a 2D feed line, start point is end point of last line or arc, or point passed to MillData.ManualToolPath if this is the first line or arc.
+
+ Syntax
+
+ MTP.Add2DLine (X, Y)
+
+ double  X X coordinate of end point
+
+ double  Y Y coordinate of end point
+
+================================================================================
+PLIK: MillManualToolPath_Add2DRapid
+================================================================================
+
+MillManualToolPath.Add2DRapid
+ 
+ 
+
+ MillManualToolPath.Add2DRapid
+
+ Add a 2D rapid line, start point is end point of last line or arc, or point passed to MillData.ManualToolPath if this is the first line or arc.
+
+ Syntax
+
+ MTP.Add2DRapid (X, Y)
+
+ double  X X coordinate of end point
+
+ double  Y Y coordinate of end point
+
+================================================================================
+PLIK: MillManualToolPath_Add2DTanArcPoint
+================================================================================
+
+MillManualToolPath.Add2DTanArcPoint
+ 
+ 
+
+ MillManualToolPath.Add2DTanArcPoint
+
+ Add a 2D arc, tangential to last line or arc, start point is end point of last line or arc. Can not be the first line or arc in a geometry.
+
+ Syntax
+
+ MTP.Add2DTanArcPoint(X, Y)
+
+ double  X  X coordinate of end point
+
+ double  Y  Y coordinate of end point
+
+================================================================================
+PLIK: MillManualToolPath_Add3DArc2Point
+================================================================================
+
+MillManualToolPath.Add3DArc2Point
+ 
+ 
+
+ MillManualToolPath.Add3DArc2Point
+
+ Add a 3D helical arc, start point is end point of last line or arc, or point passed to MillData.ManualToolPath if this is the first line or arc.
+
+ Syntax
+
+ MTP.Add3DArc2Point (X2, Y2, X3, Y3, Z3)
+
+ double  X2  X coordinate of second point
+
+ double  Y2  Y coordinate of second point
+
+ double  X3  X coordinate of end point
+
+ double  Y3  Y coordinate of end point
+
+ double Z3  Z coordinate of end point
+
+================================================================================
+PLIK: MillManualToolPath_Add3DArcCenterIncludedAngle
+================================================================================
+
+MillManualToolPath.Add3DArcCenterIncludedAngle
+ 
+ 
+
+ MillManualToolPath.Add3DArcCenterIncludedAngle
+
+ Add a 3D helical arc, start point is end point of last line or arc, or point passed to MillData.ManualToolPath if this is the first line or arc.
+
+ MTP.Add3DArcCenterIncludedAngle (XCen, YCen, Angle, EndZ)
+
+ double  XCen  X coordinate of center point
+
+ double  YCen  Y coordinate of center point
+
+ double  Angle  Included angle in degrees, CW -ve
+
+ double EndZ  Z coordinate of end point
+
+================================================================================
+PLIK: MillManualToolPath_Add3DArcPointCenter
+================================================================================
+
+MillManualToolPath.Add3DArcPointCenter
+ 
+ 
+
+ MillManualToolPath.Add3DArcPointCenter
+
+ Add a 3D helical arc, start point is end point of last line or arc, or point passed to MillData.ManualToolPath if this is the first line or arc.
+
+ Syntax
+
+ MTP.Add3DArcPointCenter (X, Y, Z, XCen, YCen, CW)
+
+ double  X  X coordinate of end point
+
+ double  Y  Y coordinate of end point
+
+ double Z  Z coordinate of end point
+
+ double  XCen  X coordinate of center point
+
+ double  YCen  Y coordinate of center point
+
+ boolean  CW  True for CW, False for CCW
+
+================================================================================
+PLIK: MillManualToolPath_Add3DArcPointRadius
+================================================================================
+
+MillManualToolPath.Add3DArcPointRadius
+ 
+ 
+
+ MillManualToolPath.Add3DArcPointRadius
+
+ Add a 3D helical arc, start point is end point of last line or arc, or point passed to MillData.ManualToolPath if this is the first line or arc.
+
+ Syntax
+
+ MTP.Add3DArcPointRadius (X, Y, Z, Radius, CW, Over180)
+
+ double   X  X coordinate of end point
+
+ double   Y  Y coordinate of end point
+
+ double  Z  Z coordinate of end point
+
+ double   Radius  Arc radius
+
+ boolean  CW  True for CW, False for CCW
+
+ boolean  Over180  True if included angle is more than 180 degrees
+
+================================================================================
+PLIK: MillManualToolPath_Add3DLine
+================================================================================
+
+MillManualToolPath.Add3DLine
+ 
+ 
+
+ MillManualToolPath.Add3DLine
+
+ Add a 3D feed line, start point is end point of last line or arc, or point passed to MillData.ManualToolPath if this is the first line or arc.
+
+ Syntax
+
+ MTP.Add3DLine (X, Y, Z)
+
+ double  X X coordinate of end point
+
+ double  Y Y coordinate of end point
+
+ double Z Z coordinate of end point
+
+================================================================================
+PLIK: MillManualToolPath_Add3DLineAndToolVector
+================================================================================
+
+MillManualToolPath.Add3DLineAndToolVector
+ 
+ 
+
+ MillManualToolPath.Add3DLineAndToolVector
+
+ Add a 3D feed line, with a specified tool vector at the end of the line, start point is end point of last line or arc, or point passed to MillData.ManualToolPath if this is the first line or arc.
+
+ Syntax
+
+ MTP.Add3DLineAndToolVector (X, Y, Z, XVector, YVector, ZVector)
+
+ double  X X coordinate of end point
+
+ double  Y Y coordinate of end point
+
+ double Z Z coordinate of end point
+
+ double XVector X component of tool axis vector
+
+ double YVector Y component of tool axis vector
+
+ double ZVector Z component of tool axis vector
+
+================================================================================
+PLIK: MillManualToolPath_Add3DRapid
+================================================================================
+
+MillManualToolPath.Add3DRapid
+ 
+ 
+
+ MillManualToolPath.Add3DRapid
+
+ Add a 3D rapid line, start point is end point of last line or arc, or point passed to MillData.ManualToolPath if this is the first line or arc.
+
+ Syntax
+
+ MTP.Add3DRapid (X, Y, Z)
+
+ double  X X coordinate of end point
+
+ double  Y Y coordinate of end point
+
+ double Z Z coordinate of end point
+
+================================================================================
+PLIK: MillManualToolPath_Add3DRapidAndToolVector
+================================================================================
+
+MillManualToolPath.Add3DRapidAndToolVector
+ 
+ 
+
+ MillManualToolPath.Add3DRapidAndToolVector
+
+ Add a 3D rapid line, with a specfied tool vector at the end of the line, start point is end point of last line or arc, or point passed to MillData.ManualToolPath if this is the first line or arc.
+
+ Syntax
+
+ MTP.Add3DRapidAndToolVector (X, Y, Z, XVector, YVector, ZVector)
+
+ double  X X coordinate of end point
+
+ double  Y Y coordinate of end point
+
+ double Z Z coordinate of end point
+
+ double XVector X component of tool axis vector
+
+ double YVector Y component of tool axis vector
+
+ double ZVector Z component of tool axis vector
+
+================================================================================
+PLIK: MillManualToolPath_Add3DTanArcPoint
+================================================================================
+
+MillManualToolPath.Add3DTanArcPoint
+ 
+ 
+
+ MillManualToolPath.Add3DTanArcPoint
+
+ Add a 3D helical arc, tangential to last line or arc, start point is end point of last line or arc. Can not be the first line or arc in a geometry.
+
+ Syntax
+
+ MTP.Add3DTanArcPoint(X, Y, Z)
+
+ double  X  X coordinate of end point
+
+ double  Y  Y coordinate of end point
+
+ double Z  Z coordinate of end point
+
+================================================================================
+PLIK: MillManualToolPath_Finish
+================================================================================
+
+MillManualToolPath.Finish
+ 
+ 
+
+ MillManualToolPath.Finish
+
+ Finish the tool path. The tool path will be split into more than one path if necessary, and added to the AlphaCAM database. 
+
+ Syntax
+
+ MTP.Finish
+
+ [Return] Paths  Returned Paths object
+
+ Remarks
+
+ A tool path consists of usually one or more leading rapids, then feeds, then optionally one or more trailing rapids. It may not have internal rapids. If it would have it will be split into more than one path.
+
+ The returned Paths object contains the resulting paths.
+
+================================================================================
+PLIK: MillManualToolPath_SetStartToolVector
+================================================================================
+
+MillManualToolPath.SetStartToolVector
+ 
+ 
+
+ MillManualToolPath.SetStartToolVector
+
+ Set the tool vector at the start of the path. It can only be called before any elements are added to the tool path.
+
+ Syntax
+
+ MTP.SetStartToolVector (XVector, YVector, ZVector)
+
+ double XVector X component of tool axis vector
+
+ double YVector Y component of tool axis vector
+
+ double ZVector Z component of tool axis vector
+
+================================================================================
+PLIK: MillManualToolPathExamples
+================================================================================
+
+MillManualToolPath Examples
+ 
+ 
+
+ MillManualToolPath Examples
+
+ Example 1, 2D tool paths.
+
+ Example 2, Helical arc.
+
+ Example 3, Facing a rectangle
+
+ Example 4, Simple 3D Lines
+
+ Example 5, Manual tool path with tool compensation on the machine
+
+================================================================================
+PLIK: MillManualToolPathObject
+================================================================================
+
+MillManualToolPath Object
+
+MillManualToolPath Object
+
+An object used to create a manual tool path in Mill.
+
+To do a manual tool path first select a tool, then use 
+ App.CreateMillData, set the Z levels and feeds and speeds if required, 
+ then use MillData.ManualToolPath to create a MillManualToolPath object. 
+ Call the methods of this object to add lines and arcs to the manual tool 
+ path. Call Finish to finish the tool path.
+
+There are 2D and 3D versions of each method. Use the 
+ 3D methods if you want complete control of the tool path, including up 
+ and down rapids, or helical arcs. If you use any 3D methods some features 
+ will not work eg multiple Z levels, you will have to implement this using 
+ linear code.
+
+If the Attribute with name "LicomUKDMBOperationName" 
+ is set for the MillData object it will be used as the name of the operation 
+ in the operation list and the NC code.
+
+It should be read from the text file (if the macro has 
+ one) and should be upper-case because it will appear in the NC code.
+
+ 
+
+MillManualToolPath 
+ Examples
+
+================================================================================
+PLIK: MillTool_GetDiskGuardGeometry
+================================================================================
+
+MillTool.GetDiskGuardGeometry
+
+MillTool.GetDiskGuardGeometry
+
+Get the geometries for the disk guard (Marble module 
+ only).
+
+Syntax
+
+tool.GetDiskGuardGeometry
+
+[Return] Paths   geometries representing guard 
+ cross-section, as a Paths collection
+
+Remarks
+
+The guard is extruded between DiskGuardBottomZ and DiskGuardTopZ.
+
+================================================================================
+PLIK: MillTool_GetGeometry
+================================================================================
+
+MillTool.GetGeometry
+ 
+ 
+
+ MillTool.GetGeometry
+
+ Get the geometry for a user-defined tool. The geometry will be the complete cross-section ie both sides of the vertical axis.
+
+ Syntax
+
+ tool.GetGeometry
+
+ [Return] Path   geometry representing tool cross-section, as a Path object
+
+ Remarks
+
+ See GetProfile.
+
+ The example gets the geometry for the current tool (if user-defined) and copies it to the AlphaCAM database.
+
+ Public Sub CopyToolGeo() 
+
+ Dim Drw As Drawing 
+
+ Dim Tool As MillTool 
+
+ Set Drw = App.ActiveDrawing 
+
+ Set Tool = App.GetCurrentTool 
+
+ If Tool Is Nothing Then 
+
+ MsgBox "No current tool" 
+
+ End 
+
+ End If 
+
+ If Tool.Type <> acamToolUSER Then 
+
+ MsgBox "Tool is not a user-defined tool" 
+
+ End 
+
+ End If 
+
+  
+
+ Dim P As Path 
+
+ Set P = Tool.GetGeometry 
+
+  
+
+ Dim Elem As Element 
+
+ Dim Geo As Geo2D 
+
+ Set Elem = P.Elements(1) 
+
+ Set Geo = Drw.Create2DGeometry(Elem.StartXL, Elem.StartYL) 
+
+ For Each Elem In P.Elements 
+
+ If Elem.IsLine Then 
+
+ Geo.AddLine Elem.EndXL, Elem.EndYL 
+
+ Else 
+
+ Geo.AddArcPointCenter Elem.EndXL, Elem.EndYL, Elem.CenterXL, Elem.CenterYL, Elem.CW 
+
+ End If 
+
+ Next Elem 
+
+ Geo.Finish 
+
+ Drw.ZoomAll 
+
+ End Sub
+
+================================================================================
+PLIK: MillTool_GetHolderGeometry
+================================================================================
+
+MillTool.GetHolderGeometry
+ 
+ 
+
+ MillTool.GetHolderGeometry
+
+ Get the geometries for the tool holder. Each geometry will be the complete cross-section ie both sides of the vertical axis.
+
+ Syntax
+
+ tool.GetHolderGeometry
+
+ [Return] Paths   geometries representing holder cross-section, as a Paths collection
+
+ Remarks
+
+ See GetHolderProfile.
+
+================================================================================
+PLIK: MillTool_SetDiskGuardGeometry
+================================================================================
+
+MillTool.SetDiskGuardGeometry
+
+MillTool.SetDiskGuardGeometry
+
+Set geometry for the disk guard (Marble module only). 
+ The geometry will be extruded between DiskGuardBottomZ and DiskGuardTopZ.
+
+Syntax
+
+tool.SetDiskGuardGeometry (paths)
+
+Paths  paths geometry representing holder 
+ cross-section, as a Paths collection, only 
+ the first will be used at the moment
+
+================================================================================
+PLIK: MillTool_SetGeometry
+================================================================================
+
+MillTool.SetGeometry
+ 
+ 
+
+ MillTool.SetGeometry
+
+ Set geometry for user-defined tool. The geometry must be the complete cross-section ie both sides of the vertical axis.
+
+ Syntax
+
+ tool.SetGeometry (path)
+
+ Path  path geometry representing tool cross-section, as a Path object
+
+ See example.
+
+================================================================================
+PLIK: MillTool_SetGeometryLineCircle
+================================================================================
+
+MillTool.SetGeometryLineCircle
+ 
+ 
+
+ MillTool.SetGeometryLineCircle
+
+ Set geometry for user-defined tool, as SetGeometry but with a line and circle to define the programming point and diameter. The geometry must be the complete cross-section ie both sides of the vertical axis. The line and circle should be the geometries that would be drawn if the tool was defined graphically.
+
+ Syntax
+
+ tool.SetGeometryLineCircle (Geometry, Line, Circle)
+
+ Path  Geometry geometry representing tool cross-section, as a Path object
+
+ Path  Line  geometry representing the line, as a Path object
+
+ Path  Circle  geometry representing the circle, as a Path object
+
+ See example.
+
+================================================================================
+PLIK: MillTool_SetHolderGeometry
+================================================================================
+
+MillTool.SetHolderGeometry
+ 
+ 
+
+ MillTool.SetHolderGeometry
+
+ Set geometry for the tool holder. The geometry must be the complete cross-section ie both sides of the vertical axis.
+
+ Syntax
+
+ tool.SetHolderGeometry (paths)
+
+ Paths  paths geometry representing holder cross-section, as a Paths collection
+
+================================================================================
+PLIK: Operation_OrderToolPaths
+================================================================================
+
+Operation.OrderToolPaths
+
+Operation.OrderToolPaths
+
+Order the tool paths in this operation.
+
+Syntax
+
+Op.OrderToolPaths (FirstPath)
+
+Path  FirstPath First path in the operation
+
+================================================================================
+PLIK: Path.GetFeedExtentXYG
+================================================================================
+
+Path.GetFeedExtentXYG
+
+Path.GetFeedExtentXYG
+
+Get global Max / Min XY (not Z) of this tool path, ignoring 
+ rapids. Return False if there are no feeds.
+
+Syntax
+
+path.GetFeedExtentXYG (MinX, MinY, MaxX, MaxY)
+
+[Return] double MinX
+
+[Return] double MinY
+
+[Return] double MaxX
+
+[Return] double MaxY
+
+[Return] boolean  Return False if there are no 
+ feeds
+
+================================================================================
+PLIK: Path.GetSawPlacePath
+================================================================================
+
+Path.GetSawPlacePath
+
+Path.GetSawPlacePath
+
+Internal routine for use by Nesting
+
+================================================================================
+PLIK: Path_AddDirectInput
+================================================================================
+
+Path.AddDirectInput
+ 
+ 
+
+ Path.AddDirectInput
+
+ Add Direct Input NC-Code to this tool path. Use vbCr to separate lines if more than one line required.
+
+ Syntax
+
+ path.AddDirectInput (Location, NCCode, [Element])
+
+ AcamDirectInputLocation Location  eg acamBEFORE_PATH
+
+ String  NCCode  The nc-code
+
+ Element Element  eg for acamAT_END_OF_ELEMENT (Optional)
+
+================================================================================
+PLIK: Path_AddPath
+================================================================================
+
+Path.AddPath
+ 
+ 
+
+ Path.AddPath
+
+ Add elements of a path on to the END of this path, with a connecting straight line if there is a gap.
+
+ See Path.AddPathToStart.
+
+ Syntax
+
+ path.AddPath(Path2)
+
+ Path Path2 Path to be added
+
+ Remarks
+
+ Path2 will be deleted.
+
+================================================================================
+PLIK: Path_AddPathToStart
+================================================================================
+
+Path.AddPathToStart
+ 
+ 
+
+ Path.AddPathToStart
+
+ Add elements of a path on to the START of this path, with a connecting straight line if there is a gap.
+
+ See Path.AddPath.
+
+ Syntax
+
+ path.AddPathToStart(Path2)
+
+ Path Path2 Path to be added
+
+ Remarks
+
+ Path2 will be deleted.
+
+ The example assumes that there is an existing tool path starting at (-5, 50). It creates a manual tool path consisting of an arc, and adds it to the start of the existing tool path. The tool used for the manual tool path is not important, because its element will be added to the start of the other path and the tool used by that path will be used.
+
+ Public Sub TestAddPathToStart()
+
+ Dim P1 As Path, P2 As Path 
+
+  
+
+ Set P1 = App.ActiveDrawing.ToolPaths(1) 
+
+  
+
+ Dim MD As MillData 
+
+ Set MD = App.CreateMillData 
+
+  
+
+ Dim MTP As MillManualToolPath 
+
+ Set MTP = MD.ManualToolPath(-50, 25, 0) 
+
+  
+
+ MTP.Add2DArcPointRadius -5, 50, 40, True, False 
+
+  
+
+ Set P2 = MTP.Finish(1) 
+
+  
+
+ P1.AddPathToStart P2 
+
+ End Sub
+
+================================================================================
+PLIK: Path_AddSupportTag
+================================================================================
+
+Path.AddSupportTag
+ 
+ 
+
+ Path.AddSupportTag
+
+ Add a support tag at given point on this tool path.
+
+ Syntax
+
+ path.AddSupportTag (TagTopZ, TagLength, Type, X, Y)
+
+ float TagTopZ Z coordinate at top of tag
+
+ float TagLength Length of tag
+
+ AcamTagType Type Type of tag, acamTagFLAT or acamTagRAMP
+
+ double X  X coordinate of tag mid-point on path
+
+ double Y  Y coordinate of tag mid-point on path
+
+================================================================================
+PLIK: Path_BreakAtPoint
+================================================================================
+
+Path.BreakAtPoint
+ 
+ 
+
+ Path.BreakAtPoint
+
+ Break the path at point closest to given point.
+
+ Syntax
+
+ geo.BreakAtPoint (X, Y)
+
+ double X Local X coordinate of break point
+
+ double Y Local Y coordinate of break point
+
+ [Return] Path  Path (see remarks).
+
+ Remarks
+
+ The returned object is the broken-off part of the path, as another path. The current path now ends at the break point.
+
+ If the point closest to the given point is the start or end of the path, it will not be broken and the return value will be the special value Nothing.
+
+================================================================================
+PLIK: Path_BreakWithCuttingGeos
+================================================================================
+
+Path.BreakWithCuttingGeos
+ 
+ 
+
+ Path.BreakWithCuttingGeos
+
+ Break the path at all intersection points with currently selected geometries.
+
+ Syntax
+
+ geo.BreakWithCuttingGeos
+
+ [Return] Paths  Paths object (see remarks).
+
+ Remarks
+
+ The returned object is a Collection of Path objects, starting with the first broken-off part of the path.
+
+ Example:
+
+ Dim Geos as Paths
+
+ set Geos = geo.BreakWithCuttingGeos
+
+================================================================================
+PLIK: Path_Bridge
+================================================================================
+
+Path.Bridge
+ 
+ 
+
+ Path.Bridge
+
+ Join this path to another path with a bridge.
+
+ Syntax
+
+ path.Bridge (Path2, X1, Y1, X2, Y2, BridgeWidth)
+
+ Path Path2 The other path
+
+ Double X1 Local X coordinate of point on this path
+
+ Double Y1 Local Y coordinate of point on this path
+
+ Double X2 Local X coordinate of point on Path2
+
+ Double Y2 Local Y coordinate of point on Path2
+
+ Double BridgeWidth Width of bridge
+
+ Remarks
+
+ If the paths are tool paths the width of the bridge will be adjusted so that the material left will be the specified width.
+
+ If the bridge is successful the second path will no longer exist - its elements will be added to the first path.
+
+ If the first path has lead-in/out it will be preserved, lead-in/out on the second path will be removed.
+
+ The example draws two rectangles and combines them into one path with a connecting bridge.
+
+ Public Sub BridgeTest()
+
+ Dim Drw As Drawing 
+
+ Set Drw = App.ActiveDrawing 
+
+  
+
+ Dim P1 As Path 
+
+ Dim P2 As Path 
+
+  
+
+ Set P1 = Drw.CreateRectangle(0, 0, 100, 100) 
+
+ Set P2 = Drw.CreateRectangle(150, 10, 300, 120) 
+
+  
+
+ P1.Bridge P2, 100, 50, 150, 60, 5 
+
+  
+
+ Drw.ZoomAll 
+
+ End Sub
+
+================================================================================
+PLIK: Path_Chamfer
+================================================================================
+
+Path.Chamfer
+ 
+ 
+
+ Path.Chamfer
+
+ Chamfer sharp corners on this path. 
+
+ Syntax
+
+ geo.Chamfer (Dist1, Dist2)
+
+ double  Dist1 First chamfer distance
+
+ double  Dist2 Second chamfer distance
+
+ Remarks
+
+ All external sharp corners will be chamfered. Internal corners are left as they are found. Whether a corner is external or internal is decided by the side that the Ghost Tool is positioned. If the Ghost Tool is on the centre line of the geometry, all sharp corners are chamfered. In all cases, existing chamfers are NOT replaced.
+
+================================================================================
+PLIK: Path_Copy
+================================================================================
+
+Path.Copy
+ 
+ 
+
+ Path.Copy
+
+ Copy the path and return a Path object for the new path.
+
+ Syntax
+
+ geo.Copy
+
+ [Return] Path  Path object.
+
+ Remarks
+
+ If the path is in a list eg the list of geometries, and is not temporary, it will be added to the end of that list.
+
+================================================================================
+PLIK: Path_CopyAsSubroutine
+================================================================================
+
+Path.CopyAsSubroutine
+ 
+ 
+
+ Path.CopyAsSubroutine
+
+ Copy a tool path as a subroutine.
+
+ Syntax
+
+ path.CopyAsSubroutine (XDisplacement, YDisplacement, Group)
+
+ double XDisplacement Distance in Local X between original and copy
+
+ double YDisplacement Distance in Local Y between original and copy
+
+ short  Group  Group number for copy. See remarks
+
+ [Return] Path  Path object
+
+ Remarks
+
+ The original path must have a non-zero group number, and the copy must have a different non-zero group number. See the example. 
+
+ Dim Drw As Drawing 
+
+ Set Drw = App.ActiveDrawing 
+
+ Dim P1 As Path, P2 As Path 
+
+  
+
+ Set P1 = Drw.ToolPaths(1) 
+
+  
+
+ Dim group As Integer 
+
+ group = Drw.GetNextGroupNumberForToolPaths 
+
+  
+
+ ' Set group number of path to be copied 
+
+ P1.group = group 
+
+ ' Get group number of new path 
+
+ group = Drw.GetNextGroupNumberForToolPaths 
+
+  
+
+ Set P2 = P1.CopyAsSubroutine(100, 100, group)
+
+================================================================================
+PLIK: Path_CopyPartial
+================================================================================
+
+Path.CopyPartial
+ 
+ 
+
+ Path.CopyPartial
+
+ Copy part of the path and return a Path object for the new path.
+
+ Syntax
+
+ geo.CopyPartial(X1, Y1, X2, Y2)
+
+ double X1 Local X coordinate of first point on path
+
+ double Y1 Local Y coordinate of first point on path
+
+ double X2 Local X coordinate of second point on path
+
+ double Y2 Local Y coordinate of second point on path
+
+ [Return] Path  Path object.
+
+ Remarks
+
+ If the path is in a list eg the list of geometries, and is not temporary, it will be added to the end of that list.
+
+ The given points don't have to be on the geometry, the closest point on the geometry will be used.
+
+ Example:
+
+ ' Draw a circle and copy part of it.
+
+ Public Sub TestCopyPartial()
+ Dim P1 As Path, P2 As Path
+ Dim Drw As Drawing
+ Set Drw = App.ActiveDrawing 
+ Set P1 = Drw.CreateCircle2(100, 0, 0, True, 180) 
+ Set P2 = P1.CopyPartial(-50, 50, 50, 50)
+ P2.MoveL 0, 50
+ End Sub
+
+================================================================================
+PLIK: Path_CopyTemporary
+================================================================================
+
+Path.CopyTemporary
+ 
+ 
+
+ Path.CopyTemporary
+
+ Copy path and do not add it to the AlphaCAM database.
+
+ Syntax
+
+ geo.CopyTemporary
+
+ See Path.StoreTemporary
+
+================================================================================
+PLIK: Path_CopyTemporaryAsSubroutine
+================================================================================
+
+Path.CopyTemporaryAsSubroutine
+ 
+ 
+
+ Path.CopyTemporaryAsSubroutine
+
+ Copy path as subroutine and do not add to AlphaCAM database.
+
+ Syntax
+
+ path.CopyTemporaryAsSubroutine (XDisplacement, YDisplacement, Group)
+
+ double XDisplacement Distance in Local X between original and copy
+
+ double YDisplacement Distance in Local Y between original and copy
+
+ short  Group  Group number for copy. See remarks
+
+ [Return] Path  Path object
+
+ Remarks
+
+ See Path.StoreTemporary
+
+================================================================================
+PLIK: Path_CreateLatheBelowCLPath
+================================================================================
+
+Path.CreateLatheBelowCLPath
+ 
+ 
+
+ Path.CreateLatheBelowCLPath
+
+ Create a copy of the path (geometry only, not tool path), mirrored about the center-line. This is used if the geometry is to be machined using a tool in a below-center-line turret, in Lathe.
+
+ Syntax
+
+ geo.CreateLatheBelowCLPath
+
+ [Return] Path below-center-line path
+
+================================================================================
+PLIK: Path_CreateSpline
+================================================================================
+
+Path.CreateSpline
+ 
+ 
+
+ Path.CreateSpline
+
+ Create a spline curve approximating the path.
+
+ Syntax
+
+ geo.CreateSpline (Tolerance)
+
+ double Tolerance Tolerance for spline fit.
+
+ [Return] Spline  Pointer to Spline Dispatch object.
+
+ Remarks
+
+ A Spline object will be returned. This will have the special value Nothing if it was not possible to fit a spline through the path eg if there are less than 4 points. Splines created by AlphaCAM are always cubic (degree 3, order 4).
+
+================================================================================
+PLIK: Path_DeleteRapids
+================================================================================
+
+Path.DeleteRapids
+ 
+ 
+
+ Path.DeleteRapids
+
+ Delete leading and/or trailing rapids from tool path.
+
+ Syntax
+
+ path.DeleteRapids (Leading, Trailing)
+
+ boolean Leading True to delete rapids at start of tool path
+
+ boolean Trailing  True to delete rapids at end of tool path
+
+================================================================================
+PLIK: Path_DragMove
+================================================================================
+
+Path.DragMove
+ 
+ 
+
+ Path.DragMove
+
+ Let the user graphically drag the path to a new location.
+
+ Syntax
+
+ path.DragMove (Prompt, XBase, YBase, Flags, Events, XNew, YNew)
+
+ String  Prompt Text to display in prompt bar
+
+ double  XBase X coordinate of base point
+
+ double  YBase Y coordinate of base point
+
+ long  Flags Reserved, should be 0
+
+ DragEvents  Events Reserved, should be Nothing
+
+ [Return] double XNew Returned X coordinate of new point
+
+ [Return] double YNew Returned Y coordinate of new point
+
+ [Return] long  Return value is 0 if OK
+
+ Remarks
+
+ The cross-hair cursor will be centered on (XBase, YBase)
+
+ The required displacement is found by (XNew - XBase, YNew - YBase).
+
+ The example will drag the first geometry, if the user accepts the geometry is moved to the new position.
+
+ Dim Drw As Drawing 
+
+ Set Drw = App.ActiveDrawing 
+
+ Dim P1 As Path 
+
+  
+
+ Set P1 = Drw.Geometries(1) 
+
+ Dim Ret As Long 
+
+ Dim XBase As Double, YBase As Double 
+
+ Dim XNew As Double, YNew As Double 
+
+  
+
+ XBase = (P1.MinXL + P1.MaxXL) / 2 
+
+ YBase = (P1.MinYL + P1.MaxYL) / 2 
+
+ Ret = P1.DragMove("Drag", XBase, YBase, 0, Nothing, XNew, YNew) 
+
+  
+
+ If Ret = 0 Then 
+
+ P1.MoveL XNew - XBase, YNew - YBase 
+
+ End If
+
+================================================================================
+PLIK: Path_EliminatePoints
+================================================================================
+
+Path.EliminatePoints
+
+Path.EliminatePoints
+
+Eliminate unnecessary 2D elements by measuring the chord 
+ error. On input, the path should contain lines only, on output it will 
+ contain lines only.
+
+Syntax
+
+Path.EliminatePoints (ChordTolerance)
+
+Double  ChordTolerance Chord Tolerance
+
+================================================================================
+PLIK: Path_Erase
+================================================================================
+
+Path.Erase
+ 
+ 
+
+ Path.Erase
+
+ Erase the path from the screen by drawing it in the screen background colour. The path will not be deleted. This is useful when a property of the path is to be changed, and you want to show the change without redrawing the whole screen.
+
+ Syntax
+
+ Path.Erase
+
+ Example
+
+ Public Sub ChangeColour()
+
+ Dim Drw As Drawing 
+
+ Dim P As Path 
+
+ Set Drw = App.ActiveDrawing 
+
+ Set P = Drw.Create2DLine(0, 0, 100, 100) 
+
+  
+
+ MsgBox "Default Colour" 
+
+ P.Erase 
+
+ P.Color = acamRED 
+
+ P.Redraw 
+
+ MsgBox "Red" 
+
+ End Sub
+
+================================================================================
+PLIK: Path_Explode
+================================================================================
+
+Path.Explode
+ 
+ 
+
+ Path.Explode
+
+ Explode path - each element (line or arc) is put into a separate path.
+
+ Syntax
+
+ geo.Explode
+
+ [Return] Paths  Paths object
+
+ Remarks
+
+ The returned object is a Paths Collection containing the new paths. The existing path is deleted - the object variable is not valid and should not be used after explode.
+
+ Example:
+
+ Dim geos As Paths
+
+ set geos = geo.Explode
+
+================================================================================
+PLIK: Path_Extend
+================================================================================
+
+Path.Extend
+ 
+ 
+
+ Path.Extend
+
+ Extend start or end of this path to meet selected geometries.
+
+ Syntax
+
+ geo.Extend (Start)
+
+ boolean Start True to extend start of path, false to extend end
+
+ [Return] boolean  True if OK
+
+================================================================================
+PLIK: Path_Fillet
+================================================================================
+
+Path.Fillet
+ 
+ 
+
+ Path.Fillet
+
+ Fillet sharp corners on this path. 
+
+ Syntax
+
+ geo.Fillet (Radius)
+
+ double  Radius Fillet radius
+
+ Remarks
+
+ All external sharp corners will be filleted. Internal corners are left as they are found. Whether a corner is external or internal is decided by the side that the Ghost Tool is positioned. If the Ghost Tool is on the centre line of the geometry, all sharp corners are filleted. In all cases, existing fillets are NOT replaced.
+
+================================================================================
+PLIK: Path_FilletBubble
+================================================================================
+
+Path.FilletBubble
+
+Path.FilletBubble
+
+Fillet sharp corners on this path, using the bubble 
+ option. 
+
+Syntax
+
+geo.FilletBubble (Radius)
+
+double  Radius Fillet radius
+
+Remarks
+
+All external sharp corners will be filleted. Internal 
+ corners are left as they are found. Whether a corner is external or internal 
+ is decided by the side that the Ghost Tool is positioned. If the Ghost 
+ Tool is on the centre line of the geometry, all sharp corners are filleted. 
+ In all cases, existing fillets are NOT replaced.
+
+================================================================================
+PLIK: Path_FitArcs
+================================================================================
+
+Path.FitArcs
+ 
+ 
+
+ Path.FitArcs
+
+ Replace lines with arcs that fit within a given tolerance.
+
+ Syntax
+
+ path.FitArcs (ChordTolerance, MaximumRadius)
+
+ double ChordTolerance Tolerance within which arcs must match line end-points
+
+ double MaximumRadius Maximum radius for arcs
+
+================================================================================
+PLIK: Path_FitLines
+================================================================================
+
+Path.FitLines
+ 
+ 
+
+ Path.FitLines
+
+ Replace lines with lines that fit within a given tolerance.
+
+ Syntax
+
+ path.FitLines (ChordTolerance)
+
+ double ChordTolerance Tolerance within which lines must match line end-points
+
+================================================================================
+PLIK: Path_FitLinesAndArcs
+================================================================================
+
+Path.FitLinesAndArcs
+ 
+ 
+
+ Path.FitLinesAndArcs
+
+ Replace lines with lines and arcs that fit within a given tolerance. This is equivalent to the Utils | Special Functions | Points to Lines / Arcs command.
+
+ Syntax
+
+ path.FitLinesAndArcs (ChordTolerance, MaximumRadius)
+
+ double ChordTolerance Tolerance within which lines / arcs must match line end-points
+
+ double MaximumRadius Maximum radius for arcs
+
+================================================================================
+PLIK: Path_GetArea
+================================================================================
+
+Path.GetArea
+ 
+ 
+
+ Path.GetArea
+
+ Return area of this path.
+
+ Syntax
+
+ geo.GetArea (HatchColor)
+
+ AcamColor HatchColor Color to use for hatch, -1 for none
+
+ [Return] double  Returned area
+
+================================================================================
+PLIK: Path_GetAttributeCount
+================================================================================
+
+Path.GetAttributeCount
+ 
+ 
+
+ Path.GetAttributeCount
+
+ Return number of attributes attached to this path.
+
+ Syntax
+
+ path.GetAttributeCount
+
+ [Return] long Number of attributes
+
+================================================================================
+PLIK: Path_GetAttributeName
+================================================================================
+
+Path.GetAttributeName
+ 
+ 
+
+ Path.GetAttributeName
+
+ Return name of an attribute attached to this path.
+
+ Syntax
+
+ path.GetAttributeName (Index)
+
+ long Index Index of attribute, 1 to GetAttributeCount
+
+ [Return] String Name of attribute
+
+================================================================================
+PLIK: Path_GetBitmap
+================================================================================
+
+Path.GetBitmap
+ 
+ 
+
+ Path.GetBitmap
+
+ Get the Bitmap associated with the path. An object of type GeoBitmap will be returned.
+
+ Syntax
+
+ geo.GetBitmap
+
+ [Return] GeoBitmap  GeoBitmap object
+
+================================================================================
+PLIK: Path_GetClosestPointL
+================================================================================
+
+Path.GetClosestPointL
+ 
+ 
+
+ Path.GetClosestPointL
+
+ Find point (and element) on this path which is closest to a given point.
+
+ Syntax
+
+ path.GetClosestPointL (XTest, YTest, XClose, YClose, Elem)
+
+ double XTest Local X coordinate of test point
+
+ double YTest Local Y coordinate of test point
+
+ double XClose Returned X coordinate of closest point
+
+ double YClose Returned Y coordinate of closest point
+
+ Element Elem Returned element containing point
+
+ Example:
+
+ ' Ask user for an XY point and draw a line from this point
+
+ ' to the closest point on each geometry
+
+ Public Sub TestClosestPoint()
+
+ Dim P As Path 
+
+ Dim X1 As Double, Y1 As Double 
+
+ Dim Drw As Drawing 
+
+ Set Drw = App.ActiveDrawing 
+
+  
+
+ If Drw.UserGet2DPoint("Pick Point", X1, Y1) <> acamUserSELECT Then Exit Sub 
+
+  
+
+ For Each P In Drw.Geometries 
+
+ Dim X2 As Double, Y2 As Double, E As Element 
+
+ P.GetClosestPointL X1, Y1, X2, Y2, E 
+
+ Drw.Create2DLine X1, Y1, X2, Y2 
+
+ Next P 
+
+ End Sub
+
+================================================================================
+PLIK: Path_GetDisplacement
+================================================================================
+
+Path.GetDisplacement
+ 
+ 
+
+ Path.GetDisplacement
+
+ Get X and Y values of shift if this tool path is a subroutine copy. (The IsSubroutineCopy property will be set if it is)
+
+ Syntax
+
+ path.GetDisplacement (X, Y)
+
+ double* X X displacement
+
+ double* Y Y displacement
+
+ Remarks
+
+ The displacement is relative to the tool path that was copied.
+
+================================================================================
+PLIK: Path_GetElemCount
+================================================================================
+
+Path.GetElemCount
+ 
+ 
+
+ Path.GetElemCount
+
+ The number of lines and arcs in a path.
+
+ Syntax
+
+ geo.GetElemCount
+
+ [Return] long  Number of elements.
+
+================================================================================
+PLIK: Path_GetFeedExtent
+================================================================================
+
+Path.GetFeedExtent
+
+Path.GetFeedExtent
+
+Get local Max / Min XY of this tool path, ignoring rapids. 
+ Return False if there are no feeds.
+
+Syntax
+
+path.GetFeedExtent (MinX, MinY, MaxX, MaxY)
+
+[Return] double MinX
+
+[Return] double MinY
+
+[Return] double MaxX
+
+[Return] double MaxY
+
+[Return] boolean  Return False if there are no 
+ feeds
+
+================================================================================
+PLIK: Path_GetFirstElem
+================================================================================
+
+Path.GetFirstElem
+ 
+ 
+
+ Path.GetFirstElem
+
+ Get the first element (line or arc) in the path. An object of type Element will be returned.
+
+ Syntax
+
+ geo.GetFirstElem
+
+ [Return] Element  Element object 
+
+ See Also
+
+ Path.Elements
+
+ Path.GetElemCount
+
+ Path.GetLastElem
+
+================================================================================
+PLIK: Path_GetLaserData_Laseronly_
+================================================================================
+
+Path.GetLaserData (Laser only)
+ 
+ 
+
+ Path.GetLaserData (Laser only)
+
+ Get the machining data for this path if it is a tool path. An object of type LaserData will be returned.
+
+ Syntax
+
+ path.GetLaserData
+
+ [Return] LaserData  LaserData object
+
+================================================================================
+PLIK: Path_GetLastElem
+================================================================================
+
+Path.GetLastElem
+ 
+ 
+
+ Path.GetLastElem
+
+ Get the last element (line or arc) in the path. An object of type Element will be returned.
+
+ Syntax
+
+ geo.GetLastElem
+
+ [Return] Element  Element object 
+
+ See Also
+
+ Path.Elements
+
+ Path.GetElemCount
+
+ Path.GetFirstElem
+
+================================================================================
+PLIK: Path_GetLayer
+================================================================================
+
+Path.GetLayer
+ 
+ 
+
+ Path.GetLayer
+
+ Get the layer for the path. An object of type Layer will be returned.
+
+ Syntax
+
+ geo.GetLayer
+
+ [Return] Layer  Layer object
+
+================================================================================
+PLIK: Path_GetMillData_Mill_Routeronly_
+================================================================================
+
+Path.GetMillData (Mill/Router only)
+ 
+ 
+
+ Path.GetMillData (Mill/Router only)
+
+ Get the machining data for this path if it is a tool path. An object of type MillData will be returned.
+
+ Syntax
+
+ path.GetMillData
+
+ [Return] MillData  MillData object
+
+================================================================================
+PLIK: Path_GetNext
+================================================================================
+
+Path.GetNext
+ 
+ 
+
+ Path.GetNext
+
+ Get the next path in the list.
+
+ Syntax
+
+ geo.GetNext
+
+ [Return] Path  Path object
+
+================================================================================
+PLIK: Path_GetSawNestPath
+================================================================================
+
+Path.GetSawNestPath
+
+Path.GetSawNestPath
+
+Internal routine for use by Nesting
+
+================================================================================
+PLIK: Path_GetSheetArea
+================================================================================
+
+Path.GetSheetArea
+ 
+ 
+
+ Path.GetSheetArea
+
+ Return area of this path and enclosed paths.
+
+ Syntax
+
+ geo.GetSheetArea (HatchColor, SheetArea, ScrapArea)
+
+ AcamColor HatchColor Color to use for hatch, -1 for none
+
+ [Return] double SheetArea Returned area of sheet ignoring enclosed paths.
+
+ [Return] double ScrapArea Returned (area of sheet) - (area of enclosed paths)
+
+================================================================================
+PLIK: Path_GetTool
+================================================================================
+
+Path.GetTool
+ 
+ 
+
+ Path.GetTool
+
+ Get the tool for this path if it is a tool path. An object of type MillTool will be returned.
+
+ Syntax
+
+ path.GetTool
+
+ [Return] MillTool  MillTool object
+
+================================================================================
+PLIK: Path_GetWireData
+================================================================================
+
+Path.GetWireData (Wire only)
+
+Path.GetWireData (Wire only)
+
+Get the machining data for this path if it is a tool 
+ path. An object of type WireData will 
+ be returned.
+
+Syntax
+
+path.GetWireData
+
+[Return] WireData  WireData object
+
+================================================================================
+PLIK: Path_GetWorkPlane
+================================================================================
+
+Path.GetWorkPlane
+ 
+ 
+
+ Path.GetWorkPlane
+
+ Get the work plane for the path. An object of type WorkPlane will be returned. If the path is not in a work plane the special value Nothing will be returned, which may be used in tests.
+
+ Syntax
+
+ geo.GetWorkPlane
+
+ [Return] WorkPlane  WorkPlane object
+
+================================================================================
+PLIK: Path_IntersectWithLine
+================================================================================
+
+Path.IntersectWithLine
+ 
+ 
+
+ Path.IntersectWithLine
+
+ Find the points of intersection of an infinite line with this path.
+
+ Syntax
+
+ geo.IntersectWithLine (X1, Y1, X2, Y2, IncludeTangents, XInt, YInt)
+
+ double X1 Local X coordinate of a point on the infinite line
+
+ double Y1 Local Y coordinate of a point on the infinite line
+
+ double X2 Local X coordinate of another point on the infinite line
+
+ double Y2 Local Y coordinate of another point on the infinite line
+
+ boolean IncludeTangents True to include points where it does not cross, just meets tangentially
+
+ [Return] Variant Array of double XInt Return X coordinates of intersection points.
+
+ [Return] Variant Array of double YInt Return Y coordinates of intersection points.
+
+ [Return] long  Returned number of intersection points
+
+ Remarks
+
+ The returned arrays are indexed from 0, see the example.
+
+ The example draws a rectangle and finds the intersection points with a line, and draws a line between the two intersection points.
+
+ Dim Drw As Drawing 
+
+ Set Drw = App.ActiveDrawing 
+
+  
+
+ Dim P1 As Path 
+
+ Set P1 = Drw.CreateRectangle(0, 0, 100, 100) 
+
+  
+
+ Dim N As Long 
+
+ Dim XInt, YInt 
+
+  
+
+ N = P1.IntersectWithLine(10, 10, 20, 120, False, XInt, YInt) 
+
+ If N = 2 Then 
+
+ Drw.Create2DLine XInt(0), YInt(0), XInt(1), YInt(1) 
+
+ End If
+
+================================================================================
+PLIK: Path_IsInWindow
+================================================================================
+
+Path.IsInWindow
+ 
+ 
+
+ Path.IsInWindow
+
+ Return True if path is visible in the XY window.
+
+ Syntax
+
+ path.IsInWindow
+
+================================================================================
+PLIK: Path_IsPointInside
+================================================================================
+
+Path.IsPointInside
+ 
+ 
+
+ Path.IsPointInside
+
+ Return True if point is inside this path.
+
+ Syntax
+
+ path.IsPointInside(X, Y)
+
+ double X Local X coordinate of point to test
+
+ double Y Local Y coordinate of point to test
+
+ [Return] boolean  True if point inside path
+
+================================================================================
+PLIK: Path_IsSame
+================================================================================
+
+Path.IsSame
+ 
+ 
+
+ Path.IsSame
+
+ See if two objects represent the same path. This is NOT a geometric comparison.
+
+ Syntax
+
+ path.IsSame(Path2)
+
+ Path Path2 Path object to compare with
+
+ [Return] boolean  Return value, True if objects are the same
+
+================================================================================
+PLIK: Path_LayerLineTypes
+================================================================================
+
+Path / Layer Line Types
+ 
+ 
+
+ Path / Layer Line Types
+
+ The line type is set by an integer as given below:
+
+ acamLineCONT = 0
+
+ acamLineDASH = 1
+
+ acamLineDOT = 2
+
+ acamLineDASHDOT = 3
+
+ acamLineCENTER = 4
+
+ acamLinePHANTOM = 5
+
+ A Path can have a line type of -1 meaning use the Layer line type, or one of the above types to override the Layer type.
+
+================================================================================
+PLIK: Path_MatchGeometry
+================================================================================
+
+Path.MatchGeometry
+
+Path.MatchGeometry
+
+Compare the geometry of this path with a second path. 
+ If they are the same shape the return value will be True.
+
+Syntax
+
+geo.MatchGeometry (Path2, Angle, X, Y)
+
+Path Path2 The path to compare with
+
+[Return] double Angle Difference angle in 
+ degrees
+
+[Return] double X  Difference in local X coordinates
+
+[Return] double Y Difference in local Y coordinates
+
+Remarks
+
+The returned values are the values which if they were 
+ applied to Path2 would put it coincident with the first path, as in the 
+ example:
+
+    Dim 
+ P1 As Path, P2 As Path
+
+    Set 
+ P1 = App.ActiveDrawing.UserSelectOneGeo("Geo 1")
+
+    Set 
+ P2 = App.ActiveDrawing.UserSelectOneGeo("Geo 2")
+
+    Dim 
+ A As Double, X As Double, Y As Double
+
+    If 
+ P1.MatchGeometry(P2, A, X, Y) Then
+
+        P2.RotateL 
+ A, 0, 0
+
+        P2.MoveL 
+ X, Y
+
+   ' 
+ P2 is now coincident with P1
+
+    End 
+ If
+
+================================================================================
+PLIK: Path_MirrorG
+================================================================================
+
+Path.MirrorG
+ 
+ 
+
+ Path.MirrorG
+
+ Mirror the path using a work plane in the 3D Global coordinate system.
+
+ Syntax
+
+ geo.MirrorG (WP)
+
+ WorkPlane WP Work plane to mirror in
+
+ Remarks
+
+ The path (which may be any path, in a work plane or 2D flat land or 3D global) will be mirrored in global XYZ, using the given work plane as the plane to mirror in.
+
+ See also
+
+ Path.MirrorL
+
+================================================================================
+PLIK: Path_MirrorL
+================================================================================
+
+Path.MirrorL
+ 
+ 
+
+ Path.MirrorL
+
+ Mirror the path about a line in its 2D Local coordinate system.
+
+ Syntax
+
+ geo.MirrorL (X1, Y1, X2, Y2)
+
+ double X1 Local X coordinate of first point on mirror line
+
+ double Y1 Local Y coordinate of first point on mirror line
+
+ double X2 Local X coordinate of second point on mirror line
+
+ double Y2 Local Y coordinate of second point on mirror line
+
+ See also
+
+ Path.MirrorG
+
+================================================================================
+PLIK: Path_MoveG
+================================================================================
+
+Path.MoveG
+ 
+ 
+
+ Path.MoveG
+
+ Move the path in the 3D Global coordinate system.
+
+ Syntax
+
+ geo.MoveG (X, Y, Z)
+
+ double X Distance to move in global X
+
+ double Y Distance to move in global Y
+
+ double Z Distance to move in global Z
+
+ Remarks
+
+ If the path is in a work plane it will be moved to a new work plane if necessary. If it is not in a work plane it will be moved in global XYZ by the specified distances.
+
+ See also
+
+ Path.MoveL
+
+================================================================================
+PLIK: Path_MoveL
+================================================================================
+
+Path.MoveL
+ 
+ 
+
+ Path.MoveL
+
+ Move the path in its 2D Local coordinate system.
+
+ Syntax
+
+ geo.MoveL (X, Y)
+
+ double X Distance to move in local X
+
+ double Y Distance to move in local Y
+
+ Remarks
+
+ If the path is in a work plane it will be moved in that plane by the specified distances. If it is not in a work plane it will be moved in global XY by the specified distances.
+
+ See also
+
+ Path.MoveG
+
+================================================================================
+PLIK: Path_Offset
+================================================================================
+
+Path.Offset
+ 
+ 
+
+ Path.Offset
+
+ Offset this geometry, adding one or more new paths to database.
+
+ Syntax
+
+ geo.Offset (Distance, Side)
+
+ double Distance  Offset distance
+
+ AcamToolSide Side  Side to offset, acamLEFT (1), or acamRIGHT (-1)
+
+ [Return] Paths  Paths object (see remarks).
+
+ Remarks
+
+ The returned object is a Collection of the offset paths.
+
+ Example:
+
+ Dim Geos As Paths
+
+ set Geos = geo.Offset(10, acamLEFT)
+
+================================================================================
+PLIK: Path_OffsetSimple
+================================================================================
+
+Path.OffsetSimple
+
+Path.OffsetSimple
+
+Offset this geometry using simple lookahead, returning 
+ one path, which will be added to the drawing database if the path is not 
+ temporary .
+
+Syntax
+
+geo.OffsetSimple (Distance, Side)
+
+double Distance  Offset distance
+
+AcamToolSide Side  Side to offset, acamLEFT 
+ (1), or acamRIGHT (-1)
+
+[Return] Path  Path object.
+
+Remarks
+
+Because simple lookahead is used the returned path may 
+ overlap itself. Use Path.Offset or Path.OffsetTemporary 
+ if the normal total-lookahead offset is required. They may return more 
+ than one path, unlike this method.
+
+Example:
+
+Dim Geos As Path
+
+Set Geo = geo.OffsetSimple(10, acamLEFT)
+
+================================================================================
+PLIK: Path_OffsetTemporary
+================================================================================
+
+Path.OffsetTemporary
+ 
+ 
+
+ Path.OffsetTemporary
+
+ Offset this geometry, new paths will NOT be added to database.
+
+ Syntax
+
+ geo.OffsetTemporary (Distance, Side, Corners)
+
+ double Distance  Offset distance
+
+ AcamToolSide Side  Side to offset, acamLEFT (1), or acamRIGHT (-1)
+
+ AcamCorners Corners  Type of corners, acamCornersROUND or acamCornersSTRAIGHT
+
+ [Return] Paths  Paths object (see remarks).
+
+ Remarks
+
+ The returned object is a Collection of the offset paths.
+
+ Example:
+
+ Dim Geos As Paths
+
+ set Geos = geo.OffsetTemporary(10, acamLEFT, acamCornersROUND )
+
+ See Path.StoreTemporary
+
+================================================================================
+PLIK: Path_PointAtDistanceAlongPathG
+================================================================================
+
+Path.PointAtDistanceAlongPathG
+ 
+ 
+
+ Path.PointAtDistanceAlongPathG
+
+ Find Global coordinates of the point at the given distance along the path.
+
+ See PointAtDistanceAlongPathL for 2D version.
+
+ Syntax
+
+ path.PointAtDistanceAlongPathG (Distance, XP, YP, ZP, Elem)
+
+ double   Distance  Distance along path from start point
+
+ double   XP  Returned X coordinate (global)
+
+ double   YP  Returned Y coordinate (global)
+
+ double   ZP  Returned Z coordinate (global)
+
+ Element  Elem  Returned Element object for line or arc containing point
+
+ [Return] boolean  Returned value, True if point found OK, False if not eg Distance greater than length of path.
+
+ Remarks
+
+ The example draws a vertical 3D polyline at intervals along a geometry.
+
+ Note the Dim statements declaring the parameters xp, yp, zp and elem, these variables must be of the specified types.
+
+ Sub main()
+
+ Dim drw As Drawing
+
+ Set drw = App.ActiveDrawing
+
+ Dim p As Path
+
+ Set p = drw.UserSelectOneGeo("Select 3D Geometry to step along")
+
+ If Not (p Is Nothing) Then
+
+ For dist = 1 To p.Length Step 10 
+
+ Dim elem as Element 
+
+ Dim xp As Double, yp As Double, zp As Double 
+
+ ok = p.PointAtDistanceAlongPathG (dist, xp, yp, zp, elem) 
+
+ If ok Then 
+
+ ' Draw a polyline 
+
+ Dim geo As PolyLine 
+
+ Set geo = drw.Create3DPolyline (xp, yp, zp) 
+
+ geo.AddLine xp, yp, zp + 5 
+
+ geo.Finish 
+
+ End If 
+
+ Next dist 
+
+ End If 
+
+ End Sub
+
+================================================================================
+PLIK: Path_PointAtDistanceAlongPathL
+================================================================================
+
+Path.PointAtDistanceAlongPathL
+ 
+ 
+
+ Path.PointAtDistanceAlongPathL
+
+ Find Local coordinates of the point at the given distance along the path.
+
+ See PointAtDistanceAlongPathG for 3D version.
+
+ Syntax
+
+ path.PointAtDistanceAlongPathL (Distance, XP, YP, Elem)
+
+ double   Distance  Distance along path from start point
+
+ double * XP  Returned X coordinate (local)
+
+ double * YP  Returned Y coordinate (local)
+
+ Element *  Elem   Returned Element object for line or arc containing point
+
+ [Return] boolean  Returned value, True if point found OK, False if not eg Distance greater than length of path.
+
+ Remarks
+
+ The example draws a circle at intervals along a geometry.
+
+ Note the Dim statements declaring the parameters xp, yp and elem, these variables must be of the specified types.
+
+ Sub main()
+
+  Dim drw As Drawing
+
+  Set drw = App.ActiveDrawing
+
+  Dim p As Path
+
+  Set p = drw.UserSelectOneGeo("Select Geometry to step along")
+
+  If Not (p Is Nothing) Then
+
+   path_len = p.Length
+
+   For dist = 1 To path_len Step 10
+
+    Dim elem As Element
+
+    Dim xp As Double, yp As Double
+
+    ok = p.PointAtDistanceAlongPathL (dist, xp, yp, elem)
+
+    if ok then
+
+     ' Draw a circle
+
+     drw.CreateCircle 5, xp, yp
+
+    Else
+
+     End
+
+    End If
+
+   Next dist
+
+  End If 
+
+ End Sub
+
+================================================================================
+PLIK: Path_Redraw
+================================================================================
+
+Path.Redraw
+ 
+ 
+
+ Path.Redraw
+
+ Redraw this path.
+
+ Syntax
+
+ Geo.Redraw
+
+================================================================================
+PLIK: Path_RemoveLoops
+================================================================================
+
+Path.RemoveLoops
+ 
+ 
+
+ Path.RemoveLoops
+
+ Remove corner loops from tool path.
+
+================================================================================
+PLIK: Path_RemoveNegativeOverlap
+================================================================================
+
+Path.RemoveNegativeOverlap
+ 
+ 
+
+ Path.RemoveNegativeOverlap
+
+ Close path if it has a tag done with negative overlap.
+
+================================================================================
+PLIK: Path_RemoveTag
+================================================================================
+
+Path.RemoveTag
+ 
+ 
+
+ Path.RemoveTag
+
+ If this path is a tag, remove it and combine previous and next paths.
+
+ Syntax
+
+ path.RemoveTag
+
+================================================================================
+PLIK: Path_ReplaceElements
+================================================================================
+
+Path.ReplaceElements
+
+Path.ReplaceElements
+
+Replace the elements in the current path with those 
+ in given path
+
+Syntax
+
+path.ReplaceElements(Path2)
+
+Path Path2 Path containing elements to be 
+ added
+
+Remarks
+
+Path2 will be deleted.
+
+================================================================================
+PLIK: Path_Reverse
+================================================================================
+
+Path.Reverse
+ 
+ 
+
+ Path.Reverse
+
+ Reverse this path.
+
+ Syntax
+
+ path.Reverse
+
+================================================================================
+PLIK: Path_RotateG
+================================================================================
+
+Path.RotateG
+ 
+ 
+
+ Path.RotateG
+
+ Rotate the path in the 3D Global coordinate system, about a specified axis.
+
+ Syntax
+
+ geo.RotateG (Angle, X1, Y1, Z1, X2, Y2, Z2)
+
+ double Angle Angle in degrees to rotate by, CW -ve. 
+
+ double X1
+
+ double Y1 Global XYZ coordinates of first point on axis to rotate about.
+
+ double Z1
+
+ double X2
+
+ double Y2 Global XYZ coordinates of second point on axis to rotate about.
+
+ double Z2
+
+ Remarks
+
+ The path (which may be any path, in a work plane or 2D flat land or 3D global) will be rotated in global XYZ about the axis given by the 3D line from (X1, Y1, Z1) to (X2, Y2, Z2).
+
+ See also
+
+ Path.RotateL
+
+================================================================================
+PLIK: Path_RotateL
+================================================================================
+
+Path.RotateL
+ 
+ 
+
+ Path.RotateL
+
+ Rotate the path in its 2D Local coordinate system.
+
+ Syntax
+
+ geo.RotateL (Angle, BaseX, BaseY)
+
+ double Angle Angle in degrees to rotate by, CW -ve. 
+
+ double BaseX Local X coordinate of point to rotate about
+
+ double BaseY Local Y coordinate of point to rotate about
+
+ Remarks
+
+ If the path is in a work plane it will be rotated in that plane. If it is not in a work plane it will be rotated in global XY.
+
+ See also
+
+ Path.RotateG
+
+================================================================================
+PLIK: Path_SaveForUndo
+================================================================================
+
+Path.SaveForUndo
+
+Path.SaveForUndo
+
+Save this path in the undo list before modifying it. 
+ Usually AlphaCAM will save it automatically but for some actions it won't, 
+ eg modifying attributes.
+
+Syntax
+
+Path.SaveForUndo
+
+================================================================================
+PLIK: Path_ScaleG
+================================================================================
+
+Path.ScaleG
+ 
+ 
+
+ Path.ScaleG
+
+ Scale the path in the 3D Global coordinate system, by a single factor.
+
+ Syntax
+
+ geo.ScaleG (Factor, BaseX, BaseY, BaseZ)
+
+ double Factor Scale factor
+
+ double BaseX Global X coordinate of point to scale about.
+
+ double BaseY Global Y coordinate of point to scale about.
+
+ double BaseZ Global Z coordinate of point to scale about.
+
+ Remarks
+
+ The path (which may be any path, in a work plane or 2D flat land or 3D global) will be scaled in global XYZ about the given base point.
+
+ See also
+
+ Path.ScaleL
+
+ Path.ScaleL2
+
+================================================================================
+PLIK: Path_ScaleL
+================================================================================
+
+Path.ScaleL
+ 
+ 
+
+ Path.ScaleL
+
+ Scale the path in its 2D Local coordinate system, by a single factor.
+
+ Syntax
+
+ geo.ScaleL (Factor, BaseX, BaseY)
+
+ double Factor Scale factor
+
+ double BaseX Local X coordinate of point to scale about.
+
+ double BaseY Local Y coordinate of point to scale about.
+
+ Remarks
+
+ If the path is in a work plane it will be scaled in that plane. If it is not in a work plane it will be scaled in global XY.
+
+ See also
+
+ Path.ScaleL2
+
+ Path.ScaleG
+
+================================================================================
+PLIK: Path_ScaleL2
+================================================================================
+
+Path.ScaleL2
+ 
+ 
+
+ Path.ScaleL2
+
+ Scale the path in its 2D Local coordinate system by different factors in X and Y.
+
+ Syntax
+
+ geo.ScaleL2 (FactorX, FactorY, BaseX, BaseY)
+
+ double FactorX Scale factor in X
+
+ double FactorY Scale factor in Y
+
+ double BaseX Local X coordinate of point to scale about.
+
+ double BaseY Local Y coordinate of point to scale about.
+
+ Remarks
+
+ If the path is in a work plane it will be scaled in that plane. If it is not in a work plane it will be scaled in global XY.
+
+ See also
+
+ Path.ScaleL
+
+ Path.ScaleG
+
+================================================================================
+PLIK: Path_Set3DApproach
+================================================================================
+
+Path.Set3DApproach
+
+Path.Set3DApproach
+
+Add 3D approach to a tool path.
+
+Syntax
+
+Path.Set3DApproach (Method, Slope, ApproachAngle, 
+ ApproachPitch, HoleDiaMultiplier, ZigZagLength, CW)
+
+Acam3DApproachMethod  Method acam3DApproachSPIRAL, 
+ acam3DApproachZIGZAG or acam3DApproachPLUNGE
+
+Acam3DApproachSlope  Slope 
+ acam3DApproachANGLE or acam3DApproachPITCH
+
+Double  ApproachAngle 
+  Approach 
+ angle
+
+Double  ApproachPitch 
+  Appoach 
+ pitch
+
+Double  HoleDiaMultiplier
+
+Double  ZigZagLength
+
+Bool  CW 
+  True for 
+ CW, False for CCW
+
+================================================================================
+PLIK: Path_Set3DLeadInOutAuto
+================================================================================
+
+Path.Set3DLeadInOutAuto
+
+Path.Set3DLeadInOutAuto
+
+Do automatic lead-in/out on this 3D tool path.
+
+Syntax
+
+path.Set3DLeadInOutAuto (LeadIn, RadiusIn, LengthIn, 
+ ArcAngleIn, SlopeIn,  ZSlopeInAmount, 
+ LeadInSide, XIn, YIn, ZIn, LeadOut, RadiusOut, LengthOut, ArcAngleOut, 
+ SlopeOut, ZSlopeOutAmount, LeadOutSide, XOut, YOut, ZOut, Overlap, ChordTolerance)
+
+AcamLeadType LeadIn eg acamLeadARC, see remarks
+
+Double  RadiusIn Radius of lead-in
+
+Double  LengthIn Length of lead-in
+
+Double  ArcAngleIn Included angle of 
+ arc lead-in, in degrees 
+
+Boolean SlopeIn  True for sloping lead-in
+
+Double ZSlopeInAmount Amount to slope in Z for lead-in
+
+AcamToolSide LeadInSide Side to lead-in on
+
+Double XIn, YIn, ZIn Point to lead-in from if using 
+ a line only
+
+AcamLeadType LeadOut eg acamLeadARC, see remarks
+
+Double  RadiusOut Radius of lead-out
+
+Double  LengthOut Length of lead-out
+
+Double  ArcAngleOut Included angle of 
+ arc lead-out, in degrees 
+
+Boolean SlopeOut  True for sloping lead-out
+
+Double ZSlopeOutAmount Amount to slope in Z for lead-out
+
+AcamToolSide LeadOutSide Side to lead-out on
+
+Double XOut, YOut, ZOut Point to lead-in from if using 
+ a line only
+
+Double Overlap  Overlap
+
+Double ChordTolerance tolerance for arcs
+
+================================================================================
+PLIK: Path_SetLaserData_Laseronly_
+================================================================================
+
+Path.SetLaserData (Laser only)
+ 
+ 
+
+ Path.SetLaserData (Laser only)
+
+ Set the machining data for this path if it is a tool path.
+
+ Syntax
+
+ path.SetLaserData (LD)
+
+ LaserData LD LaserData object 
+
+ Remarks
+
+ Can be used to edit the parameters of a tool path, usually starting with Path.GetLaserData. The example changes the cut feed of all the tool paths in the drawing to 50.
+
+ Dim Drw As Drawing 
+
+ Set Drw = App.ActiveDrawing 
+
+  
+
+ Dim P As Path 
+
+  
+
+ For Each P In Drw.Toolpaths 
+
+ Dim LD As LaserData 
+
+ Set LD = P.GetLaserData 
+
+  
+
+ LD.CutFeed = 50 
+
+  
+
+ P.SetLaserData LD 
+
+ Next P 
+
+  
+
+ Drw.Redraw
+
+================================================================================
+PLIK: Path_SetLayer
+================================================================================
+
+Path.SetLayer
+ 
+ 
+
+ Path.SetLayer
+
+ Set the layer for the path.
+
+ Syntax
+
+ geo.SetLayer (layer)
+
+ Layer layer layer object
+
+================================================================================
+PLIK: Path_SetLeadInOutAuto
+================================================================================
+
+Path.SetLeadInOutAuto
+ 
+ 
+
+ Path.SetLeadInOutAuto
+
+ Do automatic lead-in/out on this tool path.
+
+ Syntax
+
+ path.SetLeadInOutAuto (LeadIn, LeadOut, LengthMultiplier, RadiusMultiplier, Angle, SlopeIn, SlopeOut, Overlap)
+
+ AcamLeadType LeadIn eg acamLeadARC, see remarks
+
+ AcamLeadType LeadOut eg acamLeadARC, see remarks
+
+ Double  LengthMultiplier Length of lead-in/out, as multiplier of tool radius
+
+ Double  RadiusMultiplier Radius of lead-in/out, as multiplier of tool radius
+
+ Double  Angle  Angle with tool path, in degrees 
+
+ Boolean SlopeIn  True for sloping lead-in
+
+ Boolean SlopeOut True for sloping lead-out
+
+ Double  Overlap  Overlap, negative for tag
+
+ Remarks
+
+ See MillData.RoughFinish for an example.
+
+ AcamLeadType can have the values:
+
+  acamLeadARC = 1
+
+  acamLeadBOTH = 2
+
+  acamLeadLINE = 0
+
+  acamLeadNO_CHANGE = 4
+
+  acamLeadNONE = 3
+
+  acamLeadBOTH_NOT_TANGENTIAL = 10 (as acamLeadBOTH but with Line /Arc In (or Out) Tangential unchecked)
+
+================================================================================
+PLIK: Path_SetLeadInOutManual
+================================================================================
+
+Path.SetLeadInOutManual
+ 
+ 
+
+ Path.SetLeadInOutManual
+
+ Apply manual lead-in/out to this tool path.
+
+ Syntax
+
+ path.SetLeadInOutManual (LeadIn, LeadOut, SlopeIn, SlopeOut, XIn, YIn, XOut, YOut, [Overlap], [RadiusMultiplier])
+
+ AcamLeadType LeadIn eg acamLeadARC, see remarks
+
+ AcamLeadType LeadOut eg acamLeadARC, see remarks
+
+ Boolean SlopeIn  True for sloping lead-in
+
+ Boolean SlopeOut True for sloping lead-out
+
+ Double  XIn  X coordinate of start of lead-in
+
+ Double  YIn  Y coordinate of start of lead-in
+
+ Double  XOut  X coordinate of end of lead-out
+
+ Double  YOut  Y coordinate of end of lead-out
+
+ Double  Overlap  (Optional) Overlap, negative for tag
+
+ Double  RadiusMultiplier (Optional) Radius of arc, if "Both" option used, as multiplier of tool radius
+
+ Remarks
+
+ If Overlap is not given it will be 0. If RadiusMultiplier is not given it will use the current value given in the Lead-In/Out dialog box.
+
+ AcamLeadType can have the values:
+
+  acamLeadARC = 1
+
+  acamLeadBOTH = 2
+
+  acamLeadLINE = 0
+
+  acamLeadNO_CHANGE = 4
+
+  acamLeadNONE = 3
+
+ acamLeadBOTH_NOT_TANGENTIAL = 10 (as acamLeadBOTH but with Line /Arc In (or Out) Tangential unchecked)
+
+================================================================================
+PLIK: Path_SetMaterial
+================================================================================
+
+Path.SetMaterial
+ 
+ 
+
+ Path.SetMaterial
+
+ Make this geometry the material for solid simulation etc.
+
+ Syntax
+
+ geo.SetMaterial (TopZ, BottomZ)
+
+ double TopZ  Z coordinate of top of material
+
+ double BottomZ Z coordinate of bottom of material
+
+ [Return] boolean  True if OK
+
+ Remarks
+
+ The geometry must be closed.
+
+================================================================================
+PLIK: Path_SetMillData_Mill_Routeronly_
+================================================================================
+
+Path.SetMillData (Mill/Router only)
+ 
+ 
+
+ Path.SetMillData (Mill/Router only)
+
+ Set the machining data for this path if it is a tool path.
+
+ Syntax
+
+ path.SetMillData (MD)
+
+ MillData MD MillData object 
+
+ Remarks
+
+ Can be used to edit the parameters of a tool path, usually starting with Path.GetMillData. The example changes the rapid level of all the tool paths in the drawing to 50.
+
+ Dim Drw As Drawing 
+
+ Set Drw = App.ActiveDrawing 
+
+  
+
+ Dim P As Path 
+
+  
+
+ For Each P In Drw.Toolpaths 
+
+ Dim MD As MillData 
+
+ Set MD = P.GetMillData 
+
+  
+
+ MD.SafeRapidLevel = 50 
+
+  
+
+ P.SetMillData MD 
+
+ Next P 
+
+  
+
+ Drw.Options.ShowRapids = True 
+
+ Drw.Redraw
+
+================================================================================
+PLIK: Path_SetPanel
+================================================================================
+
+Path.SetPanel
+
+Path.SetPanel (Router Only)
+
+Set this geometry to be the Panel in Router (Equivalent 
+ to the "Specify Panel" command).
+
+Syntax
+
+Path.SetPanel (TopZ, BottomZ)
+
+Double  TopZ Z level of top of panel
+
+Double  BottomZ Z level of bottom of panel
+
+================================================================================
+PLIK: Path_SetStartPoint
+================================================================================
+
+Path.SetStartPoint
+ 
+ 
+
+ Path.SetStartPoint
+
+ Set the start point for the path, if path is closed.
+
+ Syntax
+
+ geo.SetStartPoint (X, Y)
+
+ double X Local X coordinate of new start point
+
+ double Y Local Y coordinate of new start point
+
+================================================================================
+PLIK: Path_SetTool
+================================================================================
+
+Path.SetTool
+ 
+ 
+
+ Path.SetTool
+
+ Change the tool used for this tool path.
+
+ Syntax
+
+ path.SetTool(Tool)
+
+ MillTool Tool Tool object
+
+ Remarks
+
+ This routine should be used with care. The tool path will NOT be recalculated in any way, eg if an offset path. If a bigger tool is used it may foul.
+
+================================================================================
+PLIK: Path_SetWorkPlane
+================================================================================
+
+Path.SetWorkPlane
+ 
+ 
+
+ Path.SetWorkPlane
+
+ Set the current work plane for the path.
+
+ Syntax
+
+ geo.SetWorkPlane (wp)
+
+ WorkPlane  wp WorkPlane object
+
+================================================================================
+PLIK: Path_SetWorkVolume
+================================================================================
+
+Path.SetWorkVolume
+ 
+ 
+
+ Path.SetWorkVolume
+
+ Make this geometry the work volume.
+
+ Syntax
+
+ geo.SetWorkVolume (TopZ, BottomZ)
+
+ double TopZ  Z coordinate of top of work volume
+
+ double BottomZ Z coordinate of bottom of work volume
+
+ [Return] boolean  True if OK
+
+ Remarks
+
+ The geometry must be a rectangle.
+
+================================================================================
+PLIK: Path_ShowGhostTool
+================================================================================
+
+Path.ShowGhostTool
+
+Path.ShowGhostTool
+
+Show or remove the ghost tool marker for this path.
+
+Syntax
+
+geo.ShowGhostTool(show)
+
+Boolean  Show True to show, False to remove
+
+================================================================================
+PLIK: Path_SlowDownForCorners
+================================================================================
+
+Path.SlowDownForCorners
+ 
+ 
+
+ Path.SlowDownForCorners
+
+ Do "Slow Down for Corners" command on this tool path. It will be split into multiple paths, each with a different feed.
+
+ Syntax
+
+ path.SlowDownForCorners (DecelerationDistance, NumberOfSteps, PercentOfFullSpeed, MaxRadius, MaxAngle, AccelerateOut)
+
+ double  DecelerationDistance Total deceleration distance
+
+ long  NumberOfSteps  Number of steps
+
+ double  PercentOfFullSpeed Slow down to this % of full speed
+
+ double  MaxRadius Do not slow down if radius is bigger than this
+
+ double  MaxAngle Ignore angle bigger than this, eg 170 (degrees)
+
+ boolean AccelerateOut True to accelerate out of corner
+
+================================================================================
+PLIK: Path_StoreTemporary
+================================================================================
+
+Path.StoreTemporary
+ 
+ 
+
+ Path.StoreTemporary
+
+ Store a path created with CopyTemporary or OffsetTemporary in the AlphaCAM database.
+
+ Syntax
+
+ Path.StoreTemporary
+
+================================================================================
+PLIK: Path_TestInsidePath
+================================================================================
+
+Path.TestInsidePath
+ 
+ 
+
+ Path.TestInsidePath
+
+ See if a path is inside this path.
+
+ Syntax
+
+ path.TestInsidePath(Path2)
+
+ Path Path2 path to be tested
+
+ [Return] AcamResult  Return result, see remarks
+
+ Remarks
+
+ Path2 should be closed, and must not cross this path, but it may touch.
+
+ Return acamResultTRUE if this path is inside Path2, acamResultFALSE if outside,
+
+ acamResultUNKNOWN if unable to determine it.
+
+================================================================================
+PLIK: Path_TestIntersectPath
+================================================================================
+
+Path.TestIntersectPath
+ 
+ 
+
+ Path.TestIntersectPath
+
+ See if a path intersects with this path.
+
+ Syntax
+
+ path.TestIntersectPath (Path2, XShift2, YShift2)
+
+ Path Path2 path to be tested
+
+ double XShift2 Local X shift for Path2
+
+ double YShift2 Local Y shift for Path2
+
+ [Return] boolean  Return result, True if intersects
+
+ The example selects all geometries that intersect with the first geometry.
+
+ Dim Drw As Drawing 
+
+ Set Drw = App.ActiveDrawing 
+
+  
+
+ Drw.SetGeosSelected False 
+
+  
+
+ Dim P1 As Path, P2 As Path 
+
+ Set P1 = Drw.Geometries(1) 
+
+ For Each P2 In Drw.Geometries 
+
+ If Not (P1 Is P2) Then 
+
+ If P2.TestIntersectPath(P1, 0, 0) Then 
+
+ P2.Selected = True 
+
+ P2.Redraw 
+
+ End If 
+
+ End If 
+
+ Next P2
+
+================================================================================
+PLIK: Path_TrimWithCuttingGeos
+================================================================================
+
+Path.TrimWithCuttingGeos
+ 
+ 
+
+ Path.TrimWithCuttingGeos
+
+ Trim the path at intersection points with currently selected geometries, and discard one part.
+
+ Syntax
+
+ geo.TrimWithCuttingGeos (X, Y)
+
+ double X X coord of point on part to delete
+
+ double Y Y coord of point on part to delete
+
+================================================================================
+PLIK: PathObject
+================================================================================
+
+Path Object
+
+Path Object
+
+A single geometry or tool path - contains a list of 
+ line and arc elements.
+
+More:
+
+Path Properties
+
+================================================================================
+PLIK: Paths.GetSawNestPaths
+================================================================================
+
+Paths.GetSawNestPaths
+
+Paths.GetSawNestPaths
+
+For tool paths with a Saw tool, get a collection of 
+ Paths representing the external shape that the saw would make at the material 
+ top.
+
+Syntax
+
+Paths.GetSawNestPaths
+
+Return Paths
+
+Remarks
+
+The paths are not in a drawing so to see them use Path.MoveToDrawing, 
+ for example:
+
+Dim Ps As Paths
+
+Set Ps = App.ActiveDrawing.ToolPaths.GetSawNestPaths
+
+Dim P As Path
+
+For Each P In Ps
+
+    P.MoveToDrawing 
+ App.ActiveDrawing
+
+Next P
+
+================================================================================
+PLIK: Paths.GetSawPlacePaths
+================================================================================
+
+Paths.GetSawPlacePaths
+
+Paths.GetSawPlacePaths
+
+For tool paths with a Saw tool, get a collection of 
+ Paths representing the internal shape that the saw would make at the material 
+ top.
+
+Syntax
+
+Paths.GetSawNestPaths
+
+Return Paths
+
+Remarks
+
+The paths are not in a drawing so to see them use Path.MoveToDrawing, 
+ for example:
+
+Dim Ps As Paths
+
+Set Ps = App.ActiveDrawing.ToolPaths.GetSawPlacePaths
+
+Dim P As Path
+
+For Each P In Ps
+
+    P.MoveToDrawing 
+ App.ActiveDrawing
+
+Next P
+
+================================================================================
+PLIK: Paths_Add
+================================================================================
+
+Paths.Add
+ 
+ 
+
+ Paths.Add
+
+ Add a Path to the Collection. Only permitted if the Collection was created with Drawing.CreatePathCollection or Paths.Duplicate.
+
+ Syntax
+
+ geos.Add(Path)
+
+ Path Path Path object to add
+
+================================================================================
+PLIK: Paths_Append
+================================================================================
+
+Paths.Append
+ 
+ 
+
+ Paths.Append
+
+ Add paths in one collection to this one. Any that are already in the collection will be ignored. Only permitted if the Collection was created with Drawing.CreatePathCollection or Paths.Duplicate.
+
+ Syntax
+
+ geos.Append(Paths, First, Last)
+
+ Paths Paths Paths object to append
+
+ First Int Index of first path to append
+
+ Last Int Index of last path to append
+
+================================================================================
+PLIK: Paths_BreakPath
+================================================================================
+
+Paths.BreakPath
+ 
+ 
+
+ Paths.BreakPath
+
+ Break the given path at all intersection points with geometries in the collection. Returned collection includes all the resulting paths, including the first one.
+
+ Syntax
+
+ paths.BreakPath (Path)
+
+ Path Path Path to break.
+
+ [Return] Paths Returned resulting paths
+
+================================================================================
+PLIK: Paths_DragMove
+================================================================================
+
+Paths.DragMove
+ 
+ 
+
+ Paths.DragMove
+
+ Let the user graphically drag the paths to a new location.
+
+ See Path.DragMove.
+
+================================================================================
+PLIK: Paths_DragRotate
+================================================================================
+
+Paths.DragRotate
+ 
+ 
+
+ Paths.DragRotate
+
+ Let the user graphically drag the path to a new orientation.
+
+ Syntax
+
+ paths.DragRotate (Prompt, XBase, YBase, Angle)
+
+ String  Prompt Text to display in prompt bar
+
+ double  XBase X coordinate of base point
+
+ double  YBase Y coordinate of base point
+
+ [Return] double Angle Returned Angle in degrees
+
+ [Return] long  Return value is 0 if OK
+
+================================================================================
+PLIK: Paths_Duplicate
+================================================================================
+
+Paths.Duplicate
+ 
+ 
+
+ Paths.Duplicate
+
+ Duplicate the collection. The paths are not copied - this method just creates a new Paths collection referencing the same paths. The Add and Remove methods may be used on the new collection.
+
+ Syntax
+
+ paths.Duplicate
+
+ [Return] Paths Returned new collection
+
+================================================================================
+PLIK: Paths_GetExtentL
+================================================================================
+
+Paths.GetExtentL
+ 
+ 
+
+ Paths.GetExtentL
+
+ Get local Max / Min XY of paths in this collection.
+
+ Syntax
+
+ paths.GetExtentL (MinX, MinY, MaxX, MaxY)
+
+ Double MinX Returned Minimum X Local coordinate
+
+ Double MinY Returned Minimum Y Local coordinate
+
+ Double MaxX Returned Maximum X Local coordinate
+
+ Double MaxY Returned Maximum Y Local coordinate
+
+================================================================================
+PLIK: Paths_GetExtentXYG
+================================================================================
+
+Paths.GetExtentXYG
+ 
+ 
+
+ Paths.GetExtentXYG
+
+ Get global Max / Min XY of paths in this collection.
+
+ Syntax
+
+ paths.GetExtentXYG (MinX, MinY, MaxX, MaxY)
+
+ Double MinX Returned Minimum X Global coordinate
+
+ Double MinY Returned Minimum Y Global coordinate
+
+ Double MaxX Returned Maximum X Global coordinate
+
+ Double MaxY Returned Maximum Y Global coordinate
+
+================================================================================
+PLIK: Paths_Item
+================================================================================
+
+Paths.Item
+ 
+ 
+
+ Paths.Item
+
+ Return a member of the Collection. It is the default member of the object so VBA can use it without specifing the word Item.
+
+ Syntax
+
+ paths.Item(Index)
+
+ OR
+
+ paths(Index)
+
+ Long Index Index of required Path, 1 to Count
+
+ For example, the following gives the 4th geometry in the drawing:
+
+ App.ActiveDrawing.Geometries(4)
+
+ (App.ActiveDrawing.Geometries is a Paths object representing the geometries in the current AlphaCAM drawing).
+
+ See Collections.
+
+================================================================================
+PLIK: Paths_JoinGeosQuick
+================================================================================
+
+Paths.JoinGeosQuick
+ 
+ 
+
+ Paths.JoinGeosQuick
+
+ "Quick-join" the paths in the collection, geometries only. Paths will not be saved for undo, they will not be redrawn, no callbacks will be called.
+
+ Syntax
+
+ paths.JoinGeosQuick (Tolerance)
+
+ Double Tolerance Tolerance, set to
+
+================================================================================
+PLIK: Paths_MoveL
+================================================================================
+
+Paths.MoveL
+ 
+ 
+
+ Paths.MoveL
+
+ See Path.MoveL.
+
+================================================================================
+PLIK: Paths_Redraw
+================================================================================
+
+Paths.Redraw
+ 
+ 
+
+ Paths.Redraw
+
+ See Path.Redraw.
+
+================================================================================
+PLIK: Paths_Remove
+================================================================================
+
+Paths.Remove
+ 
+ 
+
+ Paths.Remove
+
+ Remove a Path from the Collection. Only permitted if the Collection was created with Drawing.CreatePathCollection, or Paths.Duplicate. The path is not deleted.
+
+ Syntax
+
+ geos.Remove(Path)
+
+ Path Path Path object to remove
+
+================================================================================
+PLIK: PathsObject
+================================================================================
+
+Paths Object
+
+Paths Object
+
+A Collection of Path 
+ objects.
+
+More:
+
+Paths Properties
+
+================================================================================
+PLIK: Polyline_AddLine
+================================================================================
+
+Polyline.AddLine
+ 
+ 
+
+ Polyline.AddLine
+
+ Add a line to a 3D polyline, start point is end point of last line, or point passed to Drawing.Create3DPolyline if this is the first line.
+
+ Syntax
+
+ geo.AddLine (X, Y, Z)
+
+ double  X X coordinate of end point
+
+ double  Y Y coordinate of end point
+
+ double  Z Z coordinate of end point
+
+================================================================================
+PLIK: Polyline_Finish
+================================================================================
+
+Polyline.Finish
+ 
+ 
+
+ Polyline.Finish
+
+ Finish 3D polyline.
+
+ Syntax
+
+ geo.Finish
+
+ [Return] Path  Pointer to Path Dispatch object
+
+================================================================================
+PLIK: PolylineObject
+================================================================================
+
+Polyline Object
+
+Polyline Object
+
+An object used to create a 3D Polyline, ie a set of 
+ connected 3D lines. Create it with Drawing.Create3DPolyline, 
+ use the Polyline.AddLine method to 
+ add lines, then finish with Polyline.Finish, 
+ which returns a Path object.
+
+================================================================================
+PLIK: Spline.ProjectToWorkPlane
+================================================================================
+
+Spline.ProjectToWorkPlane
+
+Spline.ProjectToWorkPlane
+
+Project this spline to given work plane.
+
+Syntax
+
+Sp.ProjectToWorkPlane (WP, Direction)
+
+WorkPlane WP The work plane to project to
+
+AcamProjectDirection Direction Project direction, 
+ acamProjectDirectionNORMAL_TO_OLD_PLANE or acamProjectDirectionNORMAL_TO_NEW_PLANE
+
+[Return] Spline  Spline object.
+
+ 
+
+Remarks
+
+This will project the spline vertices so there is no 
+ step length or tolerance parameters as in the Drawing project methods.
+
+================================================================================
+PLIK: Spline_Copy
+================================================================================
+
+Spline.Copy
+ 
+ 
+
+ Spline.Copy
+
+ Copy the spline and return a Spline object for the new spline.
+
+ Syntax
+
+ spline.Copy
+
+ [Return] Spline  Spline object.
+
+ Remarks
+
+ The spline will be added to the end of the list of splines.
+
+================================================================================
+PLIK: Spline_CreatePath
+================================================================================
+
+Spline.CreatePath
+ 
+ 
+
+ Spline.CreatePath
+
+ Create a geometry path from the spline.
+
+ Syntax
+
+ spline.CreatePath (Tolerance)
+
+ double Tolerance Tolerance to fit path to
+
+ [Return] Path  Path object
+
+================================================================================
+PLIK: Spline_EvaluateG
+================================================================================
+
+Spline.EvaluateG
+ 
+ 
+
+ Spline.EvaluateG
+
+ Evaluate the spline at the given point, returning global coordinates. The coordinates will be returned, and, optionally, the derivative values.
+
+ See EvaluateL for local coordinates.
+
+ Syntax
+
+ spline.EvaluateG (S, Flags)
+
+ double S Parameter value
+
+ AcamSplineEvaluate Flags acamEvaluateCOORDS or acamEvaluateALL
+
+ [Return] Variant  Returned array of doubles, see remarks
+
+ Remarks
+
+ If Flags is acamEvaluateCOORDS the returned array will contain the global X, Y and Z coordinates. For example, the following code will display the XYZ coordinates at the point on the spline where the parameter value is 0.5 (Usually the middle, but not always eg if the spline came from another CAD system):
+
+  Dim V
+
+  V = spline.EvaluateG (.5, acamEvaluateCOORDS)
+
+  MsgBox "X=" & V(0) & ", Y=" & V(1) & ", Z=" & V(2)
+
+ If Flags is acamEvaluateALL, the array will also contain the derivative values: 
+
+  V(3) dx/ds
+
+  V(4) dy/ds
+
+  V(5) dz/ds
+
+  V(6), V(7), V(8)  second derivatives.
+
+================================================================================
+PLIK: Spline_EvaluateL
+================================================================================
+
+Spline.EvaluateL
+ 
+ 
+
+ Spline.EvaluateL
+
+ Evaluate the spline at the given point, returning local coordinates. The coordinates will be returned, and, optionally, the derivative values.
+
+ See EvaluateG for global coordinates.
+
+ Syntax
+
+ spline.EvaluateG (S, Flags)
+
+ double S Parameter value
+
+ AcamSplineEvaluate Flags acamEvaluateCOORDS or acamEvaluateALL
+
+ [Return] Variant  Returned array of doubles, see remarks
+
+ Remarks
+
+ If Flags is acamEvaluateCOORDS the returned array will contain the local X, Y and Z coordinates. For example, the following code will display the XYZ coordinates at the point on the spline where the parameter value is 0.5 (Usually the middle, but not always eg if the spline came from another CAD system):
+
+  Dim V
+
+  V = spline.EvaluateL (.5, acamEvaluateCOORDS)
+
+  MsgBox "X=" & V(0) & ", Y=" & V(1) & ", Z=" & V(2)
+
+ If Flags is acamEvaluateALL, the array will also contain the derivative values: 
+
+  V(3) dx/ds
+
+  V(4) dy/ds
+
+  V(5) dz/ds
+
+  V(6), V(7), V(8)  second derivatives.
+
+================================================================================
+PLIK: Spline_GetLayer
+================================================================================
+
+Spline.GetLayer
+ 
+ 
+
+ Spline.GetLayer
+
+ Get the layer for the spline. An object of type Layer will be returned.
+
+ Syntax
+
+ spline.GetLayer
+
+ [Return] Layer  Layer object
+
+================================================================================
+PLIK: Spline_GetWorkPlane
+================================================================================
+
+Spline.GetWorkPlane
+ 
+ 
+
+ Spline.GetWorkPlane
+
+ Get the work plane for the spline. An object of type WorkPlane will be returned. If the spline is not in a work plane the special value Nothing will be returned, which may be used in tests.
+
+ Syntax
+
+ spline.GetWorkPlane
+
+ [Return] WorkPlane  WorkPlane object
+
+================================================================================
+PLIK: Spline_MirrorG
+================================================================================
+
+Spline.MirrorG
+ 
+ 
+
+ Spline.MirrorG
+
+ Mirror the spline using a work plane in the 3D Global coordinate system.
+
+ Syntax
+
+ spline.MirrorG (WP)
+
+ WorkPlane WP Work plane to mirror in
+
+ Remarks
+
+ The spline (which may be any spline, in a work plane or 2D flat land or 3D global) will be mirrored in global XYZ, using the given work plane as the plane to mirror in.
+
+================================================================================
+PLIK: Spline_MirrorL
+================================================================================
+
+Spline.MirrorL
+ 
+ 
+
+ Spline.MirrorL
+
+ Mirror the spline about a line in its 2D Local coordinate system.
+
+ Syntax
+
+ spline.MirrorL (X1, Y1, X2, Y2)
+
+ double X1 Local X coordinate of first point on mirror line
+
+ double Y1 Local Y coordinate of first point on mirror line
+
+ double X2 Local X coordinate of second point on mirror line
+
+ double Y2 Local Y coordinate of second point on mirror line
+
+================================================================================
+PLIK: Spline_MoveG
+================================================================================
+
+Spline.MoveG
+ 
+ 
+
+ Spline.MoveG
+
+ Move the spline in the 3D Global coordinate system.
+
+ Syntax
+
+ spline.MoveG (X, Y, Z)
+
+ double X Distance to move in global X
+
+ double Y Distance to move in global Y
+
+ double Z Distance to move in global Z
+
+ Remarks
+
+ If the spline is in a work plane it will be moved to a new work plane if necessary. If it is not in a work plane it will be moved in global XYZ by the specified distances.
+
+================================================================================
+PLIK: Spline_MoveL
+================================================================================
+
+Spline.MoveL
+ 
+ 
+
+ Spline.MoveL
+
+ Move the spline in its 2D Local coordinate system.
+
+ Syntax
+
+ spline.MoveL (X, Y)
+
+ double X Distance to move in local X
+
+ double Y Distance to move in local Y
+
+ Remarks
+
+ If the spline is in a work plane it will be moved in that plane by the specified distances. If it is not in a work plane it will be moved in global XY by the specified distances.
+
+================================================================================
+PLIK: Spline_Redraw
+================================================================================
+
+Spline.Redraw
+ 
+ 
+
+ Spline.Redraw
+
+ Redraw this spline.
+
+ Syntax
+
+ spline.Redraw
+
+================================================================================
+PLIK: Spline_Reverse
+================================================================================
+
+Spline.Reverse
+ 
+ 
+
+ Spline.Reverse
+
+ Reverse this spline.
+
+ Syntax
+
+ spline.Reverse
+
+================================================================================
+PLIK: Spline_RotateG
+================================================================================
+
+Spline.RotateG
+ 
+ 
+
+ Spline.RotateG
+
+ Rotate the spline in the 3D Global coordinate system, about a specified axis.
+
+ Syntax
+
+ spline.RotateG (Angle, X1, Y1, Z1, X2, Y2, Z2)
+
+ double Angle Angle in degrees to rotate by, CW -ve. 
+
+ double X1
+
+ double Y1 Global XYZ coordinates of first point on axis to rotate about.
+
+ double Z1
+
+ double X2
+
+ double Y2 Global XYZ coordinates of second point on axis to rotate about.
+
+ double Z2
+
+ Remarks
+
+ The spline (which may be any spline, in a work plane or 2D flat land or 3D global) will be rotated in global XYZ about the axis given by the 3D line from (X1, Y1, Z1) to (X2, Y2, Z2).
+
+================================================================================
+PLIK: Spline_RotateL
+================================================================================
+
+Spline.RotateL
+ 
+ 
+
+ Spline.RotateL
+
+ Rotate the spline in its 2D Local coordinate system.
+
+ Syntax
+
+ spline.RotateL (Angle, BaseX, BaseY)
+
+ double Angle Angle in degrees to rotate by, CW -ve. 
+
+ double BaseX Local X coordinate of point to rotate about
+
+ double BaseY Local Y coordinate of point to rotate about
+
+ Remarks
+
+ If the spline is in a work plane it will be rotated in that plane. If it is not in a work plane it will be rotated in global XY.
+
+================================================================================
+PLIK: Spline_ScaleG
+================================================================================
+
+Spline.ScaleG
+ 
+ 
+
+ Spline.ScaleG
+
+ Scale the spline in the 3D Global coordinate system, by a single factor.
+
+ Syntax
+
+ spline.ScaleG (Factor, BaseX, BaseY, BaseZ)
+
+ double Factor Scale factor
+
+ double BaseX Global X coordinate of point to scale about.
+
+ double BaseY Global Y coordinate of point to scale about.
+
+ double BaseZ Global Z coordinate of point to scale about.
+
+ Remarks
+
+ The spline (which may be any spline, in a work plane or 2D flat land or 3D global) will be scaled in global XYZ about the given base point.
+
+================================================================================
+PLIK: Spline_ScaleL
+================================================================================
+
+Spline.ScaleL
+ 
+ 
+
+ Spline.ScaleL
+
+ Scale the spline in its 2D Local coordinate system, by a single factor.
+
+ Syntax
+
+ spline.ScaleL (Factor, BaseX, BaseY)
+
+ double Factor Scale factor
+
+ double BaseX Local X coordinate of point to scale about.
+
+ double BaseY Local Y coordinate of point to scale about.
+
+ Remarks
+
+ If the spline is in a work plane it will be scaled in that plane. If it is not in a work plane it will be scaled in global XY.
+
+================================================================================
+PLIK: Spline_ScaleL2
+================================================================================
+
+Spline.ScaleL2
+ 
+ 
+
+ Spline.ScaleL2
+
+ Scale the spline in its 2D Local coordinate system by different factors in X and Y.
+
+ Syntax
+
+ spline.ScaleL2 (FactorX, FactorY, BaseX, BaseY)
+
+ double FactorX Scale factor in X
+
+ double FactorY Scale factor in Y
+
+ double BaseX Local X coordinate of point to scale about.
+
+ double BaseY Local Y coordinate of point to scale about.
+
+ Remarks
+
+ If the spline is in a work plane it will be scaled in that plane. If it is not in a work plane it will be scaled in global XY.
+
+================================================================================
+PLIK: Spline_SetLayer
+================================================================================
+
+Spline.SetLayer
+ 
+ 
+
+ Spline.SetLayer
+
+ Set the layer for the spline.
+
+ Syntax
+
+ spline.SetLayer (layer)
+
+ Layer layer layer object
+
+================================================================================
+PLIK: Spline_SetWorkPlane
+================================================================================
+
+Spline.SetWorkPlane
+ 
+ 
+
+ Spline.SetWorkPlane
+
+ Set the current work plane for the spline.
+
+ Syntax
+
+ spline.SetWorkPlane (wp)
+
+ WorkPlane  wp WorkPlane object
+
+================================================================================
+PLIK: SplineAdded
+================================================================================
+
+SplineAdded
+ 
+ 
+
+ SplineAdded
+
+ Sub SplineAdded (S As Spline)
+
+ Called when a single spline object is added.
+
+================================================================================
+PLIK: SplineObject
+================================================================================
+
+Spline Object
+
+Spline Object
+
+A spline curve.
+
+More:
+
+Spline Properties
+
+================================================================================
+PLIK: SubOperation_OrderToolPaths
+================================================================================
+
+SubOperation.OrderToolPaths
+
+SubOperation.OrderToolPaths
+
+Order the tool paths in this sub-operation.
+
+Syntax
+
+SubOp.OrderToolPaths (FirstPath)
+
+Path  FirstPath First path in the sub-operation
+
+================================================================================
+PLIK: Surface_IntersectLine
+================================================================================
+
+Surface.IntersectLine
+ 
+ 
+
+ Surface.IntersectLine
+
+ Find the intersection of a 3D line with this surface.
+
+ Syntax
+
+ surf.IntersectLine (X1, Y1, Z1, X2, Y2, Z2, XP, YP, ZP, S, T)
+
+ double X1 X Global coordinate of a point on the line
+
+ double Y1 Y
+
+ double Z1 Z
+
+ double X2 X Global coordinate of any other point on the line
+
+ double Y2 Y
+
+ double Z2 Z
+
+ double* XP Returned X Global coordinate of intersection point (If found)
+
+ double* YP Y
+
+ double* ZP Z
+
+ double* S Returned S coordinate of intersection point
+
+ double* T Returned T coordinate of intersection point
+
+ [Return] boolean  True if OK, False if unable to find the intersection point.
+
+ Remarks
+
+ Note that the returned parameters (XP, YP, ZP, S and T) must be declared as double.
+
+ S and T can be used in a call to Surface.Evaluate, if the surface normal is required.
+
+================================================================================
+PLIK: Surface_IsPointTrimmed
+================================================================================
+
+Surface.IsPointTrimmed
+ 
+ 
+
+ Surface.IsPointTrimmed
+
+ Return True if the given S,T point is in a trimmed region of the surface.
+
+ Syntax
+
+ surface.IsPointTrimmed (S, T)
+
+ double  S S parameter value
+
+ double  T T parameter value
+
+ [Return] boolean True if point is in trimmed region of surface
+
+ See exampleSurface Example
+
+================================================================================
+PLIK: Surface_SplinesFromEdges
+================================================================================
+
+Surface.SplinesFromEdges
+
+Surface.SplinesFromEdges
+
+Create splines from the edges of the surface.
+
+Syntax
+
+surface.SplinesFromEdges
+
+[Return] Splines  Collection of Splines
+
+================================================================================
+PLIK: Surface_TrimWithPath
+================================================================================
+
+Surface.TrimWithPath
+
+Surface.TrimWithPath
+
+Add a trimming boundary to the surface. The path should 
+ be closed and orientated so that points to the right are invalid, ie if 
+ the path is CW it represents a hole, if the path is CCW it represents 
+ an outer boundary. The ToolSide property of the path should be acamRIGHT.
+
+The path should be a 2D path, the X coordinate corresponds 
+ to the S parameter of the surface, Y corresponds to T.
+
+Syntax
+
+Surface.TrimWithPath (Path)
+
+Path  Path Trimming path
+
+Remarks
+
+Call FinishTrimming 
+ when all trim paths have been added.
+
+================================================================================
+PLIK: Text_ConvertToGeometry
+================================================================================
+
+Text.ConvertToGeometry
+ 
+ 
+
+ Text.ConvertToGeometry
+
+ Convert the text to geometry lines and arcs. The text will be deleted.
+
+ Syntax
+
+ Text.ConvertToGeometry
+
+ [Return] Paths The returned geometry as a Paths object
+
+================================================================================
+PLIK: Text_ConvertToTemporaryGeometry
+================================================================================
+
+Text.ConvertToTemporaryGeometry
+ 
+ 
+
+ Text.ConvertToTemporaryGeometry
+
+ Convert the text to temporary geometry lines and arcs. The text will NOT be deleted. The paths will NOT be added to the database. Use Path.StoreTemporary if you want to store them in the database.
+
+ Syntax
+
+ Text.ConvertToTemporaryGeometry
+
+ [Return] Paths The returned geometry as a Paths object
+
+================================================================================
+PLIK: TextLineObject
+================================================================================
+
+TextLine Object
+ 
+ 
+
+ TextLine Object
+
+ An object representing one line of text in a Text object.
+
+ More:
+
+ TextLine Properties
+
+================================================================================
+PLIK: ToolPathsUpdated
+================================================================================
+
+ToolPathsUpdated
+ 
+ 
+
+ ToolPathsUpdated
+
+ Sub ToolPathsUpdated
+
+ Called when tool paths are added or changed.
+
+================================================================================
+PLIK: TurnData_GotoToolChangePoint
+================================================================================
+
+TurnData.GotoToolChangePoint
+ 
+ 
+
+ TurnData.GotoToolChangePoint
+
+ Goto Tool Change Point, set with SetToolChangePoint. Will be one move if SetRapidControlPoint is not called first.
+
+ Syntax
+
+ td.GotoToolChangePoint
+
+================================================================================
+PLIK: TurnData_ManualToolPath
+================================================================================
+
+TurnData.ManualToolPath
+ 
+ 
+
+ TurnData.ManualToolPath
+
+ Start a manual tool path, using properties set for this TurnData object. An object of type TurnManualToolPath will be returned. Its methods may then be used to build up one or more tool paths.
+
+ Syntax
+
+ td.ManualToolPath (StartZ, StartRad)
+
+ double StartZ Z coordinate of start point
+
+ double StartRad Radius coordinate of start point
+
+ [Return] TurnManualToolPath returned TurnManualToolPath object
+
+================================================================================
+PLIK: TurnData_SetRapidControlPoint
+================================================================================
+
+TurnData.SetRapidControlPoint
+ 
+ 
+
+ TurnData.SetRapidControlPoint
+
+ Set the point to control approach or retract rapids. If not set, rapid will be one move.
+
+ Syntax
+
+ td.SetRapidControlPoint (Z, Rad)
+
+ Double Z Z coordinate of point
+
+ Double Rad Radius coordinate of point
+
+ Remarks
+
+ This point controls the rapid moves for the NEXT method call. For example, if called before a machining method (for example, Finish) the tool will rapid from the current position (the tool change point, or the last point of the previous operation) to this point, and from this point to the first feed. If this method is not called, only one rapid move will be used.
+
+ If this method is called before a call to GotoToolChangePoint, the tool will rapid to this point and then to the tool change point.
+
+ See Finish for an example.
+
+================================================================================
+PLIK: TurnData_SetSyncPoints
+================================================================================
+
+TurnData.SetSyncPoints
+ 
+ 
+
+ TurnData.SetSyncPoints
+
+ Set synchronisation points for multi-turret machining.
+
+ Syntax
+
+ td.SetSyncPoints (Path1, Z1, Rad1, Path2, Z2, Rad2)
+
+ Path Path1 First Toolpath
+
+ Double Z1 Z coordinate of first sync point
+
+ Double Rad1 Radius coordinate of first sync point
+
+ Path Path2 Second Toolpath
+
+ Double Z2 Z coordinate of second sync point
+
+ Double Rad2 Radius coordinate of second sync point
+
+================================================================================
+PLIK: TurnData_SetToolChangePoint
+================================================================================
+
+TurnData.SetToolChangePoint
+ 
+ 
+
+ TurnData.SetToolChangePoint
+
+ Set the tool change point.
+
+ Syntax
+
+ td.SetToolChangePoint (Z, Rad)
+
+ Double Z Z coordinate of tool change point
+
+ Double Rad Radius coordinate of tool change point
+
+================================================================================
+PLIK: TurnData_SetToolChangePointForTurret
+================================================================================
+
+TurnData.SetToolChangePointForTurret
+ 
+ 
+
+ TurnData.SetToolChangePointForTurret
+
+ Set the tool change point for any turret.
+
+ Syntax
+
+ td.SetToolChangePointForTurret (Z, Rad, Turret, Station)
+
+ Double Z Z coordinate of tool change point
+
+ Double Rad Radius coordinate of tool change point
+
+ AcamLatheTurret Turret acamTurretABOVE_CL or acamTurretBELOW_CL
+
+ AcamLatheStation Station acamStationFRONT or acamStationBACK
+
+================================================================================
+PLIK: TurnData_SetToolSafePoint
+================================================================================
+
+TurnData.SetToolSafePoint
+ 
+ 
+
+ TurnData.SetToolSafePoint
+
+ Set the point to control roughing, or to approach grooving.
+
+ Syntax
+
+ td.SetToolSafePoint (Z, Rad)
+
+ Double Z Z coordinate of point
+
+ Double Rad Radius coordinate of point
+
+ Remarks
+
+ For Diameter Roughing, this point may be set to indicate that part of the billet has been removed for example by Facing. This is equivalent to the "Set Area to be Cut (Click in Box)" prompt when Diameter Roughing is used interactively.
+
+ If it is not set the whole billet will be used.
+
+ For Grooving, this point MUST be set. It sets the start of the first feed. For Single Cut (Diameter) grooving, only the Radius coordinate will be used.
+
+================================================================================
+PLIK: TurnManualToolPath_AddArc2Point
+================================================================================
+
+TurnManualToolPath.AddArc2Point
+ 
+ 
+
+ TurnManualToolPath.AddArc2Point
+
+ Add an arc, start point is end point of last line or arc, or point passed to TurnData.ManualToolPath if this is the first line or arc.
+
+ Syntax
+
+ MTP.AddArc2Point (Z2, Rad2, Z3, Rad3)
+
+ double Z2  Z coordinate of second point
+
+ double  Rad2  Radius coordinate of second point
+
+ double  Z3  Z coordinate of end point
+
+ double  Rad3  Radius coordinate of end point
+
+================================================================================
+PLIK: TurnManualToolPath_AddArcCenterIncludedAngle
+================================================================================
+
+TurnManualToolPath.AddArcCenterIncludedAngle
+ 
+ 
+
+ TurnManualToolPath.AddArcCenterIncludedAngle
+
+ Add an arc, start point is end point of last line or arc, or point passed to TurnData.ManualToolPath if this is the first line or arc.
+
+ MTP.AddArcCenterIncludedAngle (ZCen, RadCen, Angle)
+
+ double  ZCen  Z coordinate of center point
+
+ double  RadCen  Radius coordinate of center point
+
+ double  Angle  Included angle in degrees, CW -ve
+
+================================================================================
+PLIK: TurnManualToolPath_AddArcPointCenter
+================================================================================
+
+TurnManualToolPath.AddArcPointCenter
+ 
+ 
+
+ TurnManualToolPath.AddArcPointCenter
+
+ Add an arc, start point is end point of last line or arc, or point passed to TurnData.ManualToolPath if this is the first line or arc.
+
+ Syntax
+
+ MTP.AddArcPointCenter (Z, Rad, ZCen, RadCen, CW)
+
+ double  Z  Z coordinate of end point
+
+ double  Rad  Radius coordinate of end point
+
+ double  ZCen  Z coordinate of center point
+
+ double  RadCen  Radius coordinate of center point
+
+ boolean  CW  True for CW, False for CCW
+
+================================================================================
+PLIK: TurnManualToolPath_AddArcPointRadius
+================================================================================
+
+TurnManualToolPath.AddArcPointRadius
+ 
+ 
+
+ TurnManualToolPath.AddArcPointRadius
+
+ Add an arc, start point is end point of last line or arc, or point passed to TurnData.ManualToolPath if this is the first line or arc.
+
+ Syntax
+
+ MTP.AddArcPointRadius (Z, Rad, Radius, CW, Over180)
+
+ double   Z  Z coordinate of end point
+
+ double   Rad  Radius coordinate of end point
+
+ double   Radius  Arc radius
+
+ boolean  CW  True for CW, False for CCW
+
+ boolean  Over180  True if included angle is more than 180 degrees
+
+================================================================================
+PLIK: TurnManualToolPath_AddLine
+================================================================================
+
+TurnManualToolPath.AddLine
+ 
+ 
+
+ TurnManualToolPath.AddLine
+
+ Add a feed line, start point is end point of last line or arc, or point passed to TurnData.ManualToolPath if this is the first line or arc.
+
+ Syntax
+
+ MTP.AddLine (Z, Rad)
+
+ double  Z Z coordinate of end point
+
+ double  Rad Radius coordinate of end point
+
+================================================================================
+PLIK: TurnManualToolPath_AddRapid
+================================================================================
+
+TurnManualToolPath.AddRapid
+ 
+ 
+
+ TurnManualToolPath.AddRapid
+
+ Add a rapid line, start point is end point of last line or arc, or point passed to TurnData.ManualToolPath if this is the first line or arc.
+
+ Syntax
+
+ MTP.AddRapid (Z, Rad)
+
+ double  Z Z coordinate of end point
+
+ double  Rad Radius coordinate of end point
+
+================================================================================
+PLIK: TurnManualToolPath_AddTanArcPoint
+================================================================================
+
+TurnManualToolPath.AddTanArcPoint
+ 
+ 
+
+ TurnManualToolPath.AddTanArcPoint
+
+ Add an arc, tangential to last line or arc, start point is end point of last line or arc. Can not be the first line or arc in a geometry.
+
+ Syntax
+
+ MTP.AddTanArcPoint(Z, Rad)
+
+ double  Z  Z coordinate of end point
+
+ double  Rad  Radius coordinate of end point
+
+================================================================================
+PLIK: TurnManualToolPath_Finish
+================================================================================
+
+TurnManualToolPath.Finish
+ 
+ 
+
+ TurnManualToolPath.Finish
+
+ Finish the tool path. The tool path will be split into more than one path if necessary, and added to the AlphaCAM database. 
+
+ Syntax
+
+ MTP.Finish
+
+ [Return] Paths  Returned Paths object
+
+ Remarks
+
+ A tool path consists of usually one or more leading rapids, then feeds, then optionally one or more trailing rapids. It may not have internal rapids. If it would have it will be split into more than one path.
+
+ The returned Paths object contains the resulting paths.
+
+================================================================================
+PLIK: TurnManualToolPathObject
+================================================================================
+
+TurnManualToolPath Object
+
+TurnManualToolPath Object
+
+An object used to create a manual turning tool path 
+ in Lathe.
+
+To do a manual tool path first set the tool change position 
+ and select a tool, then use App.CreateTurnData, set the feeds and speeds 
+ etc. if required, then use TurnData.ManualToolPath to create a TurnManualToolPath 
+ object. Call the methods of this object to add lines and arcs to the manual 
+ tool path. Call Finish to finish the tool path.
+
+================================================================================
+PLIK: TurnProgrammingPointObject
+================================================================================
+
+TurnProgrammingPoint Object
+ 
+ 
+
+ TurnProgrammingPoint Object
+
+ An object representing a programming point on a Turning Tool with multiple programming points. A LatheTool object has a property which is a Collection of these objects, called TurnProgrammingPoints
+
+ Use the properties of this object to determine which programming point to use, and use LatheTool.SetTurnProgrammingPoint to set the point.
+
+ More:
+
+ TurnProgrammingPoint Properties
+
+================================================================================
+PLIK: WireData_SetAuxiliaryGeometry
+================================================================================
+
+WireData.SetAuxiliaryGeometry
+
+WireData.SetAuxiliaryGeometry
+
+Set the auxiliary geometry for Cut4AxisShape.
+
+Syntax
+
+wd.SetAuxiliaryGeometry (Geo)
+
+Path Geo, a Path object
+
+================================================================================
+PLIK: WireData_SetProgrammingGeometry
+================================================================================
+
+WireData.SetProgrammingGeometry
+
+WireData.SetProgrammingGeometry
+
+Set the programming geometry for Cut4AxisShape.
+
+Syntax
+
+wd.SetProgrammingGeometry (Geo)
+
+Path Geo, a Path object
+
+================================================================================
+PLIK: WireData_SetStartCircle
+================================================================================
+
+WireData.SetStartCircle
+ 
+ 
+
+ WireData.SetStartCircle
+
+ Set the start circle if StartInMaterial is True.
+
+ Syntax
+
+ wd.SetStartCircle (Geo)
+
+ Path Geo geometry of circle, as a Path object
+
+ Remarks
+
+ There can be only one start circle for each call to Cut2AxisShape so if multiple geometries are to be cut they will have to use the same start circle. If this is not satisfactory call SetStartCircle and Cut2AxisShape once for each geometry, eg:
+
+ geo1.Selected = True
+
+ wd.SetStartCircle circle1
+
+ wd.Cut2AxisShape
+
+ geo2.Selected = True
+
+ wd.SetStartCircle circle2
+
+ wd.Cut2AxisShape
+
+================================================================================
+PLIK: WireData_SetStartElement
+================================================================================
+
+WireData.SetStartElement
+ 
+ 
+
+ WireData.SetStartElement
+ Set the start element if StartInMaterial and MakeLeadInPerp are True.
+
+ Syntax
+
+ wd.SetStartElement (Elem)
+
+ Element Elem line or arc, as an Element object
+
+================================================================================
+PLIK: WorkPlane.IntersectPath
+================================================================================
+
+WorkPlane.IntersectPath
+
+WorkPlane.IntersectPath
+
+Find the intersection of the line elements in the given 
+ path with this work plane. Return number of intersections found.
+
+Syntax
+
+wp.IntersectPath (Path, XP, YP, ZP)
+
+Path Path The path to intersect with - only line elements 
+ will be used
+
+Variant XP Returned X Global coordinate of intersection 
+ point (If found)
+
+Variant YP Y
+
+Variant ZP Z
+
+[Return] long, number of intersection points found
+
+Remarks
+
+Note that the returned parameters (XP, YP and ZP) must 
+ be declared as Variant. They are arrays, first element at 0.
+
+Example:
+
+    App.New
+
+    Dim 
+ Drw As Drawing
+
+    Set 
+ Drw = App.ActiveDrawing
+
+    Dim 
+ WP As WorkPlane
+
+    Set 
+ WP = Drw.CreateWorkPlane(0, 0, 0, 0, 1, 0, 0, 0, 1)
+
+    Dim 
+ P As Path
+
+    Set 
+ P = Drw.CreateRectangle(0, 0, 10, 10)
+
+    Dim 
+ X, Y, Z ' default is Variant
+
+    Dim 
+ N As Long
+
+    N 
+ = WP.IntersectPath(P, X, Y, Z)
+
+    
+
+    If 
+ N = 2 Then
+
+        Dim 
+ PL As PolyLine
+
+        Set 
+ PL = Drw.Create3DPolyline(X(0), Y(0), Z(0))
+
+        PL.AddLine 
+ X(1), Y(1), Z(1)
+
+        PL.Finish
+
+    End 
+ If
+
+================================================================================
+PLIK: WorkPlane_IntersectLine
+================================================================================
+
+WorkPlane.IntersectLine
+ 
+ 
+
+ WorkPlane.IntersectLine
+
+ Find the intersection of a 3D line with this work plane.
+
+ Syntax
+
+ wp.IntersectLine (X1, Y1, Z1, X2, Y2, Z2, XP, YP, ZP)
+
+ double X1 X Global coordinate of a point on the line
+
+ double Y1 Y
+
+ double Z1 Z
+
+ double X2 X Global coordinate of any other point on the line
+
+ double Y2 Y
+
+ double Z2 Z
+
+ double* XP Returned X Global coordinate of intersection point (If found)
+
+ double* YP Y
+
+ double* ZP Z
+
+ [Return] boolean  True if OK, False if unable to find the intersection point.
+
+ Remarks
+
+ Note that the returned parameters (XP, YP and ZP) must be declared as double.
+
+ Example:
+
+  Dim drw As Drawing
+
+  Set drw = App.ActiveDrawing
+
+  Dim wp As WorkPlane
+
+  Set wp = drw.GetWorkPlane
+
+  If wp Is Nothing Then
+
+   MsgBox "There must be a Current Work Plane"
+
+   end
+
+  End If
+
+  Dim p As Path
+
+  Set p = drw.UserSelectOneGeo("Select Geometry to find Intersection with WP")
+
+  If Not (p Is Nothing) Then
+
+   Dim e1 As Element
+
+   Set e1 = p.GetLastElem
+
+   Dim xp As Double, yp As Double, zp As Double
+
+   ok = wp.IntersectLine (e1.StartXG, e1.StartYG, e1.StartZG, e1.EndXG, e1.EndYG, e1.EndZG, xp, yp, zp)
+
+   If ok Then
+
+    ' Draw a vertical 3D polyline at the intersection point
+
+    Dim p3 As PolyLine
+
+    Set p3 = drw.Create3DPolyline(xp, yp, zp)
+
+    p3.AddLine xp, yp, zp + 10
+
+    p3.Finish
+
+   Else
+
+    MsgBox "Unable to find intersection point"
+
+   End If 
+
+  End If
+
+================================================================================
+
+

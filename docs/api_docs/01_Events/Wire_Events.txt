@@ -1,0 +1,75 @@
+================================================================================
+SEKCJA: 01_Events/Wire_Events.txt
+Wygenerowano z acAPI.bas
+================================================================================
+
+PLIK: BeforeCut2AxisShapeEvent_Wireonly_
+================================================================================
+
+BeforeCut2AxisShape Event (Wire only)
+ 
+ 
+
+ BeforeCut2AxisShape Event (Wire only)
+
+ Function BeforeCut2AxisShape
+
+ Called before AlphaCAM does the Cut 2-Axis Shapes command when the user has selected the Machine / Cut 2-Axis Shapes command.
+
+ A number should be returned. There are two possible return values:
+
+ BeforeCut2AxisShape = 0
+
+ AlphaCAM will do the normal command.
+
+ BeforeCut2AxisShape = 1
+
+ AlphaCAM will do nothing - your routine should do everything required for the command - show dialog box(es), select geometries, make the tool paths (using WireData.Cut2AxisShape) etc.
+
+ For example:
+
+  Function BeforeCut2AxisShape
+
+   ' Do my code for special cuts
+
+   BeforeCut2AxisShape = 1
+
+  End Function
+
+================================================================================
+PLIK: BeforeCut4AxisShapeEvent_Wireonly_
+================================================================================
+
+BeforeCut4AxisShape Event (Wire only)
+ 
+ 
+
+ BeforeCut4AxisShape Event (Wire only)
+
+ Function BeforeCut4AxisShape
+
+ Called before AlphaCAM does the Cut 4-Axis Shape command when the user has selected the Machine / Cut 4-Axis Shape command.
+
+ A number should be returned. There are two possible return values:
+
+ BeforeCut4AxisShape = 0
+
+ AlphaCAM will do the normal command.
+
+ BeforeCut4AxisShape = 1
+
+ AlphaCAM will do nothing - your routine should do everything required for the command - show dialog box(es), select geometries, make the tool paths etc.
+
+ For example:
+
+  Function BeforeCut4AxisShape
+
+   ' Do my code for special cuts
+
+   BeforeCut4AxisShape = 1
+
+  End Function
+
+================================================================================
+
+

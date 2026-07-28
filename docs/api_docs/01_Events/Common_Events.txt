@@ -1,0 +1,1098 @@
+================================================================================
+SEKCJA: 01_Events/Common_Events.txt
+Wygenerowano z acAPI.bas
+================================================================================
+
+PLIK: AfterCreateNcEvent
+================================================================================
+
+AfterCreateNc Event
+
+AfterCreateNc Event
+
+Sub AfterCreateNc
+
+Called after AlphaCAM has output or listed the NC code. 
+ Usually used to reset anything done in BeforeCreateNc.
+
+================================================================================
+PLIK: AfterInputCadEvent
+================================================================================
+
+AfterInputCad Event
+ 
+ 
+
+ AfterInputCad Event
+
+ Sub AfterInputCad (CadType As Integer, FileName As String)
+
+ Called after AlphaCAM has input a CAD file.
+
+ CadType is an integer giving the type of CAD file. It will have one of the following values:
+
+ acamDXF
+
+ acamDWG
+
+ acamIGES
+
+ acamCADL
+
+ acamVDA
+
+ acamANVIL
+
+ acamXYZ
+
+ acamSTL
+
+ FileName is the complete path name of the file that has been input.
+
+================================================================================
+PLIK: AfterInputNcEvent
+================================================================================
+
+AfterInputNc Event
+ 
+ 
+
+ AfterInputNc Event
+
+ Sub AfterInputNc (FileName As String)
+
+ Called after AlphaCAM has input an NC file.
+
+ FileName is the complete path name of the file that has been input.
+
+================================================================================
+PLIK: AfterOpenFileEvent
+================================================================================
+
+AfterOpenFile Event
+ 
+ 
+
+ AfterOpenFile Event
+
+ Sub AfterOpenFile (FileName As String)
+
+ Called after AlphaCAM has opened an AlphaCAM drawing. FileName is the complete path name of the file that has been opened.
+
+ The example will write the name of each opened file to a log file, along with the date and time when it was opened:
+
+  Sub AfterOpenFile (FileName As String)
+
+    SysDate$ = Date
+
+    SysTime$ = Time
+
+    Open "c:\temp\log.txt" For Append As #1
+
+    Print #1, SysDate$, ", ", SysTime$, " - Opened - ", FileName
+
+    Close #1 
+
+  End Sub
+
+================================================================================
+PLIK: AfterOutputNcEvent
+================================================================================
+
+AfterOutputNc Event
+ 
+ 
+
+ AfterOutputNc Event
+
+ Sub AfterOutputNc (FileName As String)
+
+ Called after AlphaCAM has saved the NC code to a file. FileName is the complete path name of the file that has been saved.
+
+================================================================================
+PLIK: AfterSaveFileEvent
+================================================================================
+
+AfterSaveFile Event
+ 
+ 
+
+ AfterSaveFile Event
+
+ Sub AfterSaveFile (FileName As String)
+
+ Called after AlphaCAM has saved an AlphaCAM drawing, with the File / Save or File / Save As commands, or on Exit. FileName is the complete path name of the file that has been saved.
+
+ The example will write the name of each saved file to a log file, along with the date and time when it was saved:
+
+  Sub AfterSaveFile (FileName As String)
+
+   SysDate$ = Date
+
+   SysTime$ = Time
+
+   Open "c:\temp\log.txt" For Append As #1
+
+   Print #1, SysDate$, ", ", SysTime$, " - Saved - ", FileName
+
+   Close #1 
+
+  End Sub
+
+================================================================================
+PLIK: AfterSelectToolEvent
+================================================================================
+
+AfterSelectTool Event
+ 
+ 
+
+ AfterSelectTool Event
+
+ Sub AfterSelectTool (Tool As MillTool)
+
+ Called after AlphaCAM has selected a tool.
+
+ Tool is an object variable representing the selected tool. It may be used to inspect and/or modify the properties of the tool.
+
+ For example:
+
+  Sub AfterSelectTool (Tool As MillTool)
+
+   If Tool.Number = 55 Then
+
+    Tool.FixedSpeed = 500
+
+    Tool.FixedFeed = 65
+
+   End If
+
+  End Sub
+
+================================================================================
+PLIK: BeforeChangeTool_Event
+================================================================================
+
+BeforeChangeTool Event
+
+BeforeChangeTool Event
+
+Function BeforeChangeTool As String
+
+Called before AlphaCAM shows tool selection dialog box 
+ when the "Change" button is clicked in a machining dialog box. 
+ 
+
+A string should be returned. There are three possible 
+ forms of return string:
+
+BeforeChangeTool = "0"
+
+AlphaCAM will call the BeforeSelectTool 
+ event.
+
+BeforeChangeTool = filename
+
+AlphaCAM will use the tool in the given file name. This 
+ should be a file produced by the Machine 
+ / Define Tool command in AlphaCAM.
+
+BeforeChangeTool = "2"
+
+AlphaCAM will do nothing. It is assumed that the script 
+ will create and select a tool using the Application.CreateTool 
+ method, as in the example:
+
+Function BeforeChangeTool As String
+
+ Dim Tool As MillTool
+
+ Set Tool = App.CreateTool
+
+ With Tool
+
+  .type = acamToolBALL
+
+  .name = "T82, Ball, 
+ Dia 15"
+
+  .number = 82
+
+  .feedpertooth = .1
+
+  .diameter = 15
+
+  .length = 50
+
+ End With
+
+ Tool.Select
+
+ BeforeSelectTool = "2"
+
+End Function
+
+================================================================================
+PLIK: BeforeCloseEvent
+================================================================================
+
+BeforeClose Event
+ 
+ 
+
+ BeforeClose Event
+
+ Function BeforeClose
+
+ Called before AlphaCAM clears memory (complete clear ie All Layers, or New command) or exits.
+
+ If you want to prevent Clear or Exit eg because you have something in memory that is not saved, you can display a message box warning the user, saving it if necessary.
+
+ A number should be returned. There are two possible return values:
+
+ BeforeClose = 0
+
+ AlphaCAM will Clear or Exit.
+
+ BeforeClose = 1
+
+ The current command will be cancelled.
+
+================================================================================
+PLIK: BeforeConicCuts_Event
+================================================================================
+
+BeforeConicCuts Event (Wire only)
+
+BeforeConicCuts Event (Wire only)
+
+Function BeforeConicCuts
+
+Called before AlphaCAM does the Conic Cuts command when 
+ the user has selected the Machine / Conic 
+ Cuts command.
+
+A number should be returned. There are two possible 
+ return values:
+
+BeforeConicCuts = 0
+
+AlphaCAM will do the normal command.
+
+BeforeConicCuts = 1
+
+AlphaCAM will do nothing - your routine should do everything required for the command 
+ - show dialog box(es), select geometries, make the tool paths etc.
+
+For example:
+
+ Function BeforeConicCuts
+
+  ' Do my code for special cuts
+
+  BeforeConicCuts = 1
+
+ End Function
+
+================================================================================
+PLIK: BeforeCreateNcEvent
+================================================================================
+
+BeforeCreateNc Event
+
+BeforeCreateNc Event
+
+Function BeforeCreateNc
+
+Called before AlphaCAM creates the NC code, for any 
+ reason, for example: List NC, Output NC, or called from the API.
+
+This may be used to set post variables or attributes, 
+ for example. This event should be used in preference to BeforeOutputNc, 
+ because BeforeOutputNc is only 
+ called if a file name is required.
+
+Use AfterCreateNc 
+ to reset anything if necessary.
+
+A number should be returned. There are two possible 
+ return values:
+
+BeforeCreateNc 
+ = 0
+
+AlphaCAM will continue the command.
+
+BeforeCreateNc 
+ = 1
+
+The current command will be cancelled.
+
+================================================================================
+PLIK: BeforeDefineToolEvent
+================================================================================
+
+BeforeDefineTool Event
+ 
+ 
+
+ BeforeDefineTool Event
+
+ Function BeforeDefineTool
+
+ Called before AlphaCAM shows the define tool dialog box when the user has selected the Machine / Define Tool command to define a tool.
+
+ A number should be returned. There are two possible return values:
+
+ BeforeDefineTool = 0
+
+ AlphaCAM will show the normal define tool dialog box.
+
+ BeforeDefineTool = 1
+
+ AlphaCAM will do nothing - your routine should define a tool, maybe in an external program.
+
+ For example:
+
+  Function BeforeDefineTool
+
+   App.ShellAndWait "mydefinetool.exe"
+
+   BeforeDefineTool = 1
+
+  End Function
+
+================================================================================
+PLIK: BeforeEditToolEvent
+================================================================================
+
+BeforeEditTool Event
+ 
+ 
+
+ BeforeEditTool Event
+
+ Function BeforeEditTool (Tool As MillTool)
+
+ Called before AlphaCAM shows the define tool dialog box when the user has clicked the Edit tool button in the Machine / Select Tool command to edit a tool.
+
+ A number should be returned. There are three possible return values:
+
+ BeforeEditTool = 0
+
+ AlphaCAM will show the normal define tool dialog box.
+
+ BeforeEditTool = 1
+
+ Your routine may edit the tool, AlphaCAM will then save it.
+
+ BeforeEditTool = 2
+
+ AlphaCAM will do nothing, your routine can edit the tool and save it, or cancel, AlphaCAM will NOT save it.
+
+================================================================================
+PLIK: BeforeInputCadEvent
+================================================================================
+
+BeforeInputCad Event
+ 
+ 
+
+ BeforeInputCad Event
+
+ Function BeforeInputCad (CadType As Integer) As String
+
+ Called before AlphaCAM shows the open file dialog box when the user has selected the File / Input CAD command to input a CAD file eg DXF.
+
+ CadType is an integer giving the type of CAD file that the user has selected from the dialog box. It will have one of the following values:
+
+ acamDXF
+
+ acamDWG
+
+ acamIGES
+
+ acamCADL
+
+ acamVDA
+
+ acamANVIL
+
+ acamXYZ
+
+ acamSTL
+
+ A string should be returned. There are three possible forms of return string:
+
+ BeforeInputCad = "0"
+
+ AlphaCAM will show the normal open file dialog box.
+
+ BeforeInputCad = "2"
+
+ The command will be cancelled.
+
+ BeforeInputCad = filename
+
+ AlphaCAM will use the given file name.
+
+ For example:
+
+  Function BeforeInputCad (CadType As Integer) As String
+
+   If CadType = acamDXF Then
+
+    BeforeInputCad = "C:\cadfiles\template.dxf"
+
+   Else
+
+    BeforeInputCad = "0"
+
+   End If
+
+  End Function
+
+================================================================================
+PLIK: BeforeInputNcEvent
+================================================================================
+
+BeforeInputNc Event
+ 
+ 
+
+ BeforeInputNc Event
+
+ Function BeforeInputNc As String
+
+ Called before AlphaCAM shows the open file dialog box when the user has selected the File / Input NC command to read NC code.
+
+ A string should be returned. There are three possible forms of return string:
+
+ BeforeInputNc = "0"
+
+ AlphaCAM will show the normal open file dialog box.
+
+ BeforeInputNc = "2"
+
+ The command will be cancelled.
+
+ BeforeInputNc = filename
+
+ AlphaCAM will use the given file name.
+
+================================================================================
+PLIK: BeforeInsertFileEvent
+================================================================================
+
+BeforeInsertFile Event
+ 
+ 
+
+ BeforeInsertFile Event
+
+ Function BeforeInsertFile As String
+
+ Called before AlphaCAM shows the open file dialog box when the user has selected the File / Insert command to insert a drawing.
+
+ A string should be returned. There are three possible forms of return string:
+
+ BeforeInsertFile = "0"
+
+ AlphaCAM will show the normal select file dialog box.
+
+ BeforeInsertFile = "2"
+
+ The command will be cancelled.
+
+ BeforeInsertFile = filename
+
+ AlphaCAM will use the given file name.
+
+================================================================================
+PLIK: BeforeOpenFileEvent
+================================================================================
+
+BeforeOpenFile Event
+ 
+ 
+
+ BeforeOpenFile Event
+
+ Function BeforeOpenFile As String
+
+ Called before AlphaCAM shows open file dialog box when user has selected the File / Open command to open an AlphaCAM drawing.
+
+ A string should be returned. There are three possible forms of return string:
+
+ BeforeOpenFile = "0"
+
+ AlphaCAM will show the normal open file dialog box.
+
+ BeforeOpenFile = "2"
+
+ The command will be cancelled.
+
+ BeforeOpenFile = filename
+
+ AlphaCAM will open the drawing with the given file name, as in the example:
+
+  Function BeforeOpenFile As String
+
+   BeforeOpenFile = "C:\licomdir\parts\62198754.amd"
+
+  End Function
+
+================================================================================
+PLIK: BeforeOpenPostEvent
+================================================================================
+
+BeforeOpenPost Event
+ 
+ 
+
+ BeforeOpenPost Event
+
+ Function BeforeOpenPost As String
+
+ Called before AlphaCAM shows the open file dialog box when the user has selected the File / Select Post command to select a post processor.
+
+ A string should be returned. There are three possible forms of return string:
+
+ BeforeOpenPost = "0"
+
+ AlphaCAM will show the normal select post dialog box.
+
+ BeforeOpenPost = filename
+
+ AlphaCAM will use the given file name.
+
+ BeforeOpenPost = "2"
+
+ AlphaCAM will cancel the Select Post command.
+
+================================================================================
+PLIK: BeforeOutputNcDialogBoxEvent
+================================================================================
+
+BeforeOutputNcDialogBox Event
+ 
+ 
+
+ BeforeOutputNcDialogBox Event
+
+ Function BeforeOutputNcDialogBox
+
+ Called before AlphaCAM shows the dialog box which asks File, Machine or Both when user has selected the File / Output NC command to save the NC code.
+
+ A number should be returned. There are 5 possible return values:
+
+ BeforeOutputNcDialogBox = 0
+
+ AlphaCAM will show the normal dialog box.
+
+ BeforeOutputNcDialogBox = 1 ' Output to File
+
+ BeforeOutputNcDialogBox = 2 ' Output to Machine
+
+ BeforeOutputNcDialogBox = 3 ' Output to Both
+
+ BeforeOutputNcDialogBox = 10
+
+ The command will be cancelled.
+
+================================================================================
+PLIK: BeforeOutputNcEvent
+================================================================================
+
+BeforeOutputNc Event
+ 
+ 
+
+ BeforeOutputNc Event
+
+ Function BeforeOutputNc As String
+
+ Called before AlphaCAM shows save file dialog box when user has selected the File / Output NC command to save the NC code, and selected the File or Both option from the first dialog box.
+
+ A string should be returned. There are three possible forms of return string:
+
+ BeforeOutputNc = "0"
+
+ AlphaCAM will show the normal save file dialog box.
+
+ BeforeOutputNc = "2"
+
+ The command will be cancelled.
+
+ BeforeOutputNc = filename
+
+ AlphaCAM will use the given filename.
+
+ The example will create a filename, starting with prog1.nc, then prog2.nc, incrementing the number until a name is found which does not exist. If none are found the function returns "0" to show the normal dialog box:
+
+ Function BeforeOutputNc As String
+
+  For i = 1 To 9999
+
+   fn$ = "C:\temp\prog" + str$(i) + ".nc"
+
+   If dir(fn$) = "" Then
+
+    ' File does not exist - return the name
+
+    BeforeOutputNc = fn$
+
+    Exit Function
+
+   End If 
+
+  Next i
+
+  ' Give up
+
+  BeforeOutputNc = "0"
+
+ End Function
+
+================================================================================
+PLIK: BeforeSaveAsFileEvent
+================================================================================
+
+BeforeSaveAsFile Event
+ 
+ 
+
+ BeforeSaveAsFile Event
+
+ Function BeforeSaveAsFile As String
+
+ Called before AlphaCAM shows save file dialog box when user has selected the File / Save As command to save an AlphaCAM drawing.
+
+ A string should be returned. There are three possible forms of return string:
+
+ BeforeSaveAsFile = "0"
+
+ AlphaCAM will show the normal save file dialog box.
+
+ BeforeSaveAsFile = "2"
+
+ The command will be cancelled.
+
+ BeforeSaveAsFile = filename
+
+ AlphaCAM will use the given filename.
+
+================================================================================
+PLIK: BeforeSaveFileEvent
+================================================================================
+
+BeforeSaveFile Event
+ 
+ 
+
+ BeforeSaveFile Event
+
+ Function BeforeSaveFile As String
+
+ Called before AlphaCAM saves current drawing when user has selected the File / Save command to save an AlphaCAM drawing.
+
+ A string should be returned. There are three possible forms of return string:
+
+ BeforeSaveFile = "0"
+
+ AlphaCAM will use the current file name.
+
+ BeforeSaveFile = "2"
+
+ The command will be cancelled.
+
+ BeforeSaveFile = filename
+
+ AlphaCAM will use the given filename.
+
+================================================================================
+PLIK: BeforeSelectToolEvent
+================================================================================
+
+BeforeSelectTool Event
+ 
+ 
+
+ BeforeSelectTool Event
+
+ Function BeforeSelectTool As String
+
+ Called before AlphaCAM shows tool selection dialog box. 
+
+ A string should be returned. There are three possible forms of return string:
+
+ BeforeSelectTool = "0"
+
+ AlphaCAM will show normal tool selection dialog box.
+
+ BeforeSelectTool = filename
+
+ AlphaCAM will use the tool in the given file name. This should be a file produced by the Machine / Define Tool command in AlphaCAM.
+
+ BeforeSelectTool = "2"
+
+ AlphaCAM will do nothing. It is assumed that the script will create and select a tool using the Application.CreateTool method, as in the example:
+
+ Function BeforeSelectTool As String
+
+  Dim Tool As MillTool
+
+  Set Tool = App.CreateTool
+
+  With Tool
+
+   .type = acamToolBALL
+
+   .name = "T82, Ball, Dia 15"
+
+   .number = 82
+
+   .feedpertooth = .1
+
+   .diameter = 15
+
+   .length = 50
+
+  End With
+
+  Tool.Select
+
+  BeforeSelectTool = "2"
+
+ End Function
+
+================================================================================
+PLIK: BeforeUnloadEvent
+================================================================================
+
+BeforeUnload Event
+ 
+ 
+
+ BeforeUnload Event
+
+ Function BeforeUnload
+
+ Called before AlphaCAM unloads the addin, when a user turns it off in the Utils | Addins dialog box
+
+ There is no return value.
+
+================================================================================
+PLIK: Frame_CallEventFunction
+================================================================================
+
+Frame.CallEventFunction
+
+Frame.CallEventFunction
+
+Call function in Events module in VBA projects and exported 
+ by add-in DLLs.
+
+Syntax
+
+frame.CallEventFunction (FunctionName)
+
+String FunctionName Name of function
+
+================================================================================
+PLIK: GetFeedsAndSpeedsButtonTextEvent
+================================================================================
+
+GetFeedsAndSpeedsButtonText Event
+ 
+ 
+
+ GetFeedsAndSpeedsButtonText Event
+
+ Function GetFeedsAndSpeedsButtonText As String
+
+ If this function exists and returns a string, a button will be placed in the Feeds and Speeds dialog box in Rough / Finish, Drilling etc. The returned string will be used for the text of the button. If the button is clicked by the user the NewFeedsAndSpeed event will be called.
+
+ For example, the following will enable the button and put the text "Tool Manager" in it.
+
+ Function GetFeedsAndSpeedsButtonText As String
+
+  GetFeedsAndSpeedsButtonText = "&Tool Manager"
+
+ End Function
+
+================================================================================
+PLIK: IntroductiontoEvents
+================================================================================
+
+Introduction to Events
+
+Introduction to Events
+
+VBA Projects which are automatically loaded can gain 
+ control when certain events happen in AlphaCAM.
+
+Projects must have the correct extension for the module, 
+ eg *.a?b (where ? specifies the 
+ module type eg m = Mill, t = Turn etc) and must be in either the StartUp folder in the VBMacros 
+ in the default Licomdir folder, 
+ or in StartUp in the Alpha01 
+ folder, or in SysMacro in the 
+ Alpha01 folder. 
+
+They may be prevented from loading using the Utils 
+ | Add-Ins dialog box, unless in the SysMacro 
+ folder.
+
+For example, when the user selects a tool, a routine 
+ in the project can be called which might get the tool from an external 
+ database, ignoring the normal AlphaCAM tool library. As another example, 
+ when the user selects the File | Open 
+ command a routine can force a particular file to be used, suppressing 
+ the open file dialog box.
+
+All file names should include the full path and extension 
+ eg "C:\licomdir\parts\62198754.amd"
+
+The routine InitAlphacamAddIn 
+ will be called when the VBA project is loaded when AlphaCAM starts. It 
+ may be used to initialise data and add menu items, for example.
+
+A DLL written in, for example, Delphi or C++ can also 
+ handle events. See the comments in the source code samples.
+
+Note: External programs (*.exe) will NOT handle events.
+
+The project or DLL can handle as many or as few events 
+ as desired. It must exist when the AlphaCAM module is executed. When the 
+ user selects a command which causes one of the events, AlphaCAM looks 
+ for a function with the name of the event. It 
+ will only be looked for in a Module called Events. If found the function will be called.
+
+The events available are:
+
+InitAlphacamAddIn
+
+BeforeOpenFile
+
+AfterOpenFile
+
+BeforeSaveFile
+
+BeforeSaveAsFile
+
+AfterSaveFile
+
+BeforeOutputNc
+
+AfterOutputNc
+
+BeforeCreateNc
+
+AfterCreateNc
+
+BeforeOutputNcDialogBox
+
+BeforeOpenPost
+
+BeforeInsertFile
+
+BeforeInputCad
+
+BeforeInputNc
+
+AfterInputCad
+
+AfterInputNc
+
+NewFeedsAndSpeed
+
+GetFeedsAndSpeedsButtonText
+
+BeforeSelectTool
+
+BeforeChangeTool
+
+AfterSelectTool
+
+BeforeDefineTool
+
+BeforeEditTool
+
+BeforeCut2AxisShape 
+ (Wire only)
+
+BeforeCut4AxisShape 
+ (Wire only)
+
+BeforeConicCuts 
+ (Wire only)
+
+BeforeCutPath 
+ (Laser only)
+
+BeforeClearArea 
+ (Laser/Wire only)
+
+BeforeClose
+
+BeforeUnload
+
+BeforeRoughFinish
+
+BeforePocket
+
+BeforeDrillTap
+
+BeforeMachineHoles
+
+BeforePocketHoles
+
+BeforeEngrave
+
+BeforeCutSplineOrPolyline
+
+BeforeSurfaceMachining
+
+BeforeManualToolpath
+
+BeforeTurningMachining
+
+AfterRoughFinish
+
+AfterPocket
+
+AfterDrillTap
+
+AfterMachineHoles
+
+AfterPocketHoles
+
+AfterEngrave
+
+AfterCutSplineOrPolyline
+
+AfterSurfaceMachining
+
+AfterManualToolpath
+
+AfterTurningMachining
+
+AfterCut2AxisShape 
+ (Wire only)
+
+AfterCut4AxisShape 
+ (Wire only)
+
+AfterConicCuts 
+ (Wire Only)
+
+AfterClearArea 
+ (Laser/Wire only)
+
+BeforeCheckToolChangePosition
+
+GeometriesUpdated
+
+ToolPathsUpdated
+
+GeometryAdded
+
+TextAdded
+
+SplineAdded
+
+SurfaceAdded
+
+================================================================================
+PLIK: NewFeedsAndSpeedEvent
+================================================================================
+
+NewFeedsAndSpeed Event
+ 
+ 
+
+ NewFeedsAndSpeed Event
+
+ Sub NewFeedsAndSpeed (md As Object, tool As Object)
+
+ Called when button in Feeds and Speeds dialog box clicked. (See GetFeedsAndSpeedsButtonText). 
+
+ md is a MillData object whose properties may be modified if required eg DownFeed or CutFeed. Tool is the current tool, read-only ie its properties may be read but not changed.
+
+ For example:
+
+  Sub NewFeedsAndSpeed (md As MillData, tool As MillTool)
+
+   md.cutfeed = 75
+
+   md.spindlespeed = 950
+
+  End Sub
+
+================================================================================
+PLIK: OtherAfter___Machiningevents
+================================================================================
+
+Other After... Machining events
+
+Other After... Machining events
+
+AfterPocket
+
+AfterDrillTap
+
+AfterMachineHoles
+
+AfterPocketHoles
+
+AfterEngrave
+
+AfterCutSplineOrPolyline
+
+AfterSurfaceMachining
+
+AfterManualToolpath
+
+AfterCut2AxisShape (Wire only)
+
+AfterCut4AxisShape (Wire only)
+
+AfterConicCuts (Wire only)
+
+AfterClearArea (Laser/Wire only)
+
+As AfterRoughFinish 
+ event, for the other machining types.
+
+================================================================================
+PLIK: OtherBefore___Machiningevents
+================================================================================
+
+Other Before... Machining events
+ 
+ 
+
+ Other Before... Machining events
+
+ BeforePocket
+
+ BeforeDrillTap
+
+ BeforeMachineHoles
+
+ BeforePocketHoles
+
+ BeforeEngrave
+
+ BeforeCutSplineOrPolyline
+
+ BeforeSurfaceMachining
+
+ BeforeManualToolpath
+
+ As BeforeRoughFinish event, for the other machining types.
+
+================================================================================
+
+

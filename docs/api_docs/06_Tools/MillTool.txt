@@ -1,0 +1,710 @@
+================================================================================
+SEKCJA: 06_Tools/MillTool.txt
+Wygenerowano z acAPI.bas
+================================================================================
+
+PLIK: Application_CreateTool
+================================================================================
+
+Application.CreateTool
+ 
+ 
+
+ Application.CreateTool
+
+ Create object representing a Mill tool. The properties of the object (eg Diameter) may then be set before calling a method eg Select or SaveAs.
+
+ Syntax
+
+ App.CreateTool
+
+ [Return] MillTool MillTool object
+
+================================================================================
+PLIK: Application_GetCurrentTool
+================================================================================
+
+Application.GetCurrentTool
+ 
+ 
+
+ Application.GetCurrentTool
+
+ Return an object representing the currently selected tool. Return value will be Nothing if there is no tool.
+
+================================================================================
+PLIK: Application_OpenTool
+================================================================================
+
+Application.OpenTool
+ 
+ 
+
+ Application.OpenTool
+
+ Open a Mill tool, eg to edit or examine its properties. This method will not select the tool to use it for machining - use either Application.SelectTool or MillTool.Select.
+
+ Syntax
+
+ App.OpenTool (Name)
+
+ String  Name Full path name of tool file to open
+
+ [Return] MillTool  MillTool object 
+
+ Example
+
+   Set tool = App.OpenTool(fn)
+
+   If Not (tool Is Nothing) Then
+
+    If tool.Diameter = dia Then
+
+     tool.Select
+
+    End If
+
+   End If
+
+================================================================================
+PLIK: Application_SelectTool
+================================================================================
+
+Application.SelectTool
+
+Application.SelectTool
+
+Select a Mill tool to use for machining, given file 
+ name (or let user select it).
+
+New for AlphaV7.5: An 
+ empty string ("") can be used to de-select the tool, so there 
+ is no current tool.
+
+Syntax
+
+App.SelectTool (Name)
+
+String  Name Full path name of tool file to 
+ open, "$USER" to let user select it from normal dialog box
+
+[Return] MillTool  MillTool object for selected 
+ tool.
+
+Example
+
+The example will select a tool from the AlphaCAM tool 
+ library, App.LicomdatPath gives 
+ the location of the default licomdat. 
+ Note: space underline space at 
+ the end of the line means the next line is a continuation of the current 
+ line. & adds two strings together.
+
+App.SelectTool App.LicomdatPath & _
+
+"licomdat\mtools.alp\T32, 
+ 10 mm dia drill.amt"
+
+================================================================================
+PLIK: Example4_Machinesurfacesusingthesideofthetool_
+================================================================================
+
+Example 4: Machine surfaces using the side of the tool.
+ 
+ 
+
+ Example 4: Machine surfaces using the side of the tool.
+
+ Public Sub MachineWithToolSide()
+
+ App.SelectTool App.LicomdatPath & "licomdat\mtools.alp\flat - 10mm.amt" 
+
+ Dim MD As MillData 
+
+ Set MD = App.CreateMillData 
+
+  
+
+ Dim S As Surface 
+
+ For Each S In App.ActiveDrawing.Surfaces 
+
+ S.Selected = True 
+
+ Next S 
+
+  
+
+ MD.SurfaceMCAxisType = acamAxis5 
+
+  
+
+ MD.SafeRapidLevel = 50 
+
+ MD.FeedDownDistance = 1 
+
+  
+
+ MD.ChordError = 0.1 
+
+  
+
+ MD.SurfaceMCSideCheckFoulAtEdge = False 
+
+ MD.SurfaceMCSideToolAxis = acamToolAxisPARALLEL_TO_PARM_LINES 
+
+  
+
+ MD.SetSurfaceMCPoints 80, 17, 0, 78, 75, 0 
+
+  
+
+ MD.SurfaceMCAction = acamSurfaceMCActionTOOLSIDE 
+
+ Dim TP As Paths 
+
+ Set TP = MD.MachineSurfaces 
+
+ End Sub
+
+================================================================================
+PLIK: MillTool_GetHolderProfile
+================================================================================
+
+MillTool.GetHolderProfile
+ 
+ 
+
+ MillTool.GetHolderProfile
+
+ Get the geometries for the tool holder. Each geometry will be half the cross-section ie the part where X >= 0..
+
+ Syntax
+
+ tool.GetHolderProfile
+
+ [Return] Paths   geometries representing holder profile, as a Paths collection
+
+ Remarks
+
+ See GetHolderGeometry.
+
+================================================================================
+PLIK: MillTool_GetProfile
+================================================================================
+
+MillTool.GetProfile
+ 
+ 
+
+ MillTool.GetProfile
+
+ Get the profile of a user-defined tool. The geometry will be half the cross-section, ie the part where X >= 0.
+
+ Syntax
+
+ tool.GetProfile
+
+ [Return] Path   geometry representing tool profile, as a Path object
+
+ Remarks
+
+ See GetGeometry.
+
+================================================================================
+PLIK: MillTool_IsSame
+================================================================================
+
+MillTool.IsSame
+ 
+ 
+
+ MillTool.IsSame
+
+ See if two objects represent the same tool. This means that the objects refer to the same tool in AlphaCAM memory, not just that the properties are the same.
+
+ Syntax
+
+ tool.IsSame(Tool2)
+
+ Tool Tool2 Tool object to compare with
+
+ [Return] boolean  Return value, True if objects are the same
+
+================================================================================
+PLIK: MillTool_SaveAs
+================================================================================
+
+MillTool.SaveAs
+ 
+ 
+
+ MillTool.SaveAs
+
+ Save tool to disk. The tool will not be selected. See Select for this.
+
+ Syntax
+
+ tool.SaveAs (PathName)
+
+ String  PathName complete path name to save to
+
+================================================================================
+PLIK: MillTool_Select
+================================================================================
+
+MillTool.Select
+ 
+ 
+
+ MillTool.Select
+
+ Select tool after properties have been set. Tool will be used for subsequent machining operations. It will NOT be saved to the AlphaCAM tool library. See SaveAs for this.
+
+ Syntax
+
+ tool.Select
+
+ Remarks
+
+ When a tool is manually selected in AlphaCAM it is shown to the user so it can be rejected if it is wrong. This method will NOT do this. If this is required, use UserConfirm first.
+
+ See the examples
+
+================================================================================
+PLIK: MillTool_UserConfirm
+================================================================================
+
+MillTool.UserConfirm
+ 
+ 
+
+ MillTool.UserConfirm
+
+ Show tool on mouse pointer and ask user to confirm that it is the required tool, eg before using Select.
+
+ Syntax
+
+ tool.UserConfirm
+
+ [Return] boolean  True if user accepts the tool, False if rejected.
+
+ Remarks
+
+ See example 2 in examples.
+
+================================================================================
+PLIK: MillToolExample1
+================================================================================
+
+MillTool Example 1
+ 
+ 
+
+ MillTool Example 1
+
+ The following code will create and select a Ball-end tool. 
+
+  Dim tool As MillTool
+
+  Set tool = App.CreateTool
+
+  With tool
+
+   .type = acamToolBALL
+
+   .name = "T82, Ball, Dia 15mm"
+
+   .number = 82
+
+   .feedpertooth = .1
+
+   .diameter = 15
+
+   .length = 50
+
+   .units = 1
+
+   .Select
+
+  End With
+
+ The With tool / End With block is a short cut. If it is not used, tool would have to be given for each property eg
+
+  tool.type = acamToolBALL
+
+  tool.name = "T82, Ball, Dia 15mm"
+
+  tool.number = 82
+
+================================================================================
+PLIK: MillToolExample2
+================================================================================
+
+MillTool Example 2
+ 
+ 
+
+ MillTool Example 2
+
+ The following code will create and select a user-defined tool. The geometry is a cone with a flat bottom.
+
+ Public Sub DefineUserDefinedTool()
+
+ Dim Drw As Drawing 
+
+ Set Drw = App.ActiveDrawing 
+
+ Dim P2 As Geo2D 
+
+ Dim P3 As Path 
+
+ ' Define a user defined tool 
+
+ ' First define the profile 
+
+ Set P2 = Drw.Create2DGeometry(-15, 50) 
+
+ P2.AddLine -15, 20 
+
+ P2.AddLine -2, 0 
+
+ P2.AddLine 2, 0 
+
+ P2.AddLine 15, 20 
+
+ P2.AddLine 15, 50 
+
+ Set P3 = P2.Finish 
+
+ ' Define and select the tool, the SetGeometry method takes 
+
+ ' the path object returned by the Finish method 
+
+ Dim Tool As MillTool 
+
+ Set Tool = App.CreateTool 
+
+ With Tool 
+
+ .Type = acamToolUSER 
+
+ .Name = "T85, user shape (API)" 
+
+ .Number = 85 
+
+ .FeedPerTooth = 0.125 
+
+ .Units = 1 
+
+ .SetGeometry P3 
+
+ If .UserConfirm Then 
+
+ .Select 
+
+ End If 
+
+ End With 
+
+ End Sub
+
+================================================================================
+PLIK: MillToolExample3
+================================================================================
+
+MillTool Example 3
+ 
+ 
+
+ MillTool Example 3
+
+ The following code will create a Ball-end tool, and save it to the AlphaCAM tool library. It will NOT select it.
+
+  folder = App.LicomdatPath + "licomdat\mtools.alp\"
+
+  Dim tool As MillTool
+
+  Set tool = App.CreateTool
+
+  With tool
+
+   .Type = acamToolBALL
+
+   .Name = "T83, Ball, Dia 22 mm"
+
+   .Number = 83
+
+   .FeedPerTooth = .1
+
+   .Diameter = 22
+
+   .Length = 50
+
+   .NumberOfTeeth = 4
+
+   .Note = "Defined in API"
+
+   .TPD(1) = 2.2345
+
+   .SaveAs folder + .name + ".amt"
+
+  End With
+
+================================================================================
+PLIK: MillToolExample4
+================================================================================
+
+MillTool Example 4
+ 
+ 
+
+ MillTool Example 4
+
+ Use SetGeometryLineCircle to define a tool with user-defined geometry and specified programming point and diameter. The macro draws the tool geometry and the line and circle, and uses them to define the tool and then deletes them. The tool is made the current tool.
+
+ Public Sub DefineUserDefinedToolWithLineAndGeo()
+
+ Dim Drw As Drawing 
+
+ Set Drw = App.ActiveDrawing 
+
+ Dim P2 As Geo2D 
+
+ Dim P3 As Path 
+
+ ' Define a user defined tool 
+
+ ' First define the profile 
+
+ Set P2 = Drw.Create2DGeometry(-15, 50) 
+
+ P2.AddLine -15, 20 
+
+ P2.AddLine -2, 0 
+
+ P2.AddLine 2, 0 
+
+ P2.AddLine 15, 20 
+
+ P2.AddLine 15, 50 
+
+ Set P3 = P2.Finish 
+
+  
+
+ ' Define the line and circle to set the programming point and diameter 
+
+ Dim PLine As Path, PCircle As Path 
+
+ Set PLine = Drw.Create2DLine(-20, 10, 20, 10) 
+
+ Set PCircle = Drw.CreateCircle(3, 15, 20) 
+
+ ' Define and select the tool 
+
+ Dim Tool As MillTool 
+
+ Set Tool = App.CreateTool 
+
+ With Tool 
+
+ .Type = acamToolUSER 
+
+ .Name = "T85, user shape (API)" 
+
+ .Number = 85 
+
+ .FeedPerTooth = 0.125 
+
+ .Units = 1 
+
+ .SetGeometryLineCircle P3, PLine, PCircle 
+
+ If .UserConfirm Then 
+
+ .Select 
+
+ End If 
+
+ End With 
+
+ P3.Selected = True 
+
+ PLine.Selected = True 
+
+ PCircle.Selected = True 
+
+ Drw.DeleteSelected 
+
+ End Sub
+
+================================================================================
+PLIK: MillToolExamples
+================================================================================
+
+MillTool Examples
+ 
+ 
+
+ MillTool Examples
+
+ MillTool Example 1
+
+ MillTool Example 2
+
+ MillTool Example 3
+
+ MillTool Example 4
+
+================================================================================
+PLIK: MillToolObject
+================================================================================
+
+MillTool Object
+
+MillTool Object
+
+Object representing a Mill Tool. To create a Mill Tool 
+ use Application.CreateTool, set 
+ the properties of the tool, then 
+ use one of the methods to save or select the tool. See the examples. 
+ To select an existing tool with a known name use Application.SelectTool.
+
+More:
+
+MillTool Properties
+
+MillTool Examples
+
+================================================================================
+PLIK: MillToolProperties
+================================================================================
+
+MillTool Properties
+
+MillTool Properties
+
+For an example using some of these properties see examples.
+
+Attribute - See Attributes
+
+ColorRGB - (OLE_COLOR) Colour to be used for toolpaths 
+ using this tool
+
+ConeAngle - (float) Cone angle if tool is a drill, in 
+ degrees, usually 118
+
+CornerRadius - (float) Corner Radius of bull-nose tool
+
+CurrentTurnProgrammingPoint - (TurnProgrammingPoint) 
+ (Lathe Only) The current programming point for a Turning tool (read-only)
+
+DepthOfCut - (float) Depth of one cut
+
+Diameter - (float) Tool diameter
+
+DiameterAndLengthSet - (boolean) True if diameter and 
+ length were set for a user-defined tool using a line and circle (read-only)
+
+DiameterLineEndX - (double) X coord of end of line used 
+ to set diameter (read-only)
+
+DiameterLineEndY - (double) Y coord of end of line used 
+ to set diameter (read-only)
+
+DiameterLineStartX - (double) X coord of start of line 
+ used to set diameter (read-only)
+
+DiameterLineStartY - (double) Y coord of start of line 
+ used to set diameter (read-only)
+
+DiskGuardBottomZ (float) Bottom Z for wheel guard (in 
+ the Marble module)
+
+DiskGuardTopZ (float) Top Z for wheel guard (in the 
+ Marble module)
+
+DiskMinRadius (float) Minimum radius of geometry that 
+ can be cut by the tool (in the Marble module)
+
+FeedPerTooth - (float) Feed per Tooth, for feed calculations, 
+ unless fixed feeds and speeds set
+
+FileName - (String) Complete path name of file
+
+FixedDownFeed - (float) Fixed down feed, fixed speed 
+ should also be set
+
+FixedFeed - (float) Fixed feed, fixed speed should also 
+ be set
+
+FixedFeedAndSpeed - (Boolean) True if FixedFeed and 
+ FixedSpeed are to be used when this tool is used for machining
+
+FixedSpeed - (float) Fixed speed, fixed feed should 
+ also be set
+
+Length - (float) Length of tool
+
+MaximumDepth (float) Maximum depth that a Disk tool 
+ can cut
+
+Name - (String) File name, not including path or extension
+
+Note - (String) Tool Note
+
+Number - (long) Tool Number
+
+NumberOfTeeth - (long) Number of teeth for feed calculations
+
+OffsetNumber - (long) Offset Number, if this is not 
+ set tool number (property Number) will be used
+
+Pitch - (float) Pitch if Tap
+
+Rotation - (boolean) Spindle rotation, True = CW, False 
+ = CCW
+
+ShankDiameter - (float) Diameter of shank for lollipop tool
+
+Taper - (boolean) True if this is a taper tool
+
+ToolTipToGaugeLine - (float) Distance from tool tip to gauge line length (position of tool home point when tool is at home).
+
+TPD - (String) TPD(I) I = 1 to 20, Tool Post Data
+
+Type - (short) Tool type, acamToolSQUARE, acamToolBULL, 
+ acamToolBALL, acamToolDRILL, acamToolTAP, acamToolUSER, acamToolWHEEL, 
+ acamToolBULL_LOLLIPOP, acamToolBALL_LOLLIPOP
+
+Units - (short) Units, 1 = Inch, 0 = Metric (mm)
+
+ZCircleCenterX - (double) X coord of centre of circle 
+ used to set length (read-only)
+
+ZCircleCenterY - (double) Y coord of centre of circle 
+ used to set length (read-only)
+
+ZCircleRadius - (double) Radius of circle used to set 
+ length (read-only)
+
+================================================================================
+PLIK: Surface_SetToolSideAuto
+================================================================================
+
+Surface.SetToolSideAuto
+ 
+ 
+
+ Surface.SetToolSideAuto
+
+ Set tool side using normal vector. If normal vector at centre of the surface is pointing downwards reverse the surface.
+
+ Syntax
+
+ surface.SetToolSideAuto
+
+================================================================================
+
+

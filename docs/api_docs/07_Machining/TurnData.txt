@@ -1,0 +1,1258 @@
+================================================================================
+SEKCJA: 07_Machining/TurnData.txt
+Wygenerowano z acAPI.bas
+================================================================================
+
+PLIK: TurnData_AddPartSection
+================================================================================
+
+TurnData.AddPartSection
+ 
+ 
+
+ TurnData.AddPartSection
+
+ Set the section of the part to be machined.
+
+ Syntax
+
+ td.AddPartSection (Path, StartZ, StartRad, EndZ, EndRad)
+
+ Path Path The part geometry
+
+ Double StartZ Z coordinate of start point
+
+ Double StartRad Radius coordinate of start point
+
+ Double EndZ Z coordinate of end point
+
+ Double EndRad Radius coordinate of end point
+
+ Remarks
+
+ Most turning operations work on one or more sections of a geometry. For example, Rough needs one section, equivalent to the section between the two picked points when using it interactively. This method defines that section, by specifying the Path object and the start and end points. Some methods, for example Finish, allow more than one section. Call AddPartSection once for each section.
+
+================================================================================
+PLIK: TurnData_BalancedFinish
+================================================================================
+
+TurnData.BalancedFinish
+ 
+ 
+
+ TurnData.BalancedFinish
+
+ Do twin-turret Balanced Finishing operation, using properties set for this object. Set the section (or sections) to be machined with one (or more) calls to AddPartSection, for the top geometry only.
+
+ Syntax
+
+ td.BalancedFinish
+
+ Remarks
+
+ Use App.SelectToolInLatheTurret to put a tool in the top turret and one in the bottom turret. Set the properties as in the example for single turret finishing, and also set LagDistanceForSecondTool and StockForSecondTool.
+
+================================================================================
+PLIK: TurnData_BalancedRough
+================================================================================
+
+TurnData.BalancedRough
+ 
+ 
+
+ TurnData.BalancedRough
+
+ Do twin-turret Balanced Roughing operation, using properties set for this object. Set the section to be machined with AddPartSection, for the top geometry only.
+
+ Syntax
+
+ td.BalancedRough
+
+ Remarks
+
+ Use App.SelectToolInLatheTurret to put a tool in the top turret and one in the bottom turret. Set the properties as in the example for single turret roughing, and also set LagDistanceForSecondTool.
+
+================================================================================
+PLIK: TurnData_Drill
+================================================================================
+
+TurnData.Drill
+ 
+ 
+
+ TurnData.Drill
+
+ Do Drill operation, using properties set for this object, for example, StartOfHole and EndOfHole.
+
+ Syntax
+
+ td.Drill
+
+ The example shows the properties that should be set for this method. It uses the geometry drawn in functions defined here.
+
+ Public Sub Drill()
+
+ CreatePartGeo 
+
+  
+
+ Dim TD As TurnData 
+
+ Set TD = App.CreateTurnData 
+
+  
+
+ With TD 
+
+ .SetToolChangePoint 20, 50 
+
+ Dim Tool As LatheTool 
+
+ Set Tool = App.SelectTool(App.LicomdatPath & "licomdat\ttools.alp\Drill - 10mm dia.att") 
+
+ If Tool Is Nothing Then 
+
+ MsgBox "Unable to Select Tool" 
+
+ Exit Sub 
+
+ End If 
+
+ Tool.FeedType = acamFeedPER_MIN 
+
+  
+
+ .StartOfHole = 0 
+
+ .EndOfHole = -10 
+
+ .PeckDistance = 3 
+
+ .RetractPartial = True 
+
+ .HoleDepthIsShoulder = False 
+
+ .SetRapidControlPoint 10, 0 
+
+ .Drill 
+
+  
+
+ .SetRapidControlPoint 20, 0 
+
+ .GotoToolChangePoint 
+
+ End With 
+
+  
+
+ With App.ActiveDrawing 
+
+ .Options.ShowRapids = True 
+
+ .ZoomAll 
+
+ End With 
+
+ End Sub
+
+================================================================================
+PLIK: TurnData_Face
+================================================================================
+
+TurnData.Face
+ 
+ 
+
+ TurnData.Face
+
+ Do Face operation, using properties set for this object, for example Billet and Part. AddPartSection is NOT used.
+
+ Syntax
+
+ td.Face
+
+ The example shows the properties that should be set for this method. It uses the geometry drawn in functions defined here.
+
+ Public Sub Face()
+
+ App.New 
+
+ Dim Drw As Drawing 
+
+ Set Drw = App.ActiveDrawing 
+
+  
+
+ Dim P1 As Path, P2 As Path 
+
+ Set P1 = CreateBilletGeo 
+
+ Set P2 = CreatePartGeo 
+
+  
+
+ P2.ToolSide = acamRIGHT 
+
+  
+
+ Dim TD As TurnData 
+
+ Set TD = App.CreateTurnData 
+
+  
+
+ With TD 
+
+ ' Set Tool Change Position 
+
+ .SetToolChangePoint 20, 50 
+
+ ' Select Tool 
+
+ Dim Tool As LatheTool 
+
+ Set Tool = App.SelectTool(App.LicomdatPath & "licomdat\ttools.alp\Rough Outside.att") 
+
+ If Tool Is Nothing Then 
+
+ MsgBox "Unable to Select Tool" 
+
+ Exit Sub 
+
+ End If 
+
+ Tool.FeedType = acamFeedPER_REV 
+
+  
+
+ ' Set geometry 
+
+ .Billet = P1 
+
+ .Part = P2 
+
+  
+
+ .DepthOfCut = 2 
+
+ .FaceStock = 0.3 
+
+ ' Optional properties 
+
+ ' .FaceDownToRad = 5
+
+ ' .FeedInDistance = 2
+
+  
+
+ .Face 
+
+ End With 
+
+ Drw.Options.ShowRapids = True 
+
+ Drw.ZoomAll 
+
+ End Sub
+
+================================================================================
+PLIK: TurnData_Finish
+================================================================================
+
+TurnData.Finish
+ 
+ 
+
+ TurnData.Finish
+
+ Do Finish operation, using properties set for this object. Set the section (or sections) to be machined with one (or more) calls to AddPartSection.
+
+ Syntax
+
+ td.Finish
+
+ The example shows the properties that should be set for this method. It uses the geometry drawn in functions defined here.
+
+ Public Sub Finish()
+
+ Dim Drw As Drawing 
+
+ Set Drw = App.ActiveDrawing 
+
+  
+
+ Dim P2 As Path 
+
+ Set P2 = CreatePartGeo 
+
+ P2.ToolSide = acamRIGHT 
+
+  
+
+ Dim TD As TurnData 
+
+ Set TD = App.CreateTurnData 
+
+  
+
+ With TD 
+
+ .SetToolChangePoint 20, 50 
+
+ App.SelectTool App.LicomdatPath & "licomdat\ttools.alp\Finish Outside.att" 
+
+  
+
+ ' Set two sections to be finished, skipping groove 
+
+ .AddPartSection P2, -1, 10, -14.5, 10 
+
+ .AddPartSection P2, -25.5, 10, -30, 10 
+
+ .Stock = 0 
+
+ .MoveBetweenSections = acamMoveRAPID 
+
+  
+
+ ' Lead-in/out 
+
+ .AutoLeadLength = 0.5 
+
+ .AutoLeadIn = acamAutoLeadTANGENTIAL 
+
+ .AutoLeadOut = acamAutoLeadPERPENDICULAR 
+
+ .McComp = acamCompTOOLCEN 
+
+  
+
+ ' Set point to control approach rapid from tool 
+
+ ' change point or end of last operation. 
+
+ ' Will approach parallel to Z-axis. 
+
+ .SetRapidControlPoint 5, 10 
+
+ .Finish 
+
+  
+
+ ' Set point to control rapid to tool change point. 
+
+ ' Will rapid out parallel to X-axis. (Assuming tool nose rad = .4) 
+
+ .SetRapidControlPoint -30.4, 20 
+
+ .GotoToolChangePoint 
+
+ End With 
+
+  
+
+ Drw.Options.ShowRapids = True 
+
+ Drw.ZoomAll 
+
+ End Sub
+
+================================================================================
+PLIK: TurnData_Groove
+================================================================================
+
+TurnData.Groove
+ 
+ 
+
+ TurnData.Groove
+
+ Do Groove operation, using properties set for this object. Set the section to be machined with AddPartSection. Set the type using GrooveProcess and GrooveType. SetToolSafePoint must be called to set the point to approach the grooving.
+
+ Syntax
+
+ td.Groove
+
+ The example shows the properties that should be set for this method. It uses the geometry drawn in functions defined here. Also, see SetGrooveFlatBottom for an example using a single cut.
+
+ Public Sub Groove()
+
+ Dim Drw As Drawing 
+
+ Set Drw = App.ActiveDrawing 
+
+  
+
+ Dim P2 As Path 
+
+ Set P2 = CreatePartGeo 
+
+ P2.ToolSide = acamRIGHT 
+
+  
+
+ Dim TD As TurnData 
+
+ Set TD = App.CreateTurnData 
+
+  
+
+ With TD 
+
+ .SetToolChangePoint 20, 50 
+
+ App.SelectTool App.LicomdatPath & "licomdat\ttools.alp\Groove Outside - Left 2mm.att" 
+
+  
+
+ .AddPartSection P2, -15, 10, -25, 10 
+
+  
+
+ ' Must set this point, to set start radius of feeds 
+
+ .SetToolSafePoint -20, 12 
+
+  
+
+ .GrooveType = acamGrooveDIAMETER 
+
+ .GrooveProcess = acamGrooveROUGHANDFINISH 
+
+  
+
+ .PeckDistance = 4 
+
+ .DepthOfCut = 2 
+
+ .Stock = 0.5 
+
+ .GrooveHolderClearance = 1 
+
+  
+
+ ' Make approach rapid parallel to X-axis 
+
+ .SetRapidControlPoint -20, 20 
+
+ .Groove 
+
+ End With 
+
+  
+
+ Drw.Options.ShowRapids = True 
+
+ Drw.ZoomAll 
+
+ End Sub
+
+================================================================================
+PLIK: TurnData_PartOff
+================================================================================
+
+TurnData.PartOff
+ 
+ 
+
+ TurnData.PartOff
+
+ Do Part-off operation, using properties set for this object.
+
+ Syntax
+
+ td.PartOff
+
+ The example shows the properties that should be set for this method. It uses the geometry drawn in functions defined here.
+
+ Public Sub PartOff()
+
+ Dim Drw As Drawing 
+
+ Set Drw = App.ActiveDrawing 
+
+  
+
+ Dim P2 As Path 
+
+ Set P2 = CreatePartGeo 
+
+ CreateBilletGeo 
+
+ Dim TD As TurnData 
+
+ Set TD = App.CreateTurnData 
+
+  
+
+ With TD 
+
+ .SetToolChangePoint 20, 50 
+
+ App.SelectTool App.LicomdatPath & "licomdat\ttools.alp\Parting Off - 4mm wide.att" 
+
+  
+
+ .PartOffMethod = acamPartOffCHAMFER 
+
+  
+
+ ' Must set this point, to set start radius of feeds 
+
+ .SetToolSafePoint -52, 22 
+
+  
+
+ .PartOffZ = -52 
+
+ .PartOffFinishDiameter = 0 
+
+ .PartOffFirstDiameter = 15 
+
+ .PartOffFeedPerCent = 33.3 
+
+ .PartOffChamferDiameter = 40 
+
+ .PartOffChamferWidth = 2 
+
+ .PartOffSideClearance = 0.025 
+
+  
+
+ .PartOff 
+
+ End With 
+
+  
+
+ Drw.Options.ShowRapids = True 
+
+ Drw.ZoomAll 
+
+ End Sub
+
+================================================================================
+PLIK: TurnData_Pocket
+================================================================================
+
+TurnData.Pocket
+ 
+ 
+
+ TurnData.Pocket
+
+ Do Pocket operation, using properties set for this object. Set the section to be machined with AddPartSection.
+
+ Syntax
+
+ td.Pocket
+
+ The example shows the properties that should be set for this method. It uses the geometry drawn in functions defined here.
+
+ Public Sub Pocket()
+
+ Dim Drw As Drawing 
+
+ Set Drw = App.ActiveDrawing 
+
+  
+
+ Dim P2 As Path 
+
+ Set P2 = CreatePartGeo 
+
+ P2.ToolSide = acamRIGHT 
+
+  
+
+ Dim TD As TurnData 
+
+ Set TD = App.CreateTurnData 
+
+  
+
+ With TD 
+
+ .SetToolChangePoint 20, 50 
+
+ App.SelectTool App.LicomdatPath & "licomdat\ttools.alp\Finish Outside.att" 
+
+  
+
+ .AddPartSection P2, -30, 10, -40, 10 
+
+  
+
+ .PocketType = acamPocketDIAMETER 
+
+  
+
+ .FaceStock = 0.2 
+
+ .DiameterStock = 0.3 
+
+ .DepthOfCut = 0.5 
+
+  
+
+ .CheckClearanceAngle = True 
+
+ .Bidirectional = False 
+
+  
+
+ .Pocket 
+
+  
+
+ .SetRapidControlPoint -35, 25 
+
+ .GotoToolChangePoint 
+
+ End With 
+
+  
+
+ Drw.Options.ShowRapids = True 
+
+ Drw.ZoomAll 
+
+ End Sub
+
+================================================================================
+PLIK: TurnData_Rough
+================================================================================
+
+TurnData.Rough
+ 
+ 
+
+ TurnData.Rough
+
+ Do Rough operation, using properties set for this object. Set the section to be machined with AddPartSection.
+
+ Syntax
+
+ td.Rough
+
+ Example 1: Diameter Roughing
+
+ The example shows the properties that should be set for this method. It uses the geometry drawn in functions defined here.
+
+ Public Sub Rough()
+
+ Dim Drw As Drawing 
+
+ Set Drw = App.ActiveDrawing 
+
+  
+
+ Dim P1 As Path, P2 As Path 
+
+ Set P1 = CreateBilletGeo 
+
+ Set P2 = CreatePartGeo 
+
+  
+
+ P2.ToolSide = acamRIGHT 
+
+  
+
+ Dim TD As TurnData 
+
+ Set TD = App.CreateTurnData 
+
+  
+
+ With TD 
+
+ .SetToolChangePoint 20, 50 
+
+  
+
+ Dim Tool As LatheTool 
+
+ Set Tool = App.SelectTool(App.LicomdatPath & "licomdat\ttools.alp\Rough Outside.att") 
+
+ If Tool Is Nothing Then 
+
+ MsgBox "Unable to Select Tool" 
+
+ Exit Sub 
+
+ End If 
+
+  
+
+ Tool.MaxSpindleSpeed = 2500 
+
+ Tool.SpeedType = acamSpeedSURFACE 
+
+ Tool.FeedType = acamFeedPER_REV 
+
+  
+
+ .RoughType = acamRoughDIAMETER 
+
+  
+
+ .Billet = P1 
+
+ .AddPartSection P2, 0, 9, -55, 20 
+
+  
+
+ .FaceStock = 0.2 
+
+ .DiameterStock = 0.1 
+
+ .DepthOfCut = 4 
+
+ .FeedInDistance = 0.1 
+
+ .BackOffDistancePerCut = 0 
+
+ .CleanProfileWithEachCut = True 
+
+  
+
+ .Speed = 5 
+
+ .FeedZ = 0.2 
+
+ .FeedX = 0.5 
+
+ .Coolant = acamCoolFLOOD 
+
+ .CannedCycle = False 
+
+  
+
+ ' Set point to control roughing, allowing for material removed by Face operation 
+
+ .SetToolSafePoint 1, 35 
+
+ .Rough 
+
+  
+
+ .GotoToolChangePoint 
+
+ End With 
+
+ Drw.Options.ShowRapids = True 
+
+ Drw.ZoomAll 
+
+ End Sub
+
+ Example 2: Contour Roughing with multiple sections
+
+ Public Sub ContourRough()
+
+ Dim Drw As Drawing 
+
+ Set Drw = App.ActiveDrawing 
+
+  
+
+ Dim P2 As Path 
+
+ Set P2 = CreatePartGeo 
+
+ P2.ToolSide = acamRIGHT 
+
+  
+
+ Dim TD As TurnData 
+
+ Set TD = App.CreateTurnData 
+
+  
+
+ With TD 
+
+ .SetToolChangePoint 20, 50 
+
+ App.SelectTool App.LicomdatPath & "licomdat\ttools.alp\Finish Outside.att" 
+
+  
+
+ .RoughType = acamRoughCONTOUR 
+
+  
+
+ .AddPartSection P2, -1, 10, -14.5, 10 
+
+ .AddPartSection P2, -25.5, 10, -30, 10 
+
+ .AddPartSection P2, -40, 10, -50, 20 
+
+  
+
+ .OffsetForFirstCut = 3.5 
+
+ .DepthOfCut = 1 
+
+ .Stock = 0.5 
+
+  
+
+ .AutoLeadIn = acamAutoLeadTANGENTIAL 
+
+ .AutoLeadOut = acamAutoLeadPERPENDICULAR 
+
+ .AutoLeadLength = 1 
+
+  
+
+ .Rough 
+
+ .GotoToolChangePoint 
+
+ End With 
+
+  
+
+ Drw.Options.ShowRapids = True 
+
+ Drw.ZoomAll 
+
+ End Sub
+
+================================================================================
+PLIK: TurnData_SetGrooveFlatBottom
+================================================================================
+
+TurnData.SetGrooveFlatBottom
+ 
+ 
+
+ TurnData.SetGrooveFlatBottom
+
+ Set the point on the flat bottom of the groove for single cut groove. (GrooveProcess = acamGrooveSINGLECUT)
+
+ Syntax
+
+ td.SetGrooveFlatBottom (Z, Rad)
+
+ Double Z Z coordinate of point
+
+ Double Rad Radius coordinate of point
+
+ The example shows the use of this method with the Groove method. It uses the geometry drawn in functions defined here.
+
+ Public Sub GrooveSingleCut()
+
+ Dim Drw As Drawing 
+
+ Set Drw = App.ActiveDrawing 
+
+  
+
+ Dim P2 As Path 
+
+ Set P2 = CreatePartGeo 
+
+ P2.ToolSide = acamRIGHT 
+
+  
+
+ Dim TD As TurnData 
+
+ Set TD = App.CreateTurnData 
+
+  
+
+ With TD 
+
+ .SetToolChangePoint 20, 50 
+
+ App.SelectTool App.LicomdatPath & "licomdat\ttools.alp\Groove Outside - Left 2mm.att" 
+
+  
+
+ .GrooveType = acamGrooveDIAMETER 
+
+ .GrooveProcess = acamGrooveSINGLECUT 
+
+  
+
+ .Part = P2 
+
+ .SetGrooveFlatBottom -20, 7 
+
+  
+
+ ' Must set this point, to set start radius of feeds 
+
+ .SetToolSafePoint -20, 12 
+
+  
+
+ .DepthOfCut = 2 
+
+ .Stock = 0 
+
+ .GrooveHolderClearance = 1 
+
+  
+
+ .Groove 
+
+ End With 
+
+  
+
+ Drw.Options.ShowRapids = True 
+
+ Drw.ZoomAll 
+
+ End Sub
+
+================================================================================
+PLIK: TurnData_Tap
+================================================================================
+
+TurnData.Tap
+ 
+ 
+
+ TurnData.Tap
+
+ Do Tap operation, using properties set for this object, for example StartOfTapFeed and EndOfTapThread.
+
+ Syntax
+
+ td.Tap
+
+ The example shows the properties that should be set for this method. It uses the geometry drawn in functions defined here.
+
+ Public Sub Tap()
+
+ CreatePartGeo 
+
+  
+
+ Dim TD As TurnData 
+
+ Set TD = App.CreateTurnData 
+
+  
+
+ With TD 
+
+ .SetToolChangePoint 20, 50 
+
+ App.SelectTool App.LicomdatPath & "licomdat\ttools.alp\C-Y Axis Mill Tools\Tap - 10mm x 1mm pitch.amt" 
+
+  
+
+ .StartOfTapFeed = 0 
+
+ .EndOfTapThread = -5 
+
+  
+
+ .TapHolderIsFloating = True 
+
+ .DwellTime = 1.5 
+
+  
+
+ .Speed = 150 
+
+  
+
+ .SetRapidControlPoint 10, 0 
+
+ .Tap 
+
+  
+
+ .SetRapidControlPoint 10, 0 
+
+ .GotoToolChangePoint 
+
+ End With 
+
+  
+
+ With App.ActiveDrawing 
+
+ .Options.ShowRapids = True 
+
+ .ZoomAll 
+
+ End With 
+
+ End Sub
+
+================================================================================
+PLIK: TurnData_Thread
+================================================================================
+
+TurnData.Thread
+
+TurnData.Thread
+
+Do Thread operation, using properties 
+ set for this object, and the TurnThreadData 
+ object.
+
+Syntax
+
+td.Thread
+
+Remarks
+
+The thread to be used is set by the ThreadFileName property, 
+ and the data is set by the TurnThreadData object, accessed by the ThreadData 
+ property, as in the example.
+
+Example
+
+Public Sub Thread()
+
+Dim Drw As Drawing 
+
+Set Drw = App.ActiveDrawing 
+
+ 
+
+Dim P2 As Path 
+
+Set P2 = CreatePartGeo 
+
+P2.ToolSide = acamRIGHT 
+
+ 
+
+Dim TD As TurnData 
+
+Set TD = App.CreateTurnData 
+
+ 
+
+With TD 
+
+.SetToolChangePoint 20, 50 
+
+App.SelectTool App.LicomdatPath 
+ & "licomdat\ttools.alp\Thread - External, Large.att" 
+
+ 
+
+' Set section 
+
+.AddPartSection P2, -1, 10, 
+ -14.5, 10 
+
+ 
+
+' Set the thread to be used 
+
+.ThreadFileName = App.LicomdatPath 
+ & "licomdat\threads.alp\Iso 20 dia.ath" 
+
+ 
+
+' Set some thread data 
+
+With .ThreadData 
+
+.NumberOfPasses = 4 
+
+.LeadIn = acamThreadLeadTHREADANGLE 
+
+.LeadOut = acamThreadLeadHORIZONTAL 
+
+End With 
+
+ 
+
+.Thread 
+
+ 
+
+.GotoToolChangePoint 
+
+End With 
+
+ 
+
+Drw.Options.ShowRapids = True 
+
+Drw.ZoomAll 
+
+End Sub
+
+================================================================================
+PLIK: TurnDataObject
+================================================================================
+
+TurnData Object
+
+TurnData Object
+
+Machining data for a Turning operation in Lathe, eg 
+ stock, feeds and speeds.
+
+More:
+
+TurnData Properties
+
+Geometry 
+ for TurnData Examples
+
+================================================================================
+PLIK: TurnDataProperties
+================================================================================
+
+TurnData Properties
+
+TurnData Properties
+
+Most of these properties have the same name as the text 
+ in the dialog boxes in the English version of AlphaCAM, in the corresponding 
+ commands.
+
+Attribute - See Attributes
+
+AutoLeadIn - (AcamAutoLeadType) Type of lead-in for Finish
+
+AutoLeadLength - (float) Length of lead in/out for Finish
+
+AutoLeadLengthIn - (float) Length of lead in for Finish
+
+AutoLeadLengthOut - (float) Length of lead out for Finish
+
+AutoLeadOut - (AcamAutoLeadType) Type of lead-out for Finish
+
+BackOffDistancePerCut - (float) Back Off Distance Per Cut for Rough
+
+Bidirectional - (boolean) True for bi-directional cuts in Pocket
+
+Billet - (Path) The billet for roughing operations
+
+CannedCycle - (Boolean) True to use a Canned Cycle instead of Linear Code
+
+CheckClearanceAngle - (Boolean) True to Check Clearance Angle in Pocket
+
+CleanProfileWithEachCut - (Boolean) True to Clean Profile With Each Cut in Rough
+
+Coolant - (short) Coolant, acamCoolNONE = 0, acamCoolMIST = 1, acamCoolFLOOD = 2, acamCoolTOOL = 3
+
+DepthOfCut - (float) Depth of Cut in Rough, Pocket, Face, Groove
+
+DiameterStock - (float) Diameter Stock in Rough
+
+DwellTime - (float) Dwell for peck drilling
+
+EndOfHole - (float) End Of Hole for Drill
+
+EndOfTapThread - (float) End Of Tap Thread for Tap
+
+FaceDownToRad - (float) Radius to face down to for Face
+
+FaceStock - (float) Face Stock in Rough
+
+FeedInDistance - (float) Feed-In Distance for Face
+
+FeedX - (float) Feed in X direction
+
+FeedXZ - (float) Feed in XZ direction
+
+FeedZ - (float) Feed in Z direction
+
+FoulAction - (AcamFoulAction) What to do when fouling occurs in Finish
+
+GrooveHolderClearance - (float) Clearance for Tool Holder in Groove
+
+GrooveProcess - (AcamGrooveProcess) Groove process to do eg acamGrooveFINISH
+
+GrooveType - (AcamGrooveType) Type of Groove eg acamGrooveDIAMETER
+
+HoleDepthIsShoulder - (boolean) True if hole depth is measured to drill shoulder
+
+LagDistanceForSecondTool - (float) Lag distance for second tool in twin-turret roughing or finishing
+
+McComp - (AcamComp) Machine compensation, acamCompTOOLCEN = 0, acamCompMC = 1
+
+MoveBetweenSections - (AcamMoveType) Rapid or Feed between sections in Finish
+
+OffsetForFirstCut - (float) Offset for first cut in Contour Roughing
+
+OffsetNumber - (long) Tool offset number
+
+OpNo - (short) Operation number
+
+OpGroup - (long) Operation Group number
+
+Part - (Path) The part for Face
+
+PartOffChamferDiameter - (float) Outer Diameter of chamfer for Part-off
+
+PartOffChamferWidth - (float) Width of chamfer for Part-off
+
+PartOffFeedPerCent - (float) Final feed as % of first feed for Part-off
+
+PartOffFinishDiameter - (float) Finish diameter for Part-off
+
+PartOffFirstDiameter - (float) Diameter to feed to first for Part-off
+
+PartOffMethod - (AcamPartOffMethod) Method for Part-off, acamPartOffCHAMFER, acamPartOffREDUCE_FEED or acamPartOffSINGLE_CUT
+
+PartOffSideClearance - (float) Groove side clearance for Part-off
+
+PartOffZ - (float) End of part Z for Part-off
+
+PeckDistance - (float) Peck distance for peck drilling
+
+PocketType - (AcamTurnPocketType) Type of Pocket operation, acamPocketDIAMETER or acamPocketFACE
+
+ProcessType - (short) Type of machining process (read-only)
+
+RapidApproach - (AcamPostRapidApproach) Type of rapids to approach the operation
+
+RapidApproachSecurityX - (float) 
+
+RapidApproachSecurityZ - (float) 
+
+RapidOrtho - (Boolean) True to use rapid moves parallel to X or D axes only, for apporach and retract rapids
+
+RapidRetract - (AcamPostRapidRetract) Type of rapids to retract from the operation
+
+RapidRetractSecurityX - (float) 
+
+RapidRetractSecurityZ - (float) 
+
+RetractPartial - (Boolean) True for Partial Retract in Drill
+
+RoughType - (AcamRoughType) Type of roughing, acamRoughCONTOUR, acamRoughDIAMETER or acamRoughFACE
+
+Speed - (float) Speed, surface or spindle
+
+StartOfHole - (float) Start of Hole for Drill
+
+StartOfTapFeed - (float) Start of feed for Tap
+
+Stock - (float) Stock allowance
+
+StockForSecondTool - (float) Stock allowance for second tool in Balanced Finish
+
+TapHolderIsFloating - (Boolean) True for floating tap holder
+
+ThreadData - (TurnThreadData) Data for thread operation
+
+ThreadFileName - (string) File name for thread to be used
+
+ThreadPitch - (float) Pitch for tapping
+
+ToolNumber - (long) Tool number
+
+================================================================================
+
+

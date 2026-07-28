@@ -1,0 +1,80 @@
+================================================================================
+SEKCJA: 01_Events/Laser_Flame_Events.txt
+Wygenerowano z acAPI.bas
+================================================================================
+
+PLIK: BeforeClearAreaEvent_Laser_Flameonly_
+================================================================================
+
+BeforeClearArea Event (Laser/Flame only)
+
+BeforeClearArea Event (Laser/Wire only)
+
+Function BeforeClearArea
+
+Called before AlphaCAM does the Clear Area command when 
+ the user has selected the Machine / Clear 
+ Area command.
+
+A number should be returned. There are two possible 
+ return values:
+
+BeforeClearArea= 
+ 0
+
+AlphaCAM will do the normal command.
+
+BeforeClearArea= 
+ 1
+
+AlphaCAM will do nothing - your routine should do everything required for the command 
+ - show dialog box(es), select geometries, make the tool paths (using LaserData.ClearArea) 
+ etc.
+
+For example:
+
+ Function BeforeClearArea
+
+  ' Do my code for special cuts
+
+  BeforeClearArea = 1
+
+ End Function
+
+================================================================================
+PLIK: BeforeCutPathEvent_Laser_Flameonly_
+================================================================================
+
+BeforeCutPath Event (Laser/Flame only)
+ 
+ 
+
+ BeforeCutPath Event (Laser/Flame only)
+
+ Function BeforeCutPath
+
+ Called before AlphaCAM does the Cut Path command when the user has selected the Machine / Cut Path command.
+
+ A number should be returned. There are two possible return values:
+
+ BeforeCutPath = 0
+
+ AlphaCAM will do the normal command.
+
+ BeforeCutPath = 1
+
+ AlphaCAM will do nothing - your routine should do everything required for the command - show dialog box(es), select geometries, make the tool paths (using LaserData.CutPath) etc.
+
+ For example:
+
+  Function BeforeCutPath
+
+   ' Do my code for special cuts
+
+   BeforeCutPath = 1
+
+  End Function
+
+================================================================================
+
+

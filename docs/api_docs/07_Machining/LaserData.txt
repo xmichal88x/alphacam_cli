@@ -1,0 +1,397 @@
+================================================================================
+SEKCJA: 07_Machining/LaserData.txt
+Wygenerowano z acAPI.bas
+================================================================================
+
+PLIK: LaserData_ClearArea
+================================================================================
+
+LaserData.ClearArea
+ 
+ 
+
+ LaserData.ClearArea
+
+ Do Clear Area on currently selected geometries using properties set for this LaserData object.
+
+ Syntax
+
+ ld.ClearArea
+
+ [Return] Paths  Returned Paths object
+
+ Example:
+
+ Public Sub TestClearArea()
+
+ Dim Drw As Drawing 
+
+ Set Drw = App.ActiveDrawing 
+
+  
+
+ Dim P As Path 
+
+ Set P = Drw.CreateCircle(10, 10, 10) 
+
+ P.ToolInOut = acamINSIDE 
+
+ P.Selected = True 
+
+  
+
+ Dim LD As LaserData 
+
+ Set LD = App.CreateLaserData 
+
+ With LD 
+
+ .ClearAreaType = acamPocketCONTOUR 
+
+ .OffsetNumber = 77 
+
+ .BeamWidth = 0.5 
+
+ .CutFeed = 450 
+
+ .Stock = 0.1 
+
+ .WidthOfCut = 0.4 
+
+  
+
+ .ClearArea 
+
+ End With 
+
+ Drw.ZoomAll 
+
+ End Sub
+
+================================================================================
+PLIK: LaserData_CutBetweenContours
+================================================================================
+
+LaserData.CutBetweenContours
+ 
+ 
+
+ LaserData.CutBetweenContours
+
+ Do Cut Between Contours operation on given geometries, using properties set for this LaserData object.
+
+ Syntax
+
+ ld.CutBetweenContours (ProgrammingGeometry, AuxiliaryGeometry)
+
+ Path ProgrammingGeometry
+
+ Path AuxiliaryGeometry
+
+ [Return] Path  Returned Path object containing tool path
+
+ Example:
+
+ Public Sub TestCutBetweenContours()
+
+ Dim Drw As Drawing 
+
+ Dim LD As LaserData 
+
+ Set Drw = App.ActiveDrawing 
+
+  
+
+ Set LD = App.CreateLaserData 
+
+  
+
+ Dim ProgGeo As Path, AuxGeo As Path 
+
+  
+
+ Set ProgGeo = Drw.UserSelectOneGeo("Programming Geometry") 
+
+ Set AuxGeo = Drw.UserSelectOneGeo("Auxiliary Geometry") 
+
+  
+
+ LD.BeamLength = 10 
+
+ LD.BeamWidth = 0.1 
+
+ LD.ChordError = 0.1 
+
+ LD.ClearanceDistance = 1.5 
+
+ LD.CutFeed = 150 
+
+ LD.LeadInLength = 2.5 
+
+ LD.SafeRapidLevel = 100 
+
+ LD.RapidApproachDistance = 1.5 
+
+  
+
+ Dim TP As Path 
+
+ Set TP = LD.CutBetweenContours(ProgGeo, AuxGeo) 
+
+ End Sub
+
+================================================================================
+PLIK: LaserData_CutHoles
+================================================================================
+
+LaserData.CutHoles
+ 
+ 
+
+ LaserData.CutHoles
+
+ Do Cut Holes operation on currently selected geometries using properties set for this LaserData object.
+
+ Syntax
+
+ ld.CutHoles
+
+ [Return] Paths  Returned Paths object
+
+ Example:
+
+ Public Sub TestCutHoles()
+
+ Dim Drw As Drawing 
+
+ Set Drw = App.ActiveDrawing 
+
+  
+
+ App.SelectTool App.LicomdatPath & "\licomdat\lnozzles.alp\small nozzle.alt" 
+
+  
+
+ Dim P As Path 
+
+ Set P = Drw.CreateCircle(10, 10, 10) 
+
+ P.Selected = True 
+
+ Set P = Drw.CreateCircle(20, 60, 10) 
+
+ P.Selected = True 
+
+  
+
+ Dim LD As LaserData 
+
+ Set LD = App.CreateLaserData 
+
+ With LD 
+
+ .CutHolesType = acamCutHolesCUT_HOLE 
+
+ .CutFeed = 450 
+
+ .SafeRapidLevel = 50 
+
+ .ClearanceDistance = 5 
+
+  
+
+ .BeamWidth = 0.5 
+
+  
+
+ .HolesLinear = True 
+
+  
+
+ .NumberOfCuts = 5 ' post variable NCT 
+
+  
+
+ .CutHoles 
+
+ End With 
+
+ Drw.ZoomAll 
+
+ End Sub
+
+================================================================================
+PLIK: LaserDataObject
+================================================================================
+
+LaserData Object
+
+LaserData Object
+
+Machining data for a Laser/Flame operation, eg feeds 
+ and technology
+
+More:
+
+LaserData Properties
+
+================================================================================
+PLIK: LaserDataProperties
+================================================================================
+
+LaserData Properties
+
+LaserData Properties
+
+Most of these properties have the same name as the text 
+ in the dialog boxes in the English version of AlphaCAM, in the corresponding 
+ commands eg Cut Path.
+
+Attribute - See Attributes
+
+BeamLength - (float) Length of Laser beam
+
+BeamWidth - (float) Width of Laser beam or Flame
+
+ChordError - (float) Chord error for CutPolylines
+
+ClearanceDistance - (float) Clearance Distance for CutPolylines
+
+ClearAreaType - (AcamPocketType) Type of Clear Area 
+ operation, acamPocketCONTOUR = 0, acamPocketLINEAR = 1, acamPocketSPIRAL 
+ = 2
+
+CutDirection - (float) Cut Direction for Linear Pocket
+
+CutFeed - (float) Feed
+
+CutHolesType - (AcamCutHolesType) Type of action for 
+ CutHoles, acamCutHolesPIERCE = 0, acamCutHolesCUT_HOLE = 1, acamCutHolesSPIRAL 
+ = 2
+
+GivenHoleDiameter - (double) Hole diameter to select 
+ holes for CutHoles
+
+HolesLinear - (boolean) True for Linear code for CutHoles, 
+ False for canned cycles
+
+LeadInLength - (float) Length of lead-in for linear 
+ code in Cut Hole option in CutHoles
+
+LoopRadius - (float) Radius of loop corners
+
+MCAxisType - (AcamAxis) Type of machining for CutPolylines, 
+ acamAxis3 = 0, acamAxis4XZ = 1, acamAxis4YZ = 2, acamAxis5 = 3, acamAxis3HELICAL 
+ = 4, acamAxis4XY = 5
+
+McComp - (AcamComp) Machine compensation, acamCompTOOLCEN 
+ = 0, acamCompMC = 1, acamCompBOTH = 2
+
+NumberOfCuts - (short) Number of cuts for Cut Hole option 
+ in CutHoles
+
+OffsetNumber - (long) Offset Number
+
+OpNo - (short) Operation Number
+
+PolylineToolSide - (AcamToolSide) Tool side for CutPolylines
+
+ProcessType - (short) Type of machining process (read-only)
+
+RapidApproachDistance - (float) Rapid Approach Distance
+
+RapidToStart - (boolean) True to rapid to start from 
+ safe rapid level for Cut Between Contours
+
+RotationAngle - (double) Tool Rotation angle for CutPolylines
+
+SafeRapidLevel - (double) Z level to rapid at
+
+Stock - (float) Stock Allowance
+
+TiltAngle - (double) Tool Tilt angle for CutPolylines
+
+ToolAngle - (double) Tool angle relative to path for 
+ CutPolylines
+
+ToolAngleType - (AcamToolAngleType) Method to set tool 
+ angle for CutPolylines, acamToolAngleSURFACE_NORMAL = 0, acamToolAnglePERP_TO_PATH 
+ = 1, acamToolAnglePERP_TO_XY = 2, acamToolAnglePARALLEL_TO_SURFACE = 3, 
+ acamToolAngleSET_ANGLES = 4 , acamToolAngleSET_VECTOR = 5
+
+ToolVectorX - (float) X component of Tool Vector eg 
+ for Machine Polyline
+
+ToolVectorY - (float) Y component of Tool Vector eg 
+ for Machine Polyline
+
+ToolVectorZ - (float) Z component of Tool Vector eg 
+ for Machine Polyline
+
+TraverseAtRPlane - (boolean) True to traverse at R-plane 
+ in CutHoles
+
+Use3DPolylines - (boolean) True to use 3D polylines 
+ to control the tool path in Cut Between Contours
+
+WhichHoles - (short) Holes for CutHoles, acamHolesCIRCLES 
+ = 0, acamHolesMATCH_BEAM = 1,  acamHolesGIVEN_DIA 
+ = 2
+
+WidthOfCut - (float) Width of cut for pocketing
+
+XYCorners - (AcamCorners) Type of corners. acamCornersROUND 
+ = 0, acamCornersSTRAIGHT = 1,  acamCornersLOOP 
+ = 2
+
+================================================================================
+PLIK: SubOperation_GetLaserData_Laseronly_
+================================================================================
+
+SubOperation.GetLaserData (Laser only)
+ 
+ 
+
+ SubOperation.GetLaserData (Laser only)
+
+ Get the machining data for this sub-operation. An object of type LaserlData will be returned.
+
+ Syntax
+
+ SubOp.GetLaserData
+
+ [Return] LaserData  LaserData object 
+
+ Remarks
+
+ The properties of the LaserData object may be read and/or written. If any are written, use SubOperation.SetLaserData to regenerate the tool paths.
+
+ See SubOperation.SetMillData for an example.
+
+================================================================================
+PLIK: SubOperation_SetLaserData
+================================================================================
+
+SubOperation.SetLaserData
+ 
+ 
+
+ SubOperation.SetLaserData
+
+ Set the machining data for this sub-operation. The associated tool paths will be deleted and regenerated, using the associated geometries.
+
+ Syntax
+
+ SubOp.SetLaserData (LD)
+
+ LaserData LD LaserData object
+
+ Remarks
+
+ The LaserData object MUST be one returned by SubOperation.GetLaserData.
+
+ See SubOperation.SetMillData for an example.
+
+================================================================================
+
+

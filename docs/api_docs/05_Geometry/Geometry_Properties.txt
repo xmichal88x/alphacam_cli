@@ -1,0 +1,513 @@
+================================================================================
+SEKCJA: 05_Geometry/Geometry_Properties.txt
+Wygenerowano z acAPI.bas
+================================================================================
+
+PLIK: CirclePropertiesExample
+================================================================================
+
+CircleProperties Example
+ 
+ 
+
+ CircleProperties Example
+
+ The example will loop for all the geometries in the drawing and display the diameter of each circle.
+
+ Dim drw As Drawing 
+
+ Set drw = App.ActiveDrawing 
+
+ Dim p As Path 
+
+ For Each p In drw.Geometries 
+
+ Dim c As CircleProperties 
+
+ Set c = p.GetCircleProperties 
+
+ If Not (c Is Nothing) Then 
+
+ MsgBox "Circle Diameter = " & c.diameter 
+
+ End If 
+
+ Next p
+
+================================================================================
+PLIK: CirclePropertiesMethods
+================================================================================
+
+CircleProperties Methods
+ 
+ 
+
+ CircleProperties Methods
+
+ None.
+
+================================================================================
+PLIK: CirclePropertiesObject
+================================================================================
+
+CircleProperties Object
+ 
+ 
+
+ CircleProperties Object
+
+ Object used to get the properties of a circle if a geometry represents a circle.
+
+ Use Path.GetCircleProperties to get the object. If the geometry is a circle then this object will be returned and its properties may be read (not written). If it is not a circle the special value Nothing will be returned.
+
+ Note: for this object, a circle is defined as an arc with an included angle of more than 270 degrees.
+
+ More:
+
+ CircleProperties Properties
+
+ CircleProperties Methods
+
+ CircleProperties Example
+
+================================================================================
+PLIK: CirclePropertiesProperties
+================================================================================
+
+CircleProperties Properties
+
+CircleProperties Properties
+
+Diameter -(double) Circle diameter (read-only)
+
+Radius - (double) Circle radius (read-only)
+
+CenterXL - (double) Local X coordinate of center (read-only)
+
+CenterYL - (double) Local Y coordinate of center (read-only)
+
+CenterXG - (double) Global X coordinate of center (read-only)
+
+CenterYG - (double) Global Y coordinate of center (read-only)
+
+CenterZG - (double) Global Z coordinate of center (read-only)
+
+================================================================================
+PLIK: ElementProperties
+================================================================================
+
+Element Properties
+
+Element Properties
+
+Most Element properties are read-only.
+
+Attribute - See Attributes
+
+CenterXL - (double) Center X Local coordinate (if arc)
+
+CenterYL - (double) Center Y Local coordinate (if arc)
+
+CenterXG - (double) Center X Global coordinate (if arc)
+
+CenterYG - (double) Center Y Global coordinate (if arc)
+
+CenterZG - (double) Center Z Global coordinate (if arc)
+
+CW - (boolean) True if arc is CW, False if CCW
+
+EndToolVectorX - (double) X component of Tool Vector 
+ at end of element
+
+EndToolVectorY - (double) Y component of Tool Vector 
+ at end of element
+
+EndToolVectorZ - (double) Z component of Tool Vector 
+ at end of element
+
+EndXG - (double) End X Global coordinate
+
+EndXL - (double) End X Local coordinate
+
+EndYG - (double) End Y Global coordinate
+
+EndYL - (double) End Y Local coordinate
+
+EndZG - (double) End Z Global coordinate
+
+EndZL - (double) End Z Local coordinate
+
+Feed - (double) The feed rate for an element, 0 if not 
+ set
+
+IncludedAngle - (double) Included Angle of arc. Degrees, 
+ always positive
+
+Is3D - (boolean) True if this is a 3D element
+
+Is5Axis - (boolean) True if this is a 5-axis element
+
+IsArc - (boolean) True if this is an arc
+
+IsLine - (boolean) True if this is a line
+
+IsRapid - (boolean) True if this is a rapid element 
+ (Line)
+
+IsRapidTag - True if this is a rapid over a tag
+
+LeadExtra - (boolean) True if this is an extra lead-in/out 
+ line when multiple-lines used for lead-in or out (read-write)
+
+LeadIn - (boolean) True if this is a lead-in line or 
+ arc (read-write)
+
+LeadOut - (boolean) True if this is a lead-out line 
+ or arc (read-write)
+
+Length - (double) Length of line or arc
+
+Name - (String) Name in the project bar
+
+Path - (Path) The path containing this element
+
+Radius - (double) Radius of arc
+
+SawAngle - (double) Angle of Saw for this Geometry element when MillData.Saw next used. (read-write)
+
+Slope - (boolean) True if this element is a sloping 
+ lead-in or out
+
+StartToolVectorX - (double) X component of Tool Vector 
+ at start of element
+
+StartToolVectorY - (double) Y component of Tool Vector 
+ at start of element
+
+StartToolVectorZ - (double) Z component of Tool Vector 
+ at start of element
+
+StartXG - (double) Start X Global coordinate
+
+StartXL - (double) Start X Local coordinate
+
+StartYG - (double) Start Y Global coordinate
+
+StartYL - (double) Start Y Local coordinate
+
+StartZG - (double) Start Z Global coordinate
+
+StartZL - (double) Start Z Local coordinate
+
+Thread - (boolean) True if this is a threading cut in 
+ Lathe
+
+================================================================================
+PLIK: Path_GetCircleProperties
+================================================================================
+
+Path.GetCircleProperties
+ 
+ 
+
+ Path.GetCircleProperties
+
+ Analyse path to see if it is a circle. If it is, return a CircleProperties object. The properties of the object may then be read (not written). If it is not a circle the special value Nothing will be returned.
+
+ Note: for this method, a circle is defined as an arc with an included angle of more than 270 degrees.
+
+ Syntax
+
+ geo.GetCircleProperties
+
+ [Return] CircleProperties   CircleProperties object , Nothing if geo is not a circle.
+
+================================================================================
+PLIK: Path_GetRectangleProperties
+================================================================================
+
+Path.GetRectangleProperties
+ 
+ 
+
+ Path.GetRectangleProperties
+
+ Analyse path to see if it is a rectangle (parallel to the X axis). If it is, return a RectangleProperties object. The properties of the object may then be read (not written). If it is not a rectangle the special value Nothing will be returned.
+
+ Syntax
+
+ geo.GetRectangleProperties
+
+ [Return] RectangleProperties   RectangleProperties object , Nothing if geo is not a rectangle.
+
+================================================================================
+PLIK: PathProperties
+================================================================================
+
+Path Properties
+
+Path Properties
+
+Attribute - See Attributes
+
+Billet - (Boolean) True if this is the billet (Lathe 
+ only)
+
+Closed - (boolean) True if path is closed (read-only)
+
+Color - (AcamColor) For geometries, the colour set when 
+ reading a DXF file, or set by this property. For tool paths, the colour 
+ used by AlphaCAM to draw the tool path. Read-only for tool paths, read-write 
+ for geometries. Value may be any of the 16 standard colours
+
+ColorRGB - (OLE_COLOR) For geometries, the color set 
+ when reading a DXF file, or set by this property. For tool paths, the 
+ colour used by AlphaCAM to draw the tool path. Read-only for tool paths, 
+ read-write for geometries. Value is an RGB value
+
+CompOnRapid - (boolean) True if the Machine Compensation 
+ is to be applied on the rapid before this path
+
+Construction - (boolean) True if this geometry is a 
+ Construction geometry
+
+CW - (boolean) True if path is CW, only valid if path 
+ is closed
+
+Dimension - (boolean) True if this path is on the Dimension 
+ layer
+
+Disabled - (boolean) True if this path is disabled ie cannot be selected
+
+DontInvalidate - (boolean) True to suppress display list invalidation
+
+Drawing - (Drawing) The drawing for this path, if it 
+ is in the main drawing then the existing drawing object will be returned 
+ otherwise a temporary one will be created (read-only)
+
+Elements - (Elements) Collection of the elements in 
+ this path (read-only)
+
+Group - (short) Number of group containing this path, 
+ 0 if none
+
+HasLoops - (boolean) True if path contains loop elements 
+ (read-only)
+
+Is3D - (boolean) True if this is a 3D geometry or tool 
+ path
+
+IsDrilling - (boolean) True if this tool path contains 
+ just rapid elements and drilling elements. Drilling elements are zero 
+ length in XY
+
+IsDrillSub - (boolean) True if this toolpath is part 
+ of a drilling subroutine (read-only)
+
+IsPathAllRapids - (boolean) True if this path is all 
+ rapids (read-only)
+
+IsSubroutineCopy - (boolean) True if this tool path 
+ is a Subroutine Copy of another path. The XY displacement can be found 
+ using Path.GetDisplacement (read-only)
+
+IsSubroutineOriginal - (boolean) True if this tool path 
+ has subroutines copies (read-only)
+
+IsTag - (boolean) True if this path is a support tag 
+ (read-only)
+
+IsToolPath - (boolean) True if this path is a tool path 
+ (read-only)
+
+IsWorkVolume - (boolean) True if this is the Work Volume 
+ (read-only)
+
+LathePart - (boolean) True if this is the part in Lathe
+
+Length - (double) Length of this path (read-only)
+
+LineType - (AcamLineType) Line type for this path, see 
+ key in Layer object
+
+MaxXL - (double) Maximum X Local coordinate (read-only)
+
+MaxYL - (double) Maximum Y Local coordinate (read-only)
+
+McComp - (AcamComp) Machine compensation for this path 
+ (read-only)
+
+MinXL - (double) Minimum X Local coordinate (read-only)
+
+MinYL - (double) Minimum Y Local coordinate (read-only)
+
+Name - (string) Name of this path, as shown in the project 
+ bar
+
+NoRapidUpBefore - (boolean) True to suppress the automatic 
+ rapid-up before this tool path
+
+OpNo - (short) Operation number of this path. Call Operations.OrderAll 
+ if this is changed
+
+PathType - (AcamPathType) Type of this path (read-only)
+
+Selected - (boolean) True if path is selected
+
+Sheet - (boolean) True if this is a nested sheet
+
+STL - (boolean) True if this path is part of an STL 
+ model
+
+SubroutineNumber - (long) Subroutine number, if non-zero 
+ (read-only)
+
+Temp - (boolean) True if this path is a temporary path
+
+ToolInOut - (AcamToolInOut) Ghost tool inside, on center 
+ or outside of path, only valid if path closed. acamINSIDE = 1, acamCENTER 
+ = 0 acamOUTSIDE = -1
+
+ToolSide - (AcamToolSide) Ghost tool left, center or 
+ right of path. acamLEFT = 1, acamCENTER = 0, acamRIGHT = -1
+
+Visible - (boolean) True if path is marked as visible 
+ (not hidden)
+
+ZSubroutines - (boolean) True if the path has subroutines 
+ for multiple Z depths
+
+================================================================================
+PLIK: PathsProperties
+================================================================================
+
+Paths Properties
+
+Paths Properties
+
+Count - (long) Number of items in the collection (read-only)
+
+Drawing - (Drawing) The drawing for this collection, if it 
+ is in the main drawing then the existing drawing object will be returned 
+ otherwise a temporary one will be created (read-only)
+
+Selected - (boolean) Set to True to select all Paths 
+ in the collection, set to False to deselect all paths (write-only)
+
+================================================================================
+PLIK: SplineProperties
+================================================================================
+
+Spline Properties
+
+Spline Properties
+
+Degree - (short) Degree eg 3 for cubic spline (read-only)
+
+Drawing - (Drawing) The drawing for this spline, if 
+ it is in the main drawing then the existing drawing object will be returned 
+ otherwise a temporary one will be created (read-only)
+
+Knots - (Variant / Double (0 to NumberKnots - 1)) The 
+ parameter values of the knots (read-only)
+
+Is3D - (boolean) True if the spline is 3D, False if 
+ 2D (planar, ie in flatland or in a work plane) (read-only)
+
+MaxS - (double) Maximum value of S parameter (read-only)
+
+MaxXG - (double) Maximum X Global coordinate (read-only)
+
+MaxXL - (double) Maximum X Local coordinate (read-only)
+
+MaxYG - (double) Maximum Y Global coordinate (read-only)
+
+MaxYL - (double) Maximum Y Local coordinate (read-only)
+
+MaxZG - (double) Maximum Z Global coordinate (read-only)
+
+MaxZL - (double) Maximum Z Local coordinate (read-only)
+
+MinS - (double) Minimum value of S parameter (read-only)
+
+MinXG - (double) Minimum X Global coordinate (read-only)
+
+MinXL - (double) Minimum X Local coordinate (read-only)
+
+MinYG - (double) Minimum Y Global coordinate (read-only)
+
+MinYL - (double) Minimum Y Local coordinate (read-only)
+
+MinZG - (double) Minimum Z Global coordinate (read-only)
+
+MinZL - (double) Minimum Z Local coordinate (read-only)
+
+NumberKnots - (short) Number of knots (read-only)
+
+NumberVertices - (short) Number of vertices (control 
+ points) (read-only)
+
+Periodic - (boolean) True if spline is periodic (read-only)
+
+Rational - (boolean) True if spline is rational (some 
+ weights are not 1) (read-only)
+
+Selected - (boolean) True if spline is selected
+
+VerticesX - (Variant / Double (0 to NumberVertices - 
+ 1)) The X coordinates of the vertices (control points) (read-only)
+
+VerticesY - (Variant / Double (0 to NumberVertices - 
+ 1)) The Y coordinates of the vertices (control points) (read-only)
+
+VerticesZ - (Variant / Double (0 to NumberVertices - 
+ 1)) The Z coordinates of the vertices (control points) (read-only)
+
+Visible - (boolean) True if spline is visible, ie not 
+ hidden
+
+Weights - (Variant / Double (0 to NumberVertices - 1)) 
+ The weights (read-only)
+
+================================================================================
+PLIK: TextLineProperties
+================================================================================
+
+TextLine Properties
+
+TextLine Properties
+
+Text - (string) The text characters for this line
+
+================================================================================
+PLIK: TurnProgrammingPointProperties
+================================================================================
+
+TurnProgrammingPoint Properties
+
+TurnProgrammingPoint Properties
+
+OffsetNumber - (long) Offset Number for post
+
+PositionX - (float) X Position of tip centre relative 
+ to first one
+
+PositionY - (float) Y Position of tip centre relative 
+ to first one
+
+RakeAngle - (float) Clearance angle
+
+TipRadius - (float) Tip radius for this point
+
+TipX - (float) X Position of virtual tip relative to 
+ tip centre
+
+TipY - (float) Y Position of virtual tip relative to 
+ tip centre
+
+TNV - (long) Tool nose vector number for post (FANUC 
+ numbers)
+
+================================================================================
+
+

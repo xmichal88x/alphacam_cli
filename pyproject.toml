@@ -1,0 +1,40 @@
+[build-system]
+requires = ["hatchling>=1.24"]
+build-backend = "hatchling.build"
+
+[project]
+name = "alphacam-cli"
+version = "0.1.0"
+description = "CLI tool for AlphaCAM CAM automation via COM API"
+requires-python = ">=3.11"
+dependencies = [
+    "typer>=0.12.0",
+    "rich>=13.7.0",
+    "pywin32>=306; sys_platform == 'win32'",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0", "ruff>=0.3.0", "mypy>=1.8.0"]
+
+[project.scripts]
+alphacam = "alphacam_cli.main:app"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/alphacam_cli"]
+
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "W", "UP", "B", "SIM", "TRY"]
+
+[tool.mypy]
+strict = true
+python_version = "3.11"
+ignore_missing_imports = true
+warn_unused_ignores = false
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]

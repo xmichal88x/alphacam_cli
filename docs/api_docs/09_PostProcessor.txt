@@ -1,0 +1,933 @@
+================================================================================
+SEKCJA: 09_PostProcessor.txt
+Wygenerowano z acAPI.bas
+================================================================================
+
+PLIK: Application.SelectPostModuleInThisVBAProject
+================================================================================
+
+Application.SelectPostModuleInThisVBAProject
+
+Application.SelectPostModuleInThisVBAProject
+
+Use a module in the current VBA project as the post 
+ processor. This does not apply to DLL posts. See the C++ example on the 
+ CD for an alternative method.
+
+Syntax
+
+App.SelectPostModuleInThisVBAProject (Name)
+
+String  Name Name of code module in the VBA 
+ project
+
+Example
+
+A VBA project might contain two modules, 
+ called Post1 and Post2. These would contain the same routines as the Post 
+ module in a VBA Post. The following routines in the Events module of the 
+ same project would create commands to switch between the two post modules.
+
+Function InitAlphacamAddIn(AcamVersion As Long) As Integer
+
+    Dim 
+ Frm As Frame
+
+    Set 
+ Frm = App.Frame
+
+    Frm.AddMenuItem2 
+ "Select Post1", "CmdPost1", acamMenuFILE, ""
+
+    Frm.AddMenuItem2 
+ "Select Post2", "CmdPost2", acamMenuFILE, ""
+
+End Function
+
+ 
+
+Public Sub CmdPost1()
+
+    App.SelectPostModuleInThisVBAProject 
+ "Post1"
+
+End Sub
+
+ 
+
+Public Sub CmdPost2()
+
+    App.SelectPostModuleInThisVBAProject 
+ "Post2"
+
+End Sub
+
+================================================================================
+PLIK: Application_GetPostAttributeCount
+================================================================================
+
+Application.GetPostAttributeCount
+ 
+ 
+
+ Application.GetPostAttributeCount
+
+ Get the number of Attributes used in the current post, defined in $3000.
+
+ Syntax
+
+ App.GetPostAttributeCount
+
+ [Return] Long Returned Value
+
+================================================================================
+PLIK: Application_GetPostAttributeName
+================================================================================
+
+Application.GetPostAttributeName
+ 
+ 
+
+ Application.GetPostAttributeName
+
+ Get the name of an Attribute used in the current post, defined in $3000.
+
+ Syntax
+
+ App.GetPostAttributeName (Index)
+
+ Long Index Number of attribute to get, 1 to GetPostAttributeCount
+
+ [Return] String Returned Name
+
+ The example shows how to display the attributes:
+
+ Public Sub ShowPostAttributes()
+
+ Dim N As Long 
+
+ N = App.GetPostAttributeCount 
+
+ MsgBox N 
+
+ Dim I As Long 
+
+ For I = 1 To N 
+
+ MsgBox App.GetPostAttributeNumber(I) & ", " & _ 
+
+ App.GetPostAttributeName(I)
+
+ Next I 
+
+ End Sub
+
+================================================================================
+PLIK: Application_GetPostAttributeNumber
+================================================================================
+
+Application.GetPostAttributeNumber
+ 
+ 
+
+ Application.GetPostAttributeNumber
+
+ Get the PAT() number of an Attribute used in the current post, defined in $3000.
+
+ Syntax
+
+ App.GetPostAttributeNumber (Index)
+
+ Long Index Number of attribute to get, 1 to GetPostAttributeCount
+
+ [Return] Long Returned Value
+
+================================================================================
+PLIK: Application_GetPostUserVariable
+================================================================================
+
+Application.GetPostUserVariable
+ 
+ 
+
+ Application.GetPostUserVariable
+
+ Get a Post User Variable.
+
+ Syntax
+
+ App.GetPostUserVariable (Name)
+
+ String Name Name of user variable (defined in $1000 in current post)
+
+ [Return] String Value Returned Value
+
+================================================================================
+PLIK: Application_OpenVBAPost
+================================================================================
+
+Application.OpenVBAPost
+
+Application.OpenVBAPost
+
+Open VBA post for editing and as the current post.
+
+Syntax
+
+App.OpenVBAPost (Name)
+
+String  Name Full path name of AlphaCAM VBA 
+ post
+
+================================================================================
+PLIK: Application_SelectPost
+================================================================================
+
+Application.SelectPost
+ 
+ 
+
+ Application.SelectPost
+
+ Select a Post processor, given file name.
+
+ Syntax
+
+ App.SelectPost (Name)
+
+ String  Name Full path name of post file to open
+
+================================================================================
+PLIK: Application_SetPostUserVariable
+================================================================================
+
+Application.SetPostUserVariable
+ 
+ 
+
+ Application.SetPostUserVariable
+
+ Set a Post User Variable.
+
+ Syntax
+
+ App.SetPostUserVariable (Name, Value)
+
+ String Name Name of user variable (defined in $1000 in current post)
+
+ String Value Value to set, in Basic can be string or number
+
+ Example
+
+ App.SetPostUserVariable "DXFNAME", filename
+
+ App.SetPostUserVariable "PROGNUM", 123
+
+================================================================================
+PLIK: Frame_PostCommand
+================================================================================
+
+Frame.PostCommand
+
+Frame.PostCommand
+
+Run an AlphaCAM command.
+
+Syntax
+
+frame.PostCommand (ID)
+
+AcamCommand ID ID The ID of the command
+
+This uses the Windows function PostMessage to run the 
+ command, so it will not be run until the Windows message loop is checked 
+ eg when the current command finishes. See RunCommand.
+
+================================================================================
+PLIK: PostConfigure_Object
+================================================================================
+
+PostConfigure Object
+
+PostConfigure Object
+
+Object passed to AfterOpenPost when post is read or 
+ re-selected.
+
+Properties
+
+For each property the equivalent dollar-number 
+ that would be used in a template post is shown.
+
+Allow5AxisHelicalArcs (bool) - True if machine can do 
+ 5-axis helical arcs ($585)
+
+AllowOutputVisibleOnly (bool) - True to allow output 
+ of just the visible operations ($545)
+
+AllowPositiveAndNegativeTilt (bool) - True if machine 
+ can use Positive and Negative tilt ($577)
+
+ArcChordTolerance (double) - Chord error if arcs are 
+ straight line segments ($532)
+
+CAxisArcsAndLinesAsLines (typeAcamPostCAxisLines) - 
+ Output C-axis arcs and lines as straight line segments ($533)
+
+CCWSpindleRotation (String) - For variable ROT ($76)
+
+ConstantSpindleSpeed (String) - For variable CS in Lathe 
+ ($72)
+
+ConstantSurfaceSpeed (String) - For variable CS in Lathe 
+ ($71)
+
+CoolantFlood (String) - ($152)
+
+CoolantMist (String) - ($151)
+
+CoolantOff (String) - ($150)
+
+CoolantThroughTool (String) - ($153)
+
+CWSpindleRotation (String) - For variable ROT ($75)
+
+DecimalSeparator (typeAcamPostDecimalSeparator) - Use 
+ point <.> or comma <,> as decimal separator ($515)
+
+FeedMax (double) - Maximum Feed Rate ($753)
+
+FeedPerMin (String) - For variable FP in Lathe ($73)
+
+FeedPerRev (String) - For variable FP in Lathe ($74)
+
+FeedRound (double) - Round Feed Up/Down to Nearest: 
+ (.1 or 1 or 10 ... 0 = don't round) ($755)
+
+FiveAxisOffsetFromPivotPointX (double) - 4/5 axis Tool 
+ C/L offset from pivot point in X ($562)
+
+FiveAxisOffsetFromPivotPointY (double) - 4/5 axis Tool 
+ C/L offset from pivot point in Y ($563)
+
+FiveAxisProgramPivot (bool) - 4/5 axis Programming point 
+ ($560)
+
+FiveAxisToolHolderLength (double) - 4/5 axis Tool holder 
+ length ($565)
+
+FiveAxisToolMaxAngle (double) - 4/5 axis Max angle (degrees). 
+ Set to 0 to indicate 3 - axis machine. ($570)
+
+FiveAxisToolMaxAngleChange (double) - Max Angle Change 
+ per Line ($575)
+
+HelicalArcsAsLines (bool) - True to Output helical (XYZ) 
+ arcs as straight line segments ($527)
+
+HorizontalMCCentre (bool) - True to use Multi-Planes 
+ or Multi-Datums ($580)
+
+LatheAX (typeAcamPostLatheAX) - AX is Diameter or Radius in NC code ($550)
+
+LatheBelowCLXPositive (bool) - Turret below C/L: X Diameter 
+ or Radius values are +ve ($590)
+
+LatheCycleIgnoreUndercuts (bool) - Ignore Undercuts 
+ in Roughing Canned Cycle ($551)
+
+LatheEdgeTip (bool) - True = Edge/Tip, False = Tip Centre 
+ compensation ($555)
+
+LatheRapidApproach (typeAcamPostRapidApproach) ($600)
+
+LatheRapidRetract (typeAcamPostRapidRetract) ($601)
+
+LatheRapidSecurityX (double) - X security distance for rapids. ($603)
+
+LatheRapidSecurityZ (double) - Z security position for rapids. ($602)
+
+LimitArcs (typeAcamPostLimitArcs) - Limit arcs: quadrant 
+ or 180 or none ($525, $526)
+
+LineNumberIncrement (long) - Line number increment ($716)
+
+LineStartNumber (long) - Line start number ($715)
+
+LocalXorYAxis (typeAcamPostLocalXorYAxis) - Orientation 
+ of Local X or Y axis ($584)
+
+MaximumArcRadius (double) - Arcs will be output as straight lines if radius > this value ($531)
+
+MCToolComp5Axis (bool) - G41/42 is possible in 5-axis 
+ machining along spline or polyline ($148)
+
+MCToolCompAdjustInternalCorners (bool) - Adjust G41/42 
+ code at internal corners for tool radius ($146)
+
+MCToolCompBlendPercent (double) - Percentage increase 
+ in blend radius for sharp internal corners ($145)
+
+MCToolCompCancel (String) - For variable TC ($140)
+
+MCToolCompLeft (String) - For variable TC ($141)
+
+MCToolCompOnRapidApproach (bool) - Comp can be applied 
+ on Rapid Approach ($147)
+
+MCToolCompRight (String) - For variable TC ($142)
+
+ModalAbsoluteValues (String) - Will not be repeated 
+ if the value is the same ($502)
+
+ModalIncrementalValues (String) - Will not be put into 
+ NC code if value is zero ($504)
+
+ModalText (String) - Will not be repeated in following 
+ lines ($500)
+
+NeedPlusSigns (bool) - XYZIJK values must have + as 
+ well as - signs ($510)
+
+OutputLatheBySequenceNumber (bool) - True to output 
+ Lathe operations by sequence number, false for head order ($543)
+
+PlanarArcsAsLines (typeAcamPostPlanarArcsAsLines) - 
+ Which planar arcs are output as straight line segments ($530)
+
+RapidXYSpeed (double) - XY Rapid Speed ($900)
+
+RapidZSpeed (double) - Z Rapid Speed ($901)
+
+SelectWpToolOrder (typeAcamPostSelectWpToolOrder) - 
+ Multi-Plane or Datums: Select work plane before/after/same time as tool 
+ change ($582)
+
+SpindleSpeedMax (double) - Maximum Spindle Speed ($743)
+
+SpindleSpeedRound (double) - Round Speed Up/Down to 
+ Nearest: (.1 or 1 or 10 ... 0 = don't round) ($745)
+
+SubroutinesAtEnd (bool) - Put sub-routines at end of 
+ main program ($520)
+
+SubroutineStartNumber (long) ($705)
+
+Suppress5AxisFeedCalculation (bool) ($566)
+
+SuppressComments (bool) - Suppress Operations List, START and Comments in NC code ($540)
+
+TizTolerance (double) - Tolerance for TIZ when setting WVF ($586)
+
+ToolChangeTime (double) - Time to change tool for time 
+ calculations ($902)
+
+Wire4AxisArcsAsLines (bool) - True to Output Wire 4-axis 
+ arcs as straight line segments ($528)
+
+Methods
+
+AddUserVariable
+
+SetAttributeIndex(long Index, String Name)
+
+SetFixedSpindleSpeeds( String Str) - ($744)
+
+AddUserVariableQuick(String Line) - Add a User Variable 
+ using the same format as a line in $1000
+
+================================================================================
+PLIK: PostData_Object
+================================================================================
+
+PostData Object
+
+PostData Object
+
+The object passed to each Output function. All post 
+ output is done using the Post or PostQuick methods. The Post method takes 
+ as its parameter a string in the same format as a line in the old-style 
+ "template" posts.
+
+For example:
+
+P.Post "N[N] G1 [TC] D[T+10] X[AX] Y[AY] Z[AZ] 
+ F[F]"
+
+will output the same as the line:
+
+N[N] G1 [TC] D[T+10] X[AX] Y[AY] Z[AZ] F[F]
+
+in a template post.
+
+The variables N, TC, T, AX etc. will be replaced with 
+ their current values. The values of the variables can be accessed directly 
+ using the Vars property. For example:
+
+If P.Vars.MC And P.Vars.IN Then
+
+' Apply compensation on lead-in line
+
+End If
+
+The members of the Vars object have the same names as 
+ the corresponding post variables documented in the Alphaedit help file.
+
+Properties
+
+ArrayVars (PostArrayVariables) - Array variables.
+
+CutHoleType (typeAcamCutHolesType) - Type of hole cutting 
+ in Laser, acamCutHolesPIERCE, acamCutHolesCUT_HOLE or acamCutHolesSPIRAL.
+
+Drawing (Drawing) - The current drawing.
+
+DrillRapidAtRPlane (Bool) - True for rapid at R-plane, 
+ false for rapid at safe rapid level, in drill output routines eg OutputDrillCycleFirstHole.
+
+DrillType (typeAcamPostDrillType) - Type of drilling: 
+ acamPostDrillTypeDRILL, acamPostDrillTypePECK, acamPostDrillTypeTAP or 
+ acamPostDrillTypeBORE, in drill output routines eg OutputDrillCycleFirstHole.
+
+Element (Element) - The element for this call.
+
+FeedType (typeAcamPostFeedType) - Type of feed in OutputFeed 
+ and OutputLatheFeed, acamPostFeedTypeLINE, acamPostFeedTypeCWARC or acamPostFeedTypeCCWARC.
+
+IsListing (Bool) - True if listing NC, False if writing 
+ to file.
+
+LatheCycleType (typeAcamPostLatheCycleType) - Type of 
+ Lathe canned cycle.
+
+MoveType (typeAcamPostMoveType) - Type of Lathe feed, 
+ acamPostMoveTypeC for C-Axis, acamPostMoveTypeY for Y-Axis
+
+OutputFileName (String) - Complete path name of output 
+ file.
+
+Path (Path) - The path for this call.
+
+PostError (long) - Non-zero if an error occured in Post 
+ or PostQuick methods.
+
+RapidType (typeAcamPostRapidType) - Type of rapid in 
+ OutputRapid, acamPostRapidTypeXY, acamPostRapidTypeXYZ or acamPostRapidTypeZ.
+
+Tool (MillTool) - The tool in use for this call.
+
+UserVariable (Variant) - Get or set the value of a user 
+ variable, for example: P.UserVariable("XOFFSET") = 1.5
+
+Vars (PostVariables) - The post variables.
+
+WorkPlane (WorkPlane) The work plane for this call.
+
+Methods
+
+AskUserVariable - Ask user for value of user variable, 
+ eg P.AskUserVariable "PROGNUM", no return value.
+
+CreateFormat - create a Format object to pass to Format2.
+
+Evaluate - Evaluate an expression which may contain 
+ Post variables, return a double.
+
+Format - Format number using XYZ format, return a string.
+
+Format2 - Format number using given format, return a string.
+
+ModalOff - Turn off modal for specified items eg P.ModalOff 
+ "X Y Z"
+
+ModalOn - Turn on modal for specified items eg P.ModalOn 
+ "X Y Z"
+
+Post - Process string and pass to output file.
+
+PostQuick - Pass string directly to output file with 
+ no processing.
+
+================================================================================
+PLIK: PostFormat_Object
+================================================================================
+
+PostFormat Object
+
+PostFormat Object
+
+An object used to set the format for system variables 
+ and user variables.
+
+For example, in the AfterOpenPost sub the format for 
+ XYZ variables could be set using:
+
+    With 
+ .XYZNumberFormat   ' 
+ $720, 721, 722
+
+        .Format 
+ = acamPostNumberFormat2DECIMAL_NO_0
+
+        .LeadingFigures 
+ = 0
+
+        .FiguresAfterPoint 
+ = 3
+
+    End 
+ With
+
+Properties
+
+FiguresAfterPoint (Integer) Number of figures after 
+ the decimal point
+
+Format (AcamPostNumberFormat) Type of format
+
+LeadingFigures (LeadingFigures) Number of figures before 
+ the decimal point
+
+See the VBA Browser or the Alphaedit help file for descriptions 
+ of the values for Format
+
+================================================================================
+PLIK: PostUserVariable_Object
+================================================================================
+
+PostUserVariable Object
+
+PostUserVariable Object
+
+An object to define a user variable, used in AfterOpenPost.
+
+For example:
+
+Public Sub AfterOpenPost(Config As PostConfigure)
+
+    Dim 
+ UV As PostUserVariable
+
+    Set 
+ UV = .AddUserVariable
+
+    With 
+ UV
+
+        .Name 
+ = "XOFFSET"
+
+        .Prompt 
+ = "X Offset"
+
+        .Text 
+ = 100
+
+        With 
+ .Format
+
+            .Format 
+ = acamPostNumberFormat3DECIMAL_NO_0_OR_POINT
+
+            .LeadingFigures 
+ = 0
+
+            .FiguresAfterPoint 
+ = 3
+
+        End 
+ With
+
+    End 
+ With
+
+End Sub
+
+Properties
+
+Format (PostFormat) - The format for the user variable.
+
+Name (String) - Name.
+
+Prompt (String) - Prompt, if the user will be asked 
+ for the value.
+
+Text (String) - The initial text contained in the variable. 
+ (write-only)
+
+ 
+
+To read the value of a user variable use either:
+
+PostData.UserVariable(Name)
+
+This returns a Variant which will be of type double 
+ if the variable has a numeric value, and will be to the full accuracy 
+ that it is stored with, otherwise will be a string.
+
+or
+
+App.GetPostUserVariable(Name)
+
+This always returns a string, using the format specified 
+ for the user variable.
+
+For example:
+
+Public Sub OutputFileLeadingLines(P As PostData)    ' 
+ $10
+
+    P.Post 
+ "$Let XOFFSET = 1/3"
+
+    
+
+    Dim 
+ vXOffset As Variant
+
+    vXOffset 
+ = P.UserVariable("XOFFSET")
+
+    
+
+    Dim 
+ sXOffset As String
+
+    sXOffset 
+ = P.Drawing.App.GetPostUserVariable("XOFFSET")
+
+End Sub
+
+In Debug | Locals window  
+
+  : 
+ vXOffset : 0.333333333333333 : Variant/Double
+
+  : 
+ sXOffset : "0.333" : String
+
+If the value is asked for eg:
+
+P.AskUserVariable "XOFFSET"
+
+and the user enters 100.12345
+
+The values will be:
+
+  : 
+ vXOffset : 100.12345 : Variant/Double
+
+  : 
+ sXOffset : "100.12345" : String
+
+The value returned by GetPostUserVariable uses 5 decimal 
+ places even though the variable's format specifies 3 because the input 
+ from the user is treated as a string.
+
+To ask for a value for a variable every time use:
+
+P.AskUserVariable "XOFFSET"
+
+To ask for a value only if a value has not already been 
+ asked for use:
+
+    Dim 
+ V
+
+    V 
+ = P.UserVariable("XOFFSET")
+
+Otherwise the value will be asked for when it is first 
+ needed in the post output.
+
+================================================================================
+PLIK: UsingAttributesinthePostProcessor
+================================================================================
+
+Using Attributes in the Post Processor
+ 
+ 
+
+ Using Attributes in the Post Processor
+
+ Attributes may be read in the AlphaCAM post processor using PAT( ).
+
+ In $3000 define the number that is to refer to each attribute. For example, if the following is in $3000:
+
+ $3000
+
+ 1 = LicomUKdmbManualExampleTest1
+
+ 2 = LicomUKdmbManualExampleTest2
+
+ then, for Paths, PAT(1) will contain the value of Attribute("LicomUKdmbManualExampleTest1") and PAT(2) will contain the value of Attribute("LicomUKdmbManualExampleTest2").
+
+ The type of variable that is stored in the Attribute will determine the format in the NC Code.
+
+ Remember that the attribute name must be exactly the same as in the VBA code, including case.
+
+ Element Attributes may be read using EAT( ).
+
+ Tool Attributes may be read using TAT( ).
+
+ Drawing Attributes may be read using GAT( ).
+
+ WorkPlane Attributes may be read using WAT( ).
+
+================================================================================
+PLIK: VBA_DLL_Posts
+================================================================================
+
+VBA/DLL Posts
+
+VBA / DLL Posts
+
+Alphacam can use a VBA project as a post processor, 
+ and with later versions of V7 onwards, can also use a DLL (written in 
+ C++ or Delphi). There are objects added to the API which give access to 
+ the Alphacam post variables (PostVariables, PostArrayVariables) and post 
+ configuration (PostConfigure).
+
+The output format for variables is set using the PostFormat object. A user-variable is 
+ defined using a PostUserVariable  
+ object. The output is created using methods of the PostData 
+ object.
+
+This section is a basic description, see the examples 
+ on the CD for more information.
+
+Functions
+
+For a VBA post Alphacam will call subroutines in a module 
+ called "Post". (Unless App.SelectPostModuleInThisVBAProject 
+ is called.) For a DLL Alphacam will call exported functions. In either 
+ case the names are as follows:
+
+General Setup
+
+VBA
+
+Public Sub BeforeCreateNc
+
+Public Sub AfterOpenPost(Config As PostConfigure)
+
+DLL
+
+void BeforeCreateNcUsingThisDLLPost(IAlphaCamAppPtr 
+ pApp)
+
+void AfterOpenPost(IPostConfigurePtr pPC)
+
+AfterOpenPost is called only when the Post is first 
+ read by Alphacam eg on startup or if it is reselected. It takes a PostConfigure 
+ object.
+
+BeforeCreateNc (BeforeCreateNcUsingThisDLLPost in a 
+ DLL) is called each time the post is used to list or output code, before 
+ any other functions.
+
+All routines starting with Output take one parameter:
+
+For example
+
+VBA
+
+Public Sub OutputFileLeadingLines(P As PostData) 
+    ' 
+ $10
+
+C++ (Using classes defined 
+ in DllPostEx1)
+
+void AcamStd3AxisMillPost::OutputFileLeadingLines(IPostDataPtr 
+ pPD) // $10
+
+The function names are:
+
+General Output
+
+OutputFileLeadingLines
+
+OutputProgramLeadingLines
+
+OutputProgramTrailingLines
+
+OutputFileTrailingLines
+
+OutputRapid
+
+OutputFeed
+
+OutputSelectWorkPlane
+
+OutputUp
+
+OutputDown
+
+OutputOriginShift
+
+OutputCancelOriginShift
+
+OutputCallSub
+
+OutputBeginSub
+
+OutputEndSub
+
+Tool Output
+
+OutputSelectTool
+
+OutputCancelTool
+
+OutputSelectToolAndWorkPlane
+
+Clamp Output
+
+OutputMoveClamp
+
+Drill Output
+
+OutputDrillCycleCancel
+
+OutputDrillCycleFirstHole
+
+OutputDrillCycleNextHoles
+
+OutputDrillCycleSubParameters
+
+OutputFirstHoleSub
+
+OutputNextHoleSub
+
+Lathe Output 
+
+OutputLatheRapid
+
+OutputLatheFeed
+
+OutputThread
+
+OutputSelectLatheTool
+
+OutputChangeProgPoint
+
+OutputSetSyncPoint
+
+OutputLatheCycle
+
+Laser Cut Hole Output
+
+OutputCutHoleCycleCancel
+
+OutputCutHoleCycleFirstHole
+
+OutputCutHoleCycleNextHoles
+
+Wire Output
+
+OutputStop
+
+================================================================================
+
+

@@ -1,0 +1,1826 @@
+================================================================================
+SEKCJA: 10_Utilities/Utilities.txt
+Wygenerowano z acAPI.bas
+================================================================================
+
+PLIK: Attributes
+================================================================================
+
+Attributes
+
+Attributes
+
+Attributes are a feature of the API which let a VBA 
+ Macro (or DLL or EXE) attach data to a Path object. (Geometry or tool 
+ path.) (Also Element, MillTool, Drawing and WorkPlane) Each attribute 
+ may be an integer or floating point number, or a string. Each attribute 
+ may be read and written using the API, and can be read in the Post Processor. 
+ They are saved with the AlphaCAM drawing eg in the .AMD file.
+
+Each attribute is identified by a string. Because the 
+ attributes are saved in the drawing file and a user may have more than 
+ one add-in using attributes, we need to have a way of choosing the string 
+ indentifier so that it is unique. The way we have used is this:
+
+The string should be made up as follows: (no quotes 
+ or spaces)
+
+ "Company Name" "Country Code" 
+ "Script Writer Initials" "Project" "Identifier"
+
+"Company Name" and "Country Code" 
+ refer to the company and country of the script writer. "Identifier" 
+ is whatever the script writer wants to refer to it as within that project.
+
+For example, the Nesting in AlphaCAM uses attributes 
+ to store data about the nesting. A typical attribute name is:
+
+ "LicomUKsabj_nest_path_file"
+
+ie "Licom" "UK" "Stephen A.B. 
+ Jones" "Nest" "path_file".
+
+The country code should be as in Web addresses, (USA 
+ should use USA) eg UK = United Kingdom, DE = Germany, IT = Italy, FR = 
+ France, CH = Switzerland, JP = Japan, TW = Taiwan etc.
+
+If each script writer uses his company name, country 
+ and initials we should avoid conflicts. Each writer just has to worry 
+ about the remainder of the name. Each of these strings is stored just 
+ once in memory and in the file, so do not worry about a long string wasting 
+ memory.
+
+Due to international considerations, the attribute names 
+ are CASE-SENSITIVE. They should be declared only once. VBA programmers 
+ should use Const, C++ programmers 
+ should use #define, Delphi programmers 
+ should use const.
+
+The Attribute is set and returned as a Variant. VBA 
+ will automatically convert between a Variant and a string or number.
+
+For an example of attaching attributes to geometries 
+ see here.
+
+Attributes can also be attached to a MillData (or TurnData 
+ or WireData) object. The attributes will then be copied to the resulting 
+ tool paths when eg the RoughFinish method is used.
+
+Attributes are stored as Variants. A Variant is a variable 
+ stored as a number giving its type and another variable storing the data. 
+ The type is determined by the type of the variable or expression used 
+ to set the attribute. For example:
+
+ P.Attribute(ATTR1) = "ABC"
+
+will store a string,
+
+ P.Attribute(ATTR1) = 10.5
+
+will store a floating point (double precision) value.
+
+ P.Attribute(ATTR1) = 10
+
+will store an Integer value.
+
+It is recommended to set the type using a variable of 
+ the required type. For example:
+
+ Dim X As Double
+
+ X = 10
+
+ P.Attribute(ATTR1) = X
+
+will store a floating point (double precision) value.
+
+The type is important if the data is to be used in the 
+ Post Processor. Also, 
+ it is easier to read an attribute if it always has the same type. (Particularly 
+ in languages other than VBA.)
+
+More:
+
+Using 
+ Attributes in the Post Processor
+
+Example using 
+ Attributes
+
+Using 
+ Attributes in Delphi and C++
+
+================================================================================
+PLIK: CadInputSettingsMethods
+================================================================================
+
+CadInputSettings Methods
+ 
+ 
+
+ CadInputSettings Methods
+
+ None
+
+================================================================================
+PLIK: CadInputSettingsObject
+================================================================================
+
+CadInputSettings Object
+
+CadInputSettings Object
+
+Settings to control input of CAD files.
+
+ 
+
+CadInputSettings 
+ Properties
+
+CadInputSettings 
+ Methods
+
+================================================================================
+PLIK: CadInputSettingsProperties
+================================================================================
+
+CadInputSettings Properties
+
+CadInputSettings Properties
+
+BreakTol - (double) Tolerance for joining elements while 
+ reading CAD files
+
+CombineTangentialElements - (boolean) True to combine 
+ tangential lines / arcs in CAD input
+
+DxfSpecial - (long) Control DXF input: 1 = Cabinets
+
+IgnorePolylineWidth - (boolean) True to ignore width 
+ of polylines in DXF input
+
+InputText - (boolean) True to input text in CAD input
+
+UseColors - (boolean) True to use line/arc colours in 
+ DXF input
+
+================================================================================
+PLIK: Collections
+================================================================================
+
+Collections
+ 
+ 
+
+ Collections
+
+ A Collection is an object that is a list of objects. VBA provides a general Collection object which can be used to hold any kind of object, see the VBA help file. AlphaCAM provides Collection objects for many of the AlphaCAM objects. These are usually used to give access to the objects. In AlphaCAM (and in other VBA hosts eg Word) a Collection for a particular type of object has the same name as the object, with 's' added on the end. For example, a Paths object is a Collection of Path objects.
+
+ Collections give a consistent way of accessing a list of objects. The number of objects in a Collection is given by the Count property. An object can be accessed using its position in the list, 1 to Count, eg: (Where Drw is a Drawing object)
+
+ Dim Geos As Paths
+
+ Set Geos = Drw.Geometries
+
+ Dim Geo As Path
+
+ Set Geo = Geos(1) ' gives the first geometry
+
+ Set Geo = Geos(5) ' gives geometry number 5
+
+ Or:
+
+ Dim Geo As Path
+
+ Set Geo = Drw.Geometries(5) ' gives geometry number 5
+
+ If an object has a name, it can also be accessed by name eg:
+
+ Dim Lyr as Layer
+
+ Set Lyr = Drw.Layers("HOLES")
+
+ The above examples actually use the Item method of the Collection. This is the default member so in VBA / VB, Geos(5) is equivalent to Geos.Item(5). In other languages you have to specify Item.
+
+ To loop over all the objects in the Collection:
+
+ Dim Geo As Path
+
+ For Each Geo In Drw.Geometries
+
+ ' Do something with Geo 
+
+ Next Geo
+
+ For other languages see here.
+
+ The Paths Collection has a number of methods which let you do something to all the paths in it. See Paths.
+
+ See Drawing.UserSelectMultiGeosCollection for examples using the Paths Collection.
+
+ The Collections available in AlphaCAM are:
+
+ Elements
+
+ Layers
+
+ Materials
+
+ Operations
+
+ Paths
+
+ SubOperations
+
+ WorkPlanes
+
+ The Collection object is obtained from the containing object. For example, the Collection of geometries in a layer is given by: (Where Lyr is a Layer object.)
+
+ Lyr.Geometries
+
+ More:
+
+ Using Collections in Delphi and C++
+
+================================================================================
+PLIK: Constants
+================================================================================
+
+Constants
+ 
+ 
+
+ Constants
+
+ Some of the API methods and properties use named constant values eg acamINSIDE or acamToolBALL. These all start with "acam". In a VBA Project inside AlphaCAM they are defined automatically. In an externally created program or DLL they may be used by importing the Type Library.
+
+================================================================================
+PLIK: ExampleusingAttributes
+================================================================================
+
+Example using Attributes
+ 
+ 
+
+ Example using Attributes
+
+ The first Sub draws the characters A to E and attaches an attribute to each geometry making up each character. The attribute is a string containing the character.
+
+ The second Sub asks the user to select a geometry and gets the attribute. If the attribute is not there an empty variant will be returned, so this is tested for. If it is there the string is displayed. For example, clicking on one of the geometries making up the character 'B' displays 'B' in a message box.
+
+ For other languages see here.
+
+ Const ATTR1 As String = "LicomUKdmbManualExampleTest1"
+
+ Public Sub AttributeExample1()
+
+ Dim Drw As Drawing 
+
+ Set Drw = App.ActiveDrawing 
+
+ Dim PS As Paths 
+
+ Dim P1 As Path 
+
+  
+
+ Dim X As Double 
+
+ Dim CH As Integer 
+
+ X = 0 
+
+ For CH = Asc("A") To Asc("E") 
+
+ Set PS = Drw.CreateText(Chr(CH), X, 0, 10) 
+
+ X = X + 20 
+
+ For Each P1 In PS 
+
+ P1.Attribute(ATTR1) = Chr(CH) 
+
+ Next P1 
+
+ Next CH 
+
+ End Sub
+
+ Public Sub AttributeExample2()
+
+ Dim Drw As Drawing 
+
+ Set Drw = App.ActiveDrawing 
+
+ Dim P1 As Path 
+
+ Do 
+
+ Set P1 = Drw.UserSelectOneGeo("Select a Geometry") 
+
+ If P1 Is Nothing Then 
+
+ Exit Do 
+
+ End If 
+
+  
+
+ Dim V As Variant 
+
+ V = P1.Attribute(ATTR1) 
+
+ ' Test to see if the attribute has not been set 
+
+ If VarType(V) <> vbEmpty Then 
+
+ MsgBox V 
+
+ End If 
+
+ Loop 
+
+ End Sub
+
+================================================================================
+PLIK: Frame_AddButton
+================================================================================
+
+Frame.AddButton
+ 
+ 
+
+ Frame.AddButton
+
+ Add a button to a button bar.
+
+ Syntax
+
+ frame.AddButton (BarID, BmpFileName, CommandID)
+
+ AcamButtonBar BarID ID of bar
+
+ String BmpFileName File name of button image
+
+ Long CommandID ID of command that button will run
+
+ Remarks
+
+ BarID can be the ID of one of the existing button bars (see AcamButtonBar in the VBA Object Browser), or it can be the ID returned by a call to Frame.CreateButtonBar, which creates a new button bar.
+
+ BmpFileName is the name of a .BMP file. (The file name only, NOT the complete path name.) It should be in the same directory as the add-in. It should be a 16-colour bitmap, width = 16, height = 15. In the API folder on the AlphaCAM CD is Blank.bmp which can be used as a starter.
+
+ CommandID is the ID of the command that the button will run. It will usually be the value of Frame.LastMenuCommandID after a call to one of the AddMenuItem (2, 3 or 4) methods. It can also be the ID of an AlphaCAM command, see AcamCommand in the VBA Object Browser.
+
+ See AddMenuItem2 for an example.
+
+================================================================================
+PLIK: Frame_AddCommand
+================================================================================
+
+Frame.AddCommand
+
+Frame.AddCommand
+
+Add a command with NO menu item.
+
+Syntax
+
+frame.AddCommand (Function)
+
+String Function Name of the function to call
+
+Return Long Command ID
+
+Remarks
+
+This would normally be used to add a command that can 
+ be called by Frame.PostCommand.
+
+================================================================================
+PLIK: Frame_AddMenuItem
+================================================================================
+
+Frame.AddMenuItem
+ 
+ 
+
+ Frame.AddMenuItem
+
+ Obsolete. See AddMenuItem2 and AddMenuItem3.
+
+================================================================================
+PLIK: Frame_AddMenuItem2
+================================================================================
+
+Frame.AddMenuItem2
+ 
+ 
+
+ Frame.AddMenuItem2
+
+ Add an item to a menu. This method will add the item to a specified menu. See AddMenuItem3 if a "pop-out-the-side" menu is required.
+
+ Syntax
+
+ frame.AddMenuItem2 (ItemName, Function, Location, MenuName)
+
+ String ItemName Name in menu.
+
+ String Function  Name of function.
+
+ Long Location  Menu to add item to. See remarks.
+
+ String MenuName Name for new menu if Location = acamMenuNEW, else ""
+
+ Remarks
+
+ The Location parameter controls the position of the menu item. It can have one of the following values:
+
+ 
+ 
+ 
+ Value of Location
+
+ 
+ Position
+
+ 
+ 
+ acamMenuADDINS
+
+ 
+ A menu called "Add-Ins" added in front of the Help menu.
+
+ 
+ 
+ acamMenuFILE
+
+ 
+ The File menu, between Print Preview and the Recent File List.
+
+ 
+ 
+ acamMenuFILE
+
+ 
+ The File menu, between Print Preview and the Recent File List.
+
+ 
+ 
+ acamMenuFILE_OPEN
+
+ 
+ The File menu, after Open.
+
+ 
+ 
+ acamMenuFILE_INSERT
+
+ 
+ The File menu, after Insert.
+
+ 
+ 
+ acamMenuFILE_SAVE
+
+ 
+ The File menu, after Save As.
+
+ 
+ 
+ acamMenuFILE_INPUT
+
+ 
+ The File menu, after Input CAD and NC.
+
+ 
+ 
+ acamMenuFILE_OUTPUT
+
+ 
+ The File menu, after Output CAD and NC.
+
+ 
+ 
+ acamMenuFILE_POST
+
+ 
+ The File menu, after Select Post and List NC.
+
+ 
+ 
+ acamMenuFILE_CONFIGURE
+
+ 
+ The Configure pop-out in the File menu.
+
+ 
+ 
+ acamMenuEDIT
+
+ 
+ The end of the Edit menu.
+
+ 
+ 
+ acamMenuVIEW
+
+ 
+ The end of the View menu.
+
+ 
+ 
+ acamMenuGEO
+
+ 
+ The end of the Geometry menu.
+
+ 
+ 
+ acamMenu3D
+
+ 
+ The end of the 3D menu.
+
+ 
+ 
+ acamMenuUTILS
+
+ 
+ The end of the Utils menu.
+
+ 
+ 
+ acamMenuCAD
+
+ 
+ The end of the CAD menu.
+
+ 
+ 
+ acamMenuMACHINE
+
+ 
+ The end of the Machine menu.
+
+ 
+ 
+ acamMenuHELP
+
+ 
+ The end of the Help menu.
+
+ 
+ 
+ acamMenu3DDIG
+
+ 
+ A new pop-out menu called 3D-Digitise after Digitise in the Geometry menu.
+
+ 
+ 
+ acamMenuSPECIALGEO
+
+ 
+ The end of the Special Geometries menu in the Geometry menu.
+
+ 
+ 
+ acamMenuSPECIALFUN
+
+ 
+ The end of the Special Functions menu in the Utils menu.
+
+ 
+ 
+ acamMenuNEW
+
+ 
+ A new menu added in front of the Help menu, with the name given in the MenuName parameter. If a menu with that name already exists it will be used instead.
+
+ 
+ 
+ acamMenuUTILS_NEST
+
+ 
+ Before Area menu in Utils menu.
+
+ 
+ 
+ acamMenuMACHINE_SETUP
+
+ 
+ First section of Machine menu.
+
+ 
+ 
+ acamMenuMACHINE_OPS
+
+ 
+ Second section of Machine menu.
+
+ 
+ 
+ acamMenuMACHINE_3D
+
+ 
+ 3D section of Machine menu.
+
+ 
+ 
+ acamMenuMACHINE_EDIT
+
+ 
+ Edit section of Machine menu.
+
+ 
+ This routine may only be used in the Events module of a VBA Macro or a DLL.
+
+ The example will add a menu item called Circles to the end of the Geometry menu. The function Circles (in the Events module in the same VBA project, or in the same DLL) will be called when the menu item is picked. An ampersand (&) in the menu text gives an underline (_) in the displayed menu text for keyboard selection.
+
+ It also adds a button to the CAD Geometry button bar.
+
+ It also adds a menu item called Name to a new menu called Extras, which calls the function MyName.
+
+  ' In Events module in a VBA project in Licomdir\VBMacros\StartUp
+
+  Function InitAlphacamAddIn (AcamVersion As long) As Integer
+
+   Dim frm As Frame
+
+   Set frm = App.Frame
+
+   frm.AddMenuItem2 "&Circles", "Circles", acamMenuGEO, ""
+
+   frm.AddButton acamButtonBarCAD_GEOMETRY, "Circles.bmp", frm.LastMenuCommandID
+
+   frm.AddMenuItem2 "&Name", "MyName", acamMenuNEW, "E&xtras"
+
+   InitAlphacamAddIn = 0
+
+  End Function
+
+  
+
+  Function Circles()
+
+   MsgBox "Circles"
+
+  End Function
+
+  Function MyName()
+
+   MsgBox "Name"
+
+  End Function
+
+ Note that Circles and MyName are Functions, not Subs, because if they are Subs they will appear in the Macros dialog box reached from the Macros command in the VBA Macros menu, which is not wanted if they are on a menu.
+
+ If a function with the same name as the function, with "OnUpdate" in front, is found in the same module as the function, it will be used to enable or disable the menu item, and/or to add a check mark in front of the menu item. It should return one of the following values:
+
+ 0 Menu item is disabled and unchecked
+
+ 1 Menu item is enabled and unchecked
+
+ 2 Menu item is disabled and checked
+
+ 3 Menu item is enabled and checked
+
+ If there is no update function the default is 1.
+
+ For example, if in the example above there is the function below:
+
+  Function OnUpdateCircles()
+
+   If App.ActiveDrawing.GetGeoCount > 0 Then
+
+    OnUpdateCircles = 1
+
+   Else
+
+    OnUpdateCircles = 0
+
+   End If
+
+  End Function
+
+ the menu item will be disabled if there are no geometries in the drawing.
+
+================================================================================
+PLIK: Frame_AddMenuItem3
+================================================================================
+
+Frame.AddMenuItem3
+ 
+ 
+
+ Frame.AddMenuItem3
+
+ As AddMenuItem2, but with the option of using a "pop-out-the-side" menu.
+
+ Syntax
+
+ frame.AddMenuItem3 (ItemName, Function, Location, MenuName, PopupName As String)
+
+ String ItemName Name in menu.
+
+ String Function  Name of function.
+
+ Long Location  Menu to add menu to.
+
+ String MenuName Name for new menu if Location = acamMenuNEW, else ""
+
+ String PopupName Name for pop-out menu, "" if not required.
+
+ This works the same as AddMenuItem2, except that where AddMenuItem2 would add a menu item, this function will add a pop-out menu, and add the menu item to that menu. If the pop-out menu exists it will be used, the menu item will be added to the end.
+
+ See AddMenuItem2 for details.
+
+================================================================================
+PLIK: Frame_AddMenuItem4
+================================================================================
+
+Frame.AddMenuItem4
+ 
+ 
+
+ Frame.AddMenuItem4
+
+ Add an item to a menu, at any location.
+
+ Syntax
+
+ frame.AddMenuItem4 (ItemName, Function, Location, After, PopupName)
+
+ String  ItemName Name in menu.
+
+ String  Function  Name of function.
+
+ AcamCommand Location  ID of command to add menu next to.
+
+ Boolean After True to add new item after existing item, False for before.
+
+ String  PopupName Name for pop-out menu, "" if not required.
+
+ Location can be the ID of an existing AlphaCAM command (see AcamCommand in the VBA Object Browser), or a command added by this add-in, using Frame.LastMenuCommandID.
+
+ If After is True, the new command will be added after the existing command, if False it will be added in front of the command.
+
+ If PopupName is "", the new item will be added to an existing menu, if not, this function will add a pop-out menu, and add the menu item to that menu. If the pop-out menu exists it will be used, the menu item will be added to the end.
+
+================================================================================
+PLIK: Frame_AddProjectBarPage
+================================================================================
+
+Frame.AddProjectBarPage
+ 
+ 
+
+ Frame.AddProjectBarPage
+
+ Add a page to the project bar.
+
+ Syntax
+
+ frame.AddProjectBarPage (Hwnd, Name, Hbitmap)
+
+ long Hwnd Handle of window representing page
+
+ String Name Text for the tab
+
+ long Hbitmap Handle of bitmap for tab icon
+
+ Remarks
+
+ This would normally be used from a C++ DLL to add a page created as a mode-less dialog box to the project bar. See Addin1-2002 in the API02\VisualCPP folder on the AlphaCAM CD for an example.
+
+================================================================================
+PLIK: Frame_AddTitleText
+================================================================================
+
+Frame.AddTitleText
+ 
+ 
+
+ Frame.AddTitleText
+
+ Add text to the main AlphaCAM title bar.
+
+ Syntax
+
+ frame.AddTitleText (Text)
+
+ String  Text Text to add.
+
+ See Frame.RemoveTitleText to remove it.
+
+================================================================================
+PLIK: Frame_ClearEvaluateParameters
+================================================================================
+
+Frame.ClearEvaluateParameters
+
+Frame.ClearEvaluateParameters
+
+Clear the parameters set for the Evaluate 
+ method..
+
+Syntax
+
+frame.ClearEvaluateParameters
+
+================================================================================
+PLIK: Frame_CloseProgressBox
+================================================================================
+
+Frame.CloseProgressBox
+ 
+ 
+
+ Frame.CloseProgressBox
+
+ Close the window displayed with Frame.ShowProgressBox.
+
+ Syntax
+
+ frame.CloseProgressBox
+
+================================================================================
+PLIK: Frame_CreateButtonBar
+================================================================================
+
+Frame.CreateButtonBar
+
+Frame.CreateButtonBar
+
+Create an empty button bar, or return an existing one
+
+Syntax
+
+frame.CreateButtonBar (Name)
+
+String Name The name of the bar
+
+[Return] Long Returned ID of the bar.
+
+Remarks
+
+If there is an existing API button bar with the same 
+ name, its ID will be returned, otherwise a new button bar will be created, 
+ and its ID returned.There are 24 button bars available for add-ins to 
+ use. If they are all used, the return value will be 0. The ID can be passed 
+ as the BarID parameter to Frame.AddButton, 
+ to add buttons.
+
+================================================================================
+PLIK: Frame_Evaluate
+================================================================================
+
+Frame.Evaluate
+
+Frame.Evaluate
+
+Evaluate an expression using the AlphaCAM expression 
+ evaluator (as used in Posts and dialog boxes). See "Math Functions" 
+ in the AlphaEDIT help file.
+
+Syntax
+
+frame.Evaluate (Expression)
+
+String  Expression The expression to evaluate
+
+Example
+
+Dim X As Double 
+
+X = App.Frame.Evaluate("atan2(1,3)") 
+
+MsgBox "Atan(1/3) = " 
+ & X, vbInformation 
+
+Remarks
+
+See SetEvaluateParameter 
+ and ClearEvaluateParameters
+
+================================================================================
+PLIK: Frame_ExitNewMessageLoop
+================================================================================
+
+Frame.ExitNewMessageLoop
+
+Frame.ExitNewMessageLoop
+
+Exit the new message loop.
+
+Syntax
+
+frame.ExitNewMessageLoop
+
+This can be used to abort the current selection routine 
+ and return AlphaCAM to a state where commands can be executed, eg with 
+ PostCommand.
+
+================================================================================
+PLIK: Frame_GetProjectBarPage
+================================================================================
+
+Frame.GetProjectBarPage
+ 
+ 
+
+ Frame.GetProjectBarPage
+
+ Get the Hwnd for a page to the project bar.
+
+ Syntax
+
+ frame.GetProjectBarPage (Type)
+
+ AcamProjectBarPage Type Page to get.
+
+================================================================================
+PLIK: Frame_InputFloatDialog
+================================================================================
+
+Frame.InputFloatDialog
+ 
+ 
+
+ Frame.InputFloatDialog
+
+ Get a floating point number using a dialog box, allowing expression evaluation, and rejecting invalid values.
+
+ Syntax
+
+ frame.InputFloatDialog(Title, Prompt, Flags, Value)
+
+ String Title Title for dialog box
+
+ String Prompt Prompt
+
+ AcamFloat Flags required values eg acamFloatPOSITIVE
+
+ Float Value On input, the default value, on return, the entered value
+
+ [Return] boolean  Return False if user cancels
+
+ Example
+
+ Dim X As Single 
+
+ If App.Frame.InputFloatDialog("AlphaCAM", "Enter X (> 0)", acamFloatPOSITIVE, X) Then 
+
+ MsgBox "X = " & X 
+
+ End If
+
+================================================================================
+PLIK: Frame_InputIntegerDialog
+================================================================================
+
+Frame.InputIntegerDialog
+ 
+ 
+
+ Frame.InputIntegerDialog
+
+ Get a long integer number using a dialog box, allowing expression evaluation, and rejecting invalid values.
+
+ Syntax
+
+ frame.InputIntegerDialog(Title, Prompt, Flags, Value)
+
+ String Title Title for dialog box
+
+ String Prompt Prompt
+
+ AcamFloat Flags required values eg acamFloatPOSITIVE
+
+ Long Value On input, the default value, on return, the entered value
+
+ [Return] boolean  Return False if user cancels
+
+ Example
+
+ Dim N As Long 
+
+ N = 100 
+
+ If App.Frame.InputIntegerDialog("AlphaCAM", "Enter N (> 0)", acamFloatPOSITIVE, N) Then 
+
+ MsgBox "N = " & N 
+
+ End If
+
+================================================================================
+PLIK: Frame_LoadWindowLayout
+================================================================================
+
+Frame.LoadWindowLayout
+
+Frame.LoadWindowLayout
+
+Load window layout. File name must not have an extension 
+ as two files are used.
+
+Syntax
+
+frame.LoadWindowLayout (FileName)
+
+String FileName file name only
+
+================================================================================
+PLIK: Frame_ReadTextFile
+================================================================================
+
+Frame.ReadTextFile
+ 
+ 
+
+ Frame.ReadTextFile
+
+ Read and decrypt text from AlphaCAM text file or other text file.
+
+ Syntax
+
+ frame.ReadTextFile (FileName, DollarNumber, Index)
+
+ String FileName Name of text file (.txt or .ctx extension), no path
+
+ long DollarNumber $ number to read
+
+ short Index  Line number, 1 = first line after $, 2 = second etc.
+
+ [Return] String  Returned string.
+
+ Remarks
+
+ This is mainly for Licom companies and distributors who want to write an add-in which can be easily translated to other languages. The text file must have the same format as engacam.txt. For example, the text file addin1.txt might contain the following:
+
+ Text for example addin (ADDIN1.DLL)
+
+ $10
+
+ Select Tool
+
+ Tool Library
+
+ Then the statement
+
+ S$ = frame.ReadTextFile("ADDIN1.TXT", 10, 1) 
+
+ will put the string "Select Tool" into S$
+
+ The .txt file should be in the same directory as the DLL or VBA Project that will use it. The file does not have to be encrypted with maketext.exe, AlphaCAM will automatically detect whether it is encrypted or not and read it.
+
+ The statement
+
+ S$ = frame.ReadTextFile("acam.ctx", 2350, 1)
+
+ will put the string "Clear Memory" into S$.
+
+ Note that the numbers in the acam.ctx and aedit.ctx are not guaranteed to stay the same forever, although every effort will be made to keep them compatible.
+
+================================================================================
+PLIK: Frame_RegisterExportFunction
+================================================================================
+
+Frame.RegisterexportFunction
+ 
+ 
+
+ Frame.RegisterexportFunction
+
+ Register a function in this add-in which can export a file of a specified type.
+
+ Syntax
+
+  Frame.RegisterExportFunction (FileTypeName, FileExtension, Function)
+
+ String FileTypeName A name for the file type
+
+ String FileExtension The extension of this type of file
+
+ String Function  The name of the function which will export the file
+
+ Remarks
+
+ The file type name will be added to the list of types in the drop-down list in the Output CAD dialog box.
+
+ Example (C++)
+
+ In InitAlphacamAddIn:
+
+ frame->RegisterExportFunction("Parasolid Binary", ".x_b", "PSExportFile");
+
+ In the same DLL:
+
+  ACAMAPIFUN(void) PSExportFile(VARIANT Acam, const char *FileName)
+
+  // Write the add-in's data to the file.
+
+================================================================================
+PLIK: Frame_RegisterImportFunction
+================================================================================
+
+Frame.RegisterImportFunction
+ 
+ 
+
+ Frame.RegisterImportFunction
+
+ Register a function in this add-in which can import a file of a specified type.
+
+ Syntax
+
+  Frame.RegisterImportFunction (FileTypeName, FileExtensions, Function)
+
+ String FileTypeName A name for the file type
+
+ String FileExtensions The extensions of this type of file separated by ;
+
+ String Function  The name of the function which will import the file
+
+ Remarks
+
+ When the API method Application.OpenExternalFile is called AlphaCAM will look through the list of registered import functions to see if any can import the file. The first function found will be called with the name of the file. The function should read the file into AlphaCAM. The same process happens when a file of unknown type is "dropped" on to AlphaCAM from Explorer.
+
+ Example (C++)
+
+ In InitAlphacamAddIn:
+
+ frame->RegisterImportFunction("Parasolid", ".x_t;.x_b", "PSInputFile");
+
+ In the same DLL:
+
+  ACAMAPIFUN(void) PSInputFile(VARIANT Acam, const char *FileName, VARIANT CadSettings)
+
+  // Read the file into AlphaCAM
+
+ Example (VBA)
+
+ In InitAlphacamAddin:
+
+  frame.RegisterImportFunction "Text", ".txt", "InputText"
+
+ In the same module (Events)
+
+ Function InputText(FileName As String, CadSettings As CadInputSettings)
+
+  Shell "notepad " & FileName
+
+ End Function
+
+ CadSettings is an object of type CadInputSettings, which contains properties which may be used to control the import eg BreakTol.
+
+ See Application.OpenExternalFile
+
+================================================================================
+PLIK: Frame_RegisterImportFunction2
+================================================================================
+
+Frame.RegisterImportFunction2
+ 
+ 
+
+ Frame.RegisterImportFunction2
+
+ Register a function in this add-in which can import a file of a specified type.
+
+ As RegisterImportFunction but with CheckFunction to check a file to see if it is the required type.
+
+ This method should be called if a file extension could be used for more than one type.
+
+ This method will work with add-in DLLs only, not VBA projects.
+
+ Syntax
+
+  Frame.RegisterImportFunction2 (FileTypeName, FileExtensions, ImportFunction, CheckFunction)
+
+ String FileTypeName A name for the file type
+
+ String FileExtensions The extensions of this type of file separated by ;
+
+ String ImportFunction  The name of the function which will import the file
+
+ String CheckFunction  The name of the function which will check the file
+
+ Remarks
+
+ CheckFunction will be passed App and file name, should return non-zero if it can be handled.
+
+ When the API method Application.OpenExternalFile is called AlphaCAM
+ will look through the list of registered import handlers to see if any can import a file with the extension.
+ For each handler the CheckFunction will be called with the name of the file. The function should examine the file to see if it can handle it, and return non-zero if so.
+ If a CheckFunction returns non-zero the ImportFunction will be called and should import the file.
+ The same process happens when a file of unknown type is "dropped" on to AlphaCAM from Explorer.
+
+ Example (C++)
+
+ In InitAlphacamAddIn:
+
+ frame->RegisterImportFunction2("Parasolid", ".x_t;.x_b", "PSInputFile", "PSCheckFile");
+
+ In the same DLL:
+
+  ACAMAPIFUN(void) PSInputFile(VARIANT Acam, const char *FileName, VARIANT CadSettings)
+
+  // Read the file into AlphaCAM
+
+  ACAMAPIFUN(int) PSCheckFile(VARIANT Acam, const char *FileName)
+
+  // Return non-zero if the file can be handled by PSInputFile
+
+ CadSettings is an object of type CadInputSettings, which contains properties which may be used to control the import eg BreakTol.
+
+ See Application.OpenExternalFile
+
+================================================================================
+PLIK: Frame_RemoveCommand
+================================================================================
+
+Frame.RemoveCommand
+ 
+ 
+
+ Frame.RemoveCommand
+
+ Remove the menu item and button associated with an AlphaCAM command.
+
+ If the menu would be empty after removing the item, it is also removed.
+
+ Syntax
+
+ frame.RemoveCommand (ID)
+
+ AcamCommand ID ID The ID of the command
+
+================================================================================
+PLIK: Frame_RemoveMenu
+================================================================================
+
+Frame.RemoveMenu
+ 
+ 
+
+ Frame.RemoveMenu
+
+ Remove the menu containing the given AlphaCAM command.
+
+ Syntax
+
+ frame.RemoveMenu (ID)
+
+ AcamCommand ID ID The ID of the command
+
+================================================================================
+PLIK: Frame_RemoveProjectBarPage
+================================================================================
+
+Frame.RemoveProjectBarPage
+ 
+ 
+
+ Frame.RemoveProjectBarPage
+
+ Remove a page from the project bar. Only pages added by this addin may be removed.
+
+ Syntax
+
+ frame.RemoveProjectBarPage (Hwnd)
+
+ long Hwnd Handle of window added
+
+ Remarks
+
+ See AddProjectBarPage.
+
+================================================================================
+PLIK: Frame_RemoveTitleText
+================================================================================
+
+Frame.RemoveTitleText
+ 
+ 
+
+ Frame.RemoveTitleText
+
+ Remove text added by AddTitleText
+
+ Syntax
+
+ frame.RemoveTitleText (Text)
+
+ String  Text The text that was passed to AddTitleText
+
+ See Frame.AddTitleText.
+
+================================================================================
+PLIK: Frame_RunCommand
+================================================================================
+
+Frame.RunCommand
+
+Frame.RunCommand
+
+Run an AlphaCAM command.
+
+Syntax
+
+frame.RunCommand (ID)
+
+AcamCommand ID ID The ID of the command
+
+Remarks
+
+This uses the Windows function SendMessage to run the 
+ command, so will be run immediately. See PostCommand.
+
+================================================================================
+PLIK: Frame_SaveWindowLayout
+================================================================================
+
+Frame.SaveWindowLayout
+
+Frame.SaveWindowLayout
+
+Save window layout. File name must not have an extension 
+ as two files are used.
+
+Syntax
+
+frame.SaveWindowLayout (FileName)
+
+String FileName file name only
+
+================================================================================
+PLIK: Frame_SetEvaluateParameter
+================================================================================
+
+Frame.SetEvaluateParameter
+
+Frame.SetEvaluateParameter
+
+Set a parameter for the Evaluate 
+ method..
+
+Syntax
+
+frame.SetEvaluateParameter (Name, Value)
+
+String Name  The name of the parameter
+
+Double Value The value of the parameter
+
+Example
+
+    Dim 
+ F As Frame
+
+    Set 
+ F = App.Frame
+
+    
+
+    F.ClearEvaluateParameters
+
+    F.SetEvaluateParameter 
+ "A", 10
+
+    F.SetEvaluateParameter 
+ "B", 25
+
+    
+
+    MsgBox 
+ F.Evaluate("A+B")
+
+================================================================================
+PLIK: Frame_SetProgressText
+================================================================================
+
+Frame.SetProgressText
+ 
+ 
+
+ Frame.SetProgressText
+
+ Update the text in the window displayed with Frame.ShowProgressBox.
+
+ Syntax
+
+ frame.SetProgressText Text
+
+ String Text Text in window
+
+ Remarks
+
+ Frame.ShowProgressBox must be called first.
+
+================================================================================
+PLIK: Frame_ShowProgressBox
+================================================================================
+
+Frame.ShowProgressBox
+
+Frame.ShowProgressBox
+
+Show a window while the script performs a lengthy operation.
+
+Syntax
+
+frame.ShowProgressBox Title, Text
+
+String Title Text in title bar
+
+String Text Text in window
+
+Remarks
+
+The window will stay on the screen until the script 
+ calls Frame.CloseProgressBox, 
+ or the script finishes.
+
+Example:
+
+ Set frm = App.Frame
+
+ frm.ShowProgressBox("AlphaCAM", "Loading 
+ file - Please Wait") 
+
+ .. do lots of things ..
+
+ frm.CloseProgressBox
+
+================================================================================
+PLIK: Frame_ShowProjectBarPage
+================================================================================
+
+Frame.ShowProjectBarPage
+ 
+ 
+
+ Frame.ShowProjectBarPage
+
+ Show a page from the project bar, as if the user clicked on the tab. Only pages added by this addin may be shown.
+
+ Syntax
+
+ frame.ShowProjectBarPage (Hwnd)
+
+ long Hwnd Handle of window added
+
+ Remarks
+
+ See AddProjectBarPage.
+
+================================================================================
+PLIK: FrameObject
+================================================================================
+
+Frame Object
+
+Frame Object
+
+Object representing the main frame of AlphaCAM. Used 
+ to add menu items, read the text file, show a progress box etc.
+
+More:
+
+Frame Properties
+
+================================================================================
+PLIK: FrameProperties
+================================================================================
+
+Frame Properties
+
+Frame Properties
+
+ClearBeforeCadInput - (boolean) Value of Clear option 
+ in Input CAD, for use only in BeforeInputCad event (read-only)
+
+InNewMessageLoop - (boolean) True if AlphaCAM is running 
+ a second message loop (read-only)
+
+LastMenuCommandID - (long) Command ID of last menu item 
+ added by AddMenuItem? methods (read-only)
+
+PathOfThisAddin - (String) The path, not including the 
+ file name, of the file containing this add-in (read-only)
+
+PathOfThisAddin2 - (String) The complete path, including 
+ the file name and extension, of the file containing this add-in (read-only)
+
+ProjectBarUpdating - (boolean) Set to False to stop 
+ the project bar being updated eg when a lot of paths are being created 
+ by a macro. Set to True when the macro has finished adding paths, the 
+ project bar will then be updated
+
+ProjectBarVisible - (boolean) True if the project bar 
+ is visible, False if not. (read-write)
+
+OutputNcVisibleOnly - (boolean) Value of Visible Only 
+ option in Output NC, for use only in BeforeOutputNc and BeforeCreateNc 
+ events (read-only)
+
+ViewWindowHandle - (Long) The window handle for the 
+ AlphaCAM view window (read-only)
+
+WindowHandle - (Long) The window handle for the main 
+ AlphaCAM window (read-only)
+
+================================================================================
+PLIK: GeoCad_AddArcWithAttribute
+================================================================================
+
+GeoCad.AddArc
+
+GeoCad.AddArcWithAttribute
+
+Add an arc in any plane, with an attribute. The center, 
+ start and end points must be given in 3D 
+ Global coordinates. The plane 
+ containing the arc is specified by giving the axis ie the unit normal 
+ vector of the plane, for example (0, 0, 1) for a plane parallel to the 
+ global XY plane. The arc is CCW.
+
+Syntax
+
+geo.AddArcWithAttribute (CenX, CenY, CenZ, AxisX, 
+ AxisY, AxisZ, X1, Y1, Z1, X2, Y2, Z2, Index, newVal)
+
+double CenX X coord of arc center
+
+double CenY Y coord of arc center
+
+double CenZ Z coord of arc center
+
+double AxisX X coord of axis
+
+double AxisY Y coord of axis
+
+double AxisZ Z coord of axis
+
+double X1 X coord of start point
+
+double Y1 Y coord of start point
+
+double Z1 Z coord of start point
+
+double X2 X coord of end point
+
+double Y2 Y coord of end point
+
+double Z2 Z coord of end point
+
+String Index Name of attribute
+
+Variant newVal Value of attribute
+
+================================================================================
+PLIK: UsingAttributesinDelphiandC__
+================================================================================
+
+Using Attributes in Delphi and C++
+ 
+ 
+
+ Using Attributes in Delphi and C++
+
+ The equivalent code in Delphi to apply attributes is as follows:
+
+ Const ATTR1 = 'LicomUKdmbManualExampleTest1';
+
+ procedure TForm1.Button1Click(Sender: TObject);
+
+ var
+
+ acam: IAlphaCamApp; 
+
+ Drw: IDrawing; 
+
+ PS: IPaths; 
+
+ P1: IPath; 
+
+ X: Double; 
+
+ I, CH: Integer; 
+
+ begin
+
+ acam := CreateOleObject ('am5axaps.application') as IAlphaCamApp; 
+
+ Drw := acam.ActiveDrawing; 
+
+ X := 0.5; 
+
+ For CH := 65 To 69 do 
+
+ begin 
+
+ PS := Drw.CreateText(Chr(CH), X, 0, 10); 
+
+ For I := 1 to PS.Count do 
+
+ begin 
+
+ P1 := PS.Item(I); 
+
+ P1.Attribute[ATTR1] := Chr(CH); 
+
+ end; 
+
+ X := X + 20; 
+
+ end; 
+
+ end;
+
+ Code to read the attributes in Delphi is as follows:
+
+ procedure TForm1.Button2Click(Sender: TObject);
+
+ var
+
+ acam: IAlphaCamApp; 
+
+ Drw: IDrawing; 
+
+ P1: IPath; 
+
+ Attr: OleVariant; 
+
+ begin
+
+ acam := CreateOleObject ('am5axaps.application') as IAlphaCamApp; 
+
+ Drw := acam.ActiveDrawing; 
+
+ acam.Visible := true; 
+
+ repeat 
+
+ P1 := Drw.UserSelectOneGeo('Select a Geometry'); 
+
+ if P1 <> nil then 
+
+ begin 
+
+ Attr := P1.Attribute[ATTR1]; 
+
+ if VarType(Attr) <> varEmpty then 
+
+ ShowMessage (Attr); 
+
+ end; 
+
+ until P1 = nil 
+
+ end;
+
+ The equivalent code in Visual C++ to apply attributes is as follows:
+
+ #define ATTR1 "LicomUKdmbManualExampleTest1"
+
+ void CRunAcam2Dlg::OnButton6() 
+
+ {
+
+  using namespace AlphaCAMMill;
+
+  
+
+  IAlphaCamAppPtr pApp("am5axaps.application");
+
+  IDrawingPtr pDrw = pApp->ActiveDrawing;
+
+  double X = 0.5;
+
+  for(int CH = 'A' ; CH <= 'E' ; CH++)
+
+  {
+
+   char buf[2];
+
+   buf[0] = CH;
+
+   buf[1] = '\0';
+
+   _bstr_t str(buf);
+
+   IPathsPtr PS = pDrw->CreateText(str, X, 0, 10);
+
+   for(int I = 1 ; I <= PS->Count ; I++)
+
+   {
+
+    IPathPtr P1 = PS->Item(I);
+
+    P1->Attribute[ATTR1] = str;
+
+   }
+
+   X += 20.;
+
+  }
+
+ }
+
+ Code to read the attributes in Visual C++ is as follows:
+
+ void CRunAcam2Dlg::OnButton7() 
+
+ {
+
+  using namespace AlphaCAMMill;
+
+  
+
+  IAlphaCamAppPtr pApp("am5axaps.application");
+
+  
+
+  IDrawingPtr pDrw = pApp->ActiveDrawing;
+
+  
+
+  IPathPtr P1;
+
+  do
+
+  {
+
+   P1 = pDrw->UserSelectOneGeo("Select a Geometry");
+
+   if(P1 == NULL) break;
+
+   
+
+   VARIANT V = P1->Attribute[ATTR1];
+
+   // Test to see if the attribute has not been set
+
+   if(V.vt == VT_BSTR)
+
+    AfxMessageBox(CString(V.bstrVal));
+
+  }while(P1 != NULL);
+
+ }
+
+================================================================================
+PLIK: UsingCollectionsinDelphiandC__
+================================================================================
+
+Using Collections in Delphi and C++
+ 
+ 
+
+ Using Collections in Delphi and C++
+
+ To loop over all the objects in the Collection using C++ (assuming Smart Pointers):
+
+  IPathsPtr pGeos = pDrw->Geometries;
+
+  for(int i = 1 ; i <= pGeos->Count ; i++)
+
+  {
+
+   IPathPtr pGeo = pGeos->Item(i);
+
+   // Do something with pGeo
+
+  }
+
+ To loop over all the objects in the Collection using Delphi:
+
+ var
+
+ Drw: IDrawing; 
+
+ Geos: IPaths; 
+
+ Geo: IPath; 
+
+ // set Drw
+
+ Geos := Drw.Geometries; 
+
+ for i := 1 to Geos.Count do 
+
+ begin 
+
+ Geo := Geos.Item(i); 
+
+ // Do something with Geo 
+
+ end;
+
+================================================================================
+
+

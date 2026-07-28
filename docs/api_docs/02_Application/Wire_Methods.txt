@@ -1,0 +1,25 @@
+================================================================================
+SEKCJA: 02_Application/Wire_Methods.txt
+Wygenerowano z acAPI.bas
+================================================================================
+
+PLIK: Application_CreateWireData_Wireonly_
+================================================================================
+
+Application.CreateWireData (Wire only)
+ 
+ 
+
+ Application.CreateWireData (Wire only)
+
+ Create object representing Wire machining data. The properties of the object (eg ProgrammingZ) may then be set before calling a method eg Cut2AxisShape.
+
+ Syntax
+
+ App.CreateWireData
+
+ [Return] WireData  WireData object
+
+================================================================================
+
+

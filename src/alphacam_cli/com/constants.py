@@ -1,0 +1,52 @@
+from __future__ import annotations
+
+PROG_IDS = [
+    "Ar5axaps.Application",
+    "am5axaps.Application",
+    "aroutaps.Application",
+]
+
+# Tool types (from acAPI.bas)
+ACAM_TOOL_SQUARE = 0
+ACAM_TOOL_BULL = 1
+ACAM_TOOL_BALL = 2
+ACAM_TOOL_DRILL = 3
+ACAM_TOOL_TAP = 4
+ACAM_TOOL_USER = 5
+ACAM_TOOL_WHEEL = 6
+
+# Surface MC actions
+ACAM_SURFACE_MC_ROUGHING = 0
+ACAM_SURFACE_MC_FINISHING = 1
+ACAM_SURFACE_MC_TOOLSIDE = 2
+ACAM_SURFACE_MC_PENCIL = 3
+
+# Pocket types
+ACAM_POCKET_CONTOUR = 0
+ACAM_POCKET_ZIGZAG = 1
+ACAM_POCKET_SPIRAL = 2
+ACAM_POCKET_TRUE_SPIRAL = 3
+ACAM_POCKET_PARALLEL = 4
+
+# ToolInOut
+ACAM_TOOL_OUTSIDE = -1
+ACAM_TOOL_INSIDE = 1
+
+# Drill types
+ACAM_DRILL = 0
+ACAM_TAP = 1
+ACAM_BORE = 2
+ACAM_PECK = 3
+
+# NC output destinations
+ACAM_OUT_NC_FILE = 0
+ACAM_OUT_NC_MACHINE = 1
+ACAM_OUT_NC_BOTH = 2
+ACAM_OUT_NC_ASK = -1
+
+# Module letters
+MODULE_MILL = 77  # 'M'
+MODULE_ROUTER = 82  # 'R'
+MODULE_LATHE = 76  # 'L'
+MODULE_WIRE = 87  # 'W'
+MODULE_FLAME = 70  # 'F'

@@ -1,0 +1,219 @@
+================================================================================
+SEKCJA: 06_Tools/LatheTool.txt
+Wygenerowano z acAPI.bas
+================================================================================
+
+PLIK: LatheTool_SetCurrentTool
+================================================================================
+
+LatheTool.SetCurrentTool
+ 
+ 
+
+ LatheTool.SetCurrentTool
+
+ Set this tool to be the current tool, when there is more than one turret.
+
+ Syntax
+
+ Tool.SetCurrentTool
+
+ This is used to specify which tool is to be used for the next (single turret) machining operation when there is a tool in more than one turret.
+
+================================================================================
+PLIK: LatheToolExample
+================================================================================
+
+LatheTool Example
+ 
+ 
+
+ LatheTool Example
+
+ The example shows how to define a groving tool with two programming points.
+
+ Public Sub DefineTurningTool()
+
+ Dim Drw As Drawing 
+
+ Set Drw = App.ActiveDrawing 
+
+  
+
+ Dim Geos As Paths 
+
+ Set Geos = Drw.CreatePathCollection 
+
+  
+
+ ' Create Insert of grooving tool (must be first in Collection) 
+
+ Dim P1 As Path 
+
+ Set P1 = Drw.CreateRectangle(0, 0, 4, 12) 
+
+ P1.Fillet 0.5 
+
+  
+
+ ' Move it so the tip centre is at (0,0) 
+
+ P1.MoveL -0.5, -0.5 
+
+  
+
+ Geos.Add P1 
+
+  
+
+ ' Create Holder 
+
+ Dim P2 As Path 
+
+ Set P2 = Drw.CreateRectangle(0, 8, 25, 80) 
+
+  
+
+ ' Set start point and direction so we know which elements to chamfer 
+
+ P2.SetStartPoint 0, 8 
+
+ P2.CW = False 
+
+ P2.Elements(1).Chamfer P2.Elements(2), False, True, 15, 15 
+
+  
+
+ Geos.Add P2 
+
+  
+
+ P1.Selected = True 
+
+ P2.TrimWithCuttingGeos 0, 8 
+
+ P1.Selected = False 
+
+  
+
+ Dim Tool As LatheTool 
+
+ Set Tool = App.CreateTool 
+
+ Tool.SetTurningToolGeometry Geos 
+
+  
+
+ ' Define first programming point, PositionX and PositionY must be 0,0 for the first point 
+
+ ' TNV is a number between 1 and 8 as in the diagram in the AlphaEdit help file (search for TNV) 
+
+ Tool.DefineTurnProgrammingPoint 1, 0, 0, 0, 3, 11, 0.5 
+
+  
+
+ ' Define second programming point, PositionX and PositionY define the shift from the first point to this point 
+
+ Tool.DefineTurnProgrammingPoint 2, 3, 0, 0, 4, 12, 0.5 
+
+  
+
+ Tool.FeedPerRevX = 0.1 
+
+ Tool.FeedPerRevXZ = 0.2 
+
+ Tool.FeedPerRevZ = 0.3 
+
+  
+
+ Tool.TurretOffsetX = 1 
+
+  
+
+ Tool.SaveAs "c:\licomdat\ttools.alp\Groove2ProgPoints.att" 
+
+ End Sub
+
+================================================================================
+PLIK: LatheToolObject
+================================================================================
+
+LatheTool Object
+
+LatheTool Object
+
+Object representing a Tool in Lathe. The tool may be 
+ a turning tool or a milling tool. To create a LatheTool use Application.CreateTool, 
+ set the properties of the tool, 
+ then use one of the methods to save or select the tool. To select an existing 
+ tool with a known name use Application.SelectTool.
+
+A LatheTool has all the methods and properties of a 
+ MillTool, plus some extra ones for Turning. This section only lists the 
+ extra properties and methods for Turning. See MillTool 
+ for the Milling properties and methods.
+
+More:
+
+LatheTool Properties
+
+================================================================================
+PLIK: LatheToolProperties
+================================================================================
+
+LatheTool Properties
+
+LatheTool Properties
+
+FeedPerRevX - (float) Feed Per Rev in X direction
+
+FeedPerRevXZ - (float) Feed Per Rev in XZ direction
+
+FeedPerRevZ - (float) Feed Per Rev in Z direction
+
+FeedType - (AcamLatheFeed) Type of feed for Turning 
+ acamFeedPER_MIN or acamFeedPER_REV
+
+MaxSpindleSpeed - (float) Maximum spindle speed for 
+ Turning
+
+SpeedType - (AcamLatheSpeed) Type of speed for Turning 
+ acamSpeedSPINDLE or acamSpeedSURFACE
+
+Station - (AcamLatheStation) Which station is this tool 
+ in: acamStationFRONT or acamStationBACK (read-only)
+
+TurnProgrammingPoints - (TurnProgrammingPoints) Collection 
+ of TurnProgrammingPoint objects for a turning tool with multiple programming 
+ points
+
+Turret - (AcamLatheTurret) Which turret is this tool 
+ in: acamTurretABOVE_CL or acamTurretBELOW_CL (read-only)
+
+TurretOffsetX - (float) Turrret Offset in X
+
+TurretOffsetZ - (float) Turrret Offset in Z
+
+================================================================================
+PLIK: MillTool_SelectInLatheTurret
+================================================================================
+
+MillTool.Select
+ 
+ 
+
+ MillTool.SelectInLatheTurret
+
+ Select tool into given Lathe turret and station, after properties have been set. Tool will be used for subsequent machining operations.
+
+ Syntax
+
+ tool.SelectInLatheTurret (Turret, Station)
+
+ AcamLatheTurret Turret acamTurretABOVE_CL or acamTurretBELOW_CL
+
+ AcamLatheStation Station acamStationFRONT or acamStationBACK
+
+================================================================================
+
+

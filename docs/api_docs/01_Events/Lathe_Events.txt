@@ -1,0 +1,141 @@
+================================================================================
+SEKCJA: 01_Events/Lathe_Events.txt
+Wygenerowano z acAPI.bas
+================================================================================
+
+PLIK: AfterTurningMachiningEvent_Latheonly_
+================================================================================
+
+AfterTurningMachining Event (Lathe only)
+ 
+ 
+
+ AfterTurningMachining Event (Lathe only)
+
+ Sub AfterTurningMachining(Method As AcamTurningMethod, PS As Paths, Redo As Integer)
+
+ Called after AlphaCAM has produced tool paths using a Turning command, or using the API. Redo will always be 0 at the moment.
+
+ The tool paths will be passed as a Paths Collection.
+
+ For example:
+
+ Public Sub AfterTurningMachining(Method As AcamTurningMethod, PS As Paths, Redo As Integer)
+
+ Dim Mat As Material 
+
+ Set Mat = App.ActiveDrawing.GetMaterial 
+
+ If Mat.Speed <> SaveSpeed And SaveSpeed > 0 Then 
+
+ Mat.Speed = SaveSpeed 
+
+ App.ActiveDrawing.SetMaterial Mat 
+
+ End If 
+
+ End Sub
+
+================================================================================
+PLIK: BeforeCheckToolChangePositionEvent_Latheonly_
+================================================================================
+
+BeforeCheckToolChangePosition Event (Lathe only)
+ 
+ 
+
+ BeforeCheckToolChangePosition Event (Lathe only)
+
+ Function BeforeCheckToolChangePosition(Tool As LatheTool)
+
+ Called before AlphaCAM checks that the tool change position has been set in Lathe before a tool is selected (or a tool is about to be put in a different turret).
+
+ To suppress the check, set the position using the API routine TurnData.SetToolChangePoint, and return 1 from this routine, else return 0 to let the user set it.
+
+ The Tool parameter is not used at the moment, but must be declared in the function header, and will normally be empty.
+
+ For example:
+
+ Public Function BeforeCheckToolChangePosition(Tool As LatheTool)
+
+ Dim TD As TurnData 
+
+ Set TD = App.CreateTurnData 
+
+ TD.SetToolChangePoint 20, 50 
+
+ BeforeCheckToolChangePosition = 1 
+
+ End Function
+
+================================================================================
+PLIK: BeforeTurningMachiningEvent_Latheonly_
+================================================================================
+
+BeforeTurningMachining Event (Lathe only)
+ 
+ 
+
+ BeforeTurningMachining Event (Lathe only)
+
+ Function BeforeTurningMachining (Method As AcamTurningMethod)
+
+ Called before AlphaCAM does a Turning command in Lathe.
+
+ The Method parameter specfies which command is being used eg acamTurningDIAMETER_ROUGH. See AcamTurningMethod in the VBA Object Browser.
+
+ A number should be returned. There are two possible return values:
+
+ BeforeTurningMachining = 0
+
+ AlphaCAM will do the normal command.
+
+ BeforeTurningMachining = 1
+
+ AlphaCAM will do nothing - your routine should do everything required for the command - show dialog box(es), select geometries, make the tool paths etc.
+
+ For example:
+
+ Public Function BeforeTurningMachining(Method As AcamTurningMethod)
+
+ Dim Mul As Double 
+
+ Dim Mat As Material 
+
+ Set Mat = App.ActiveDrawing.GetMaterial 
+
+ SaveSpeed = Mat.Speed 
+
+  
+
+ Mul = 1 
+
+ Select Case Method 
+
+ Case acamTurningDIAMETER_ROUGH 
+
+ Mul = 0.8 
+
+ Case acamTurningFINISH 
+
+ Mul = 1.2 
+
+ End Select 
+
+  
+
+ If Mul <> 1 Then 
+
+ Mat.Speed = Mat.Speed * Mul 
+
+ App.ActiveDrawing.SetMaterial Mat 
+
+ End If 
+
+ BeforeTurningMachining = 0 
+
+ End Function
+
+================================================================================
+
+

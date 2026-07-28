@@ -1,0 +1,25 @@
+================================================================================
+SEKCJA: 02_Application/Laser_Methods.txt
+Wygenerowano z acAPI.bas
+================================================================================
+
+PLIK: Application_CreateLaserData_Laser_Flameonly_
+================================================================================
+
+Application.CreateLaserData (Laser/Flame only)
+ 
+ 
+
+ Application.CreateLaserData (Laser/Flame only)
+
+ Create object representing Laser/Flame machining data. The properties of the object (eg BeamWidth) may then be set before calling a method eg CutPath.
+
+ Syntax
+
+ App.CreateLaserData
+
+ [Return] LaserData  LaserData object
+
+================================================================================
+
+

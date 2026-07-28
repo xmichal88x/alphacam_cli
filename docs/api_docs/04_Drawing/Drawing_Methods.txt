@@ -1,0 +1,5328 @@
+================================================================================
+SEKCJA: 04_Drawing/Drawing_Methods.txt
+Wygenerowano z acAPI.bas
+================================================================================
+
+PLIK: Application_CreateTempDrawing
+================================================================================
+
+Application.CreateTempDrawing
+ 
+ 
+
+ Application.CreateTempDrawing
+
+ Create a temporary drawing, which will not be displayed.
+
+ Syntax
+
+ App.CreateTempDrawing
+
+ Remarks
+
+ This can be used to create a drawing that is not to be displayed, for example to be used as a work area.
+
+================================================================================
+PLIK: Application_OpenDrawing
+================================================================================
+
+Application.OpenDrawing
+
+Application.OpenDrawing
+
+Open AlphaCAM drawing file.
+
+Syntax
+
+App.OpenDrawing (Name)
+
+String  Name Full path name of AlphaCAM drawing 
+ file to open
+
+[Return] Drawing  Drawing 
+ object representing the drawing.
+
+================================================================================
+PLIK: Application_OpenTempDrawing
+================================================================================
+
+Application.OpenTempDrawing
+ 
+ 
+
+ Application.OpenTempDrawing
+
+ Open AlphaCAM drawing file into a temporary drawing, which will not be displayed.
+
+ Syntax
+
+ App.OpenTempDrawing (Name)
+
+ String  Name Full path name of AlphaCAM drawing file to open
+
+ [Return] Drawing  Drawing object representing the drawing.
+
+ Remarks
+
+ This can be used to open a drawing that is not to be displayed, and to copy geometries or tool paths to the main drawing.
+
+ The example opens a drawing and copies circles from it to the main drawing.
+
+ Public Sub TestOpenTempDrawing()
+
+ Dim Drw1 As Drawing 
+
+ Dim Drw2 As Drawing 
+
+  
+
+ Set Drw1 = App.ActiveDrawing 
+
+  
+
+ Set Drw2 = App.OpenTempDrawing(App.LicomdirPath & "licomdir\tutorial\Mill Simple Shape + tool paths.amd") 
+
+  
+
+ Dim P As Path, P2 As Path 
+
+ For Each P In Drw2.Geometries 
+
+ Dim CP As CircleProperties 
+
+ Set CP = P.GetCircleProperties 
+
+ If Not (CP Is Nothing) Then 
+
+ ' Copy circle to main drawing 
+
+ Set P2 = P.CopyTemporary 
+
+ P2.StoreTemporary 
+
+ End If 
+
+ Next P 
+
+ Drw1.ZoomAll 
+
+ End Sub
+
+================================================================================
+PLIK: Drawing.ClampsSetInitialPositions
+================================================================================
+
+Drawing.ClampsSetInitialPositions
+
+Drawing.ClampsSetInitialPositions
+
+Set the current positions of the clamps to be the initial 
+ position.
+
+Syntax
+
+drw.ClampsSetInitialPositions
+
+================================================================================
+PLIK: Drawing.CreateWorkPlaneSubSpindle
+================================================================================
+
+Drawing.CreateWorkPlaneSubSpindle
+
+Drawing.CreateWorkPlaneSubSpindle (Lathe Only)
+
+Create a work plane for 2-Axis Turning on the Sub-Spindle 
+ and return an object representing it. The object is of type WorkPlane. 
+ This method only creates the work plane - it will not make it the current 
+ work plane. To make it the current work plane use Drawing.SetWorkPlane, 
+ to move a geometry into the work plane use Path.SetWorkPlane
+
+Syntax
+
+drw.CreateWorkPlaneSubSpindle 
+
+[Return] WorkPlane  WorkPlane 
+ object 
+
+Remarks
+
+If the work plane already exists this will raise an 
+ error. Use Drawing.GetSubSpindleWorkPlane 
+ first to see if it exists.
+
+To set the shift use Drawing.SetSubSpindleShift, 
+ after using this command.
+
+================================================================================
+PLIK: Drawing.GetSubSpindleWorkPlane
+================================================================================
+
+Drawing.GetSubSpindleWorkPlane
+
+Drawing.GetSubSpindleWorkPlane (Lathe only)
+
+Get the Sub-Spindle work plane for the drawing. An object 
+ of type WorkPlane will be returned. 
+ If the work plane doesn't exist the special value Nothing 
+ will be returned, which may be used in tests.
+
+Syntax
+
+drw.GetSubSpindleWorkPlane
+
+[Return] WorkPlane  WorkPlane object 
+
+Remarks
+
+Use Drawing.CreateWorkPlaneSubSpindle 
+ to create the work plane if it doesn't exist.
+
+================================================================================
+PLIK: Drawing.SetSubSpindleShift
+================================================================================
+
+Drawing.SetSubSpindleShift
+
+Drawing.SetSubSpindleShift (Lathe only)
+
+Set the Z-shift for the Sub-Spindle work plane.
+
+Syntax
+
+drw.SetSubSpindleShift (ZShift)
+
+double ZShift Sub-Spindle datum Z-Shift
+
+[Return] WorkPlane  WorkPlane object 
+
+Remarks
+
+Use Drawing.CreateWorkPlaneSubSpindle 
+ to create the work plane if it doesn't exist.
+
+================================================================================
+PLIK: Drawing_AddBsplineCurve2
+================================================================================
+
+Drawing.AddBsplineCurve2
+ 
+ 
+
+ Drawing.AddBsplineCurve2
+
+ Create a B-Spline curve given the curve data: knots, vertices etc.
+
+ Syntax
+
+ drw.AddBsplineCurve2 V
+
+ Variant V The curve data, see remarks
+
+ Remarks
+
+ The variant contains a SafeArray of doubles, where some doubles contain 2 integers. The array can be treated as an array of unions of type dints, defined (in C) as:
+
+ union dints
+
+ {
+
+  double dval;
+
+  int ival[2];
+
+ };
+
+ SurfaceEx1 in the API directory of the AlphaCAM cdrom contains a C++ example.
+
+ P[0].ival[0] = dimension of the curve, 3 (XYZ) or 4 (XYZW) if rational
+
+ P[0].ival[1] = the order ( = degree + 1)
+
+ P[1].ival[0] = number of vertices, = nv
+
+ P[1].ival[1] = reserved, must be 0
+
+ Then the knots, (nv + order) doubles
+
+ Then the vertices (control points) as an array of doubles, XYZ (and W if rational) for each vertex.
+
+ Then the minimum and maximum parameter values for the curve.
+
+================================================================================
+PLIK: Drawing_AddBsplineCurveSW
+================================================================================
+
+Drawing.AddBsplineCurveSW
+ 
+ 
+
+ Drawing.AddBsplineCurveSW
+
+ Do not use. See AddBsplineCurve2.
+
+================================================================================
+PLIK: Drawing_AddBsplineSurface2
+================================================================================
+
+Drawing.AddBsplineSurface2
+ 
+ 
+
+ Drawing.AddBsplineSurface2
+
+ Create a B-Spline surface given the surface data: knots, vertices, trimming boundaries etc.
+
+ Syntax
+
+ drw.AddBsplineSurface2 V
+
+ Variant V The surface data, see remarks
+
+ Remarks
+
+ The variant contains a SafeArray of doubles, where some doubles contain 2 integers. The array can be treated as an array of unions of type dints, defined (in C) as:
+
+ union dints
+
+ {
+
+  double dval;
+
+  int ival[2];
+
+ };
+
+ SurfaceEx1 in the API directory of the AlphaCAM cdrom contains a C++ example.
+
+ A surface with NO trimming is defined as follows, where P represents the array embedded in the Variant V:
+
+ P[0].ival[0] = dimension of the surface, 3 (XYZ) or 4 (XYZW) if rational
+
+ P[0].ival[1] = reserved, must be 0
+
+ P[1].ival[0] = S order (= degree + 1)
+
+ P[1].ival[1] = T order
+
+ P[2].ival[0] = number of vertices in S, = nvs
+
+ P[2].ival[1] = number of vertices in T, = nvt
+
+ P[3].ival[0] = reserved, must be 0
+
+ P[3].ival[1] = reserved, must be 0
+
+ The knots in S, (nvs + S order) doubles
+
+ The knots in T, (nvt + T order) doubles
+
+ The vertices (control points) as an array of doubles, XYZ (and W if rational) for each vertex, increasing the S index before the T index.
+
+ Minimum S
+
+ Maximum S
+
+ Minimum T
+
+ Maximum T
+
+ A trimmed surface is represented by a surface given in the same way as above, but with trimming data in front of it. The trimming data is one or more loops, where each loop is made up of one or more B-Spline curves. There may be only one outer loop, which must be the first. There may be any number of inner loops. If there are no outer loops then first_is_outer should be set to 0.
+
+ A trimmed surface is defined as follows, where P represents the array embedded in the Variant V:
+
+ P[0].ival[0] = Number of trimming loops = nloops
+
+ P[0].ival[1] = Total number of spline curves = tot_sp
+
+ P[1].ival[0] = Number of spline curves in the first loop
+
+ P[1].ival[1] = Number of spline curves in the second loop (if exists)
+
+ Following elements contain pairs of the number of spline curves in each loop.
+
+ Then come 2 elements for each spline curve, containing 2 integers each:
+
+ P[n].ival[0] = the order ( = degree + 1)
+
+ P[n].ival[1] = reserved, must be 0
+
+ P[n+1].ival[0] = dimension of the curve, 2 (ST) or 3 (STW) if rational
+
+ P[n+1].ival[1] = number of vertices, = nv
+
+ Then come the knots for each curve, (nv + order) doubles
+
+ Then come the vertices (control points) for each curve as an array of doubles, ST (and W if rational) for each vertex. The vertices for each curve are immediately followed by the minimum and maximum parameter values for that curve.
+
+ Finally is an element with ival[0] = first_is_outer, which should be 1 if the first loop is the outer trimming loop, 0 if not.
+
+ That completes the trimming data, then comes the surface in the same way as for an untrimmed surface.
+
+ P[n].ival[0] = dimension of the surface, 3 (XYZ) or 4 (XYZW) if rational
+
+ P[n].ival[1] = reserved, must be 0
+
+ P[n+1].ival[0] = S order (= degree + 1)
+
+ P[n+1].ival[1] = T order
+
+ P[n+2].ival[0] = number of vertices in S, = nvs
+
+ P[n+2].ival[1] = number of vertices in T, = nvt
+
+ P[n+3].ival[0] = reserved, must be 0
+
+ P[n+3].ival[1] = reserved, must be 0
+
+ The knots in S, (nvs + S order) doubles
+
+ The knots in T, (nvt + T order) doubles
+
+ The vertices (control points) as an array of doubles, XYZ (and W if rational) for each vertex, increasing the S index before the T index.
+
+ Minimum S
+
+ Maximum S
+
+ Minimum T
+
+ Maximum T
+
+================================================================================
+PLIK: Drawing_AddBsplineSurfaceSW
+================================================================================
+
+Drawing.AddBsplineSurfaceSW
+ 
+ 
+
+ Drawing.AddBsplineSurfaceSW
+
+ Do not use. See AddBsplineSurface2.
+
+================================================================================
+PLIK: Drawing_AddToRecentFileList
+================================================================================
+
+Drawing.AddToRecentFileList
+ 
+ 
+
+ Drawing.AddToRecentFileList
+
+ Add the name of this drawing to the "Recent File List", the list on the end of the File menu. Normally drawings opened and saved using the API are not added use this method to add them if required.
+
+ Syntax
+
+ Drw.AddToRecentFileList
+
+================================================================================
+PLIK: Drawing_AutoClose
+================================================================================
+
+Drawing.AutoClose
+ 
+ 
+
+ Drawing.AutoClose
+
+ Apply the AlphaCAM Auto Close command to all the geometries in the drawing (except paths marked as Construction or hidden (Visible property = False).
+
+ Syntax
+
+ drw.Autoclose (X, Y, GapTolerance)
+
+ Double  X X coordinate of start point
+
+ Double  Y Y coordinate of start point
+
+ Double  GapTolerance Tolerance for gaps
+
+ [Return] Path  Returned closed geometry as a Path object, if successful
+
+================================================================================
+PLIK: Drawing_CancelWorkPlane
+================================================================================
+
+Drawing.CancelWorkPlane
+ 
+ 
+
+ Drawing.CancelWorkPlane
+
+ Cancel the current work plane.
+
+ Syntax
+
+ drw.CancelWorkPlane
+
+================================================================================
+PLIK: Drawing_Clear
+================================================================================
+
+Drawing.Clear
+ 
+ 
+
+ Drawing.Clear
+
+ Clear (delete) specified entities.
+
+ Syntax
+
+ drw.Clear (Geometry, Construction, Toolpaths, Dimensions, Splines, Surfaces, UserLayers)
+
+ boolean Geometry True to clear geometry
+
+ boolean Construction True to clear construction
+
+ boolean Toolpaths True to clear tool paths
+
+ boolean Dimensions True to clear dimensions
+
+ boolean Splines  True to clear splines
+
+ boolean Surfaces  True to clear surfaces
+
+ boolean UserLayers True to clear user layers
+
+ boolean Text  True to clear text
+
+ Remarks
+
+ The example clears tool paths and dimensions:
+
+ drw.clear false, false, true, true, false, false, false, false
+
+================================================================================
+PLIK: Drawing_Create2DGeometry
+================================================================================
+
+Drawing.Create2DGeometry
+ 
+ 
+
+ Drawing.Create2DGeometry
+
+ Create an object representing a 2D geometry. The object is of type Geo2D. Its methods may be called to build up a 2D geometry as a set of connected lines and arcs. The geometry may be open or closed.
+
+ Syntax
+
+ drw.Create2DGeometry (X, Y)
+
+ double X X coordinate of start point of first line or arc
+
+ double Y Y coordinate of start point of first line or arc
+
+ [Return] Geo2D  Geo2D object 
+
+ The example will draw a triangle:
+
+  Dim geo As Geo2D
+
+  Set geo = drw.Create2DGeometry (-20, 0)
+
+  geo.AddLine 20, 0
+
+  geo.AddLine 0, 30
+
+  geo.CloseAndFinishLine
+
+================================================================================
+PLIK: Drawing_Create2DLine
+================================================================================
+
+Drawing.Create2DLine
+ 
+ 
+
+ Drawing.Create2DLine
+
+ Create a geometry containing a single 2D line and add to the AlphaCAM geometry database, and return an object of type Path.
+
+ Syntax
+
+ drw.Create2DLine (X1, Y1, X2, Y2)
+
+ double X1 X coordinate of start point of line
+
+ double Y1 Y coordinate of start point of line
+
+ double X2 X coordinate of end point of line
+
+ double Y2 Y coordinate of end point of line
+
+ [Return] Path  Path object
+
+================================================================================
+PLIK: Drawing_Create3DPolyline
+================================================================================
+
+Drawing.Create3DPolyline
+ 
+ 
+
+ Drawing.Create3DPolyline
+
+ Create an object representing a 3D polyline. The object is of type Polyline. Its AddLine method may be called to build up a 3D geometry as a set of connected lines.
+
+ Syntax
+
+ drw.Create3DPolyline (X, Y, Z)
+
+ double X X coordinate of start point of first line
+
+ double Y Y coordinate of start point of first line
+
+ double Z Z coordinate of start point of first line
+
+ [Return] PolyLine  PolyLine object 
+
+ The example will draw a 3D polyline:
+
+  Dim geo As PolyLine
+
+  Set geo = drw.Create3DPolyline (0, 0, 0)
+
+  geo.AddLine 20, 0, 0
+
+  geo.AddLine 25, 30, 40
+
+  geo.AddLine 30, 40, 30
+
+  geo.AddLine 40, 50, 20
+
+  geo.Finish
+
+================================================================================
+PLIK: Drawing_CreateCadGeometry
+================================================================================
+
+Drawing.CreateCadGeometry
+ 
+ 
+
+ Drawing.CreateCadGeometry
+
+ Create a GeoCad object.
+
+ Syntax
+
+ drw.CreateCadGeometry
+
+ [Return] GeoCad  GeoCad object 
+
+ Remarks
+
+ Used for adding random 3D lines and arcs. See GeoCad object.
+
+================================================================================
+PLIK: Drawing_CreateCircle
+================================================================================
+
+Drawing.CreateCircle
+ 
+ 
+
+ Drawing.CreateCircle
+
+ Create a circle and add to the AlphaCAM geometry database, and return an object of type Path.
+
+ Syntax
+
+ drw.CreateCircle (Diameter, XCen, YCen)
+
+ double Diameter Diameter of circle
+
+ double XCen  X coordinate of centre of circle
+
+ double YCen  Y coordinate of centre of circle
+
+ [Return] Path  Path object 
+
+ Remarks
+
+ The start point and direction will be as set in File | Configure | General | Geometry. See CreateCircle2.
+
+================================================================================
+PLIK: Drawing_CreateCircle2
+================================================================================
+
+Drawing.CreateCircle2
+ 
+ 
+
+ Drawing.CreateCircle2
+
+ Create a circle and add to the AlphaCAM geometry database, and return an object of type Path. Start point and direction may be set.
+
+ Syntax
+
+ drw.CreateCircle2 (Diameter, XCen, YCen, CW, StartAngle)
+
+ double   Diameter Diameter of circle
+
+ double  XCen  X coordinate of centre of circle
+
+ double  YCen  Y coordinate of centre of circle
+
+ boolean CW  True for CW, False for CCW
+
+ double   StartAngle Start Angle in degrees, 90 = top
+
+ [Return] Path  Path object 
+
+ Remarks
+
+ The start point and direction will be as specified. To use system settings see CreateCircle.
+
+================================================================================
+PLIK: Drawing_CreateDefaultMaterialGeo
+================================================================================
+
+Drawing.CreateDefaultMaterialGeo
+ 
+ 
+
+ Drawing.CreateDefaultMaterialGeo
+
+ Create the default material geometry for the tool paths in the drawing.
+
+ Syntax
+
+ drw.CreateDefaultMaterialGeo
+
+================================================================================
+PLIK: Drawing_CreateDefaultWorkVolume
+================================================================================
+
+Drawing.CreateDefaultWorkVolume
+ 
+ 
+
+ Drawing.CreateDefaultWorkVolume
+
+ Create work volume around everything in the drawing.
+
+ Syntax
+
+ drw.CreateDefaultWorkVolume
+
+================================================================================
+PLIK: Drawing_CreateEllipse
+================================================================================
+
+Drawing.CreateEllipse
+ 
+ 
+
+ Drawing.CreateEllipse
+
+ Create an ellipse and add to geometry database. A Path object will be returned.
+
+ Syntax
+
+ drw.CreateEllipse (Width, Height, NumQuads, NumArcsPerQuad, CenterX, CenterY)
+
+ double Width   X dimension of ellipse
+
+ double Height   Y dimension of ellipse
+
+ short NumQuads  Number of quadrants, 4 = complete ellipse
+
+ short NumArcsPerQuad Number of arcs per quadrant, usually 4
+
+ double CenterX   X coordinate of center
+
+ double CenterY   Y coordinate of center
+
+ [Return] Path  Path object
+
+================================================================================
+PLIK: Drawing_CreateFastGeometry
+================================================================================
+
+Drawing.CreateFastGeometry
+ 
+ 
+
+ Drawing.CreateFastGeometry
+
+ Create an object used to create a geometry using AlphaCAM Fast Geometry. The object is of type FastGeometry. Its methods may be called to add turns. It should be ended with the Finish or CloseAndFinish method. The geometry may be open or closed.
+
+ Syntax
+
+ drw.CreateFastGeometry
+
+ [Return] FastGeometry FastGeometry object  
+
+ The example will draw a simple geometry. Note that the value of the XIntersection parameter in the call to LineToLineBlend is not known, so it is left blank. This is the same as pressing F1 (for Unknown) when using Fast Geometry interactively. VBA will indicate that a parameter is optional (in the Object Browser and prompts) by enclosing it in square brackets, for example, [XIntersection].
+
+ Public Sub FastGeoEx1()
+
+ Dim Drw As Drawing 
+
+ Set Drw = App.ActiveDrawing 
+
+  
+
+ Dim FastGeo As FastGeometry 
+
+ Set FastGeo = Drw.CreateFastGeometry 
+
+  
+
+ With FastGeo 
+
+ .KnownArc 50, True, 0, 0, 90 
+
+ .ArcToArc 20, False, False 
+
+ .KnownArc 25, True, 100, 10 
+
+ .LineToLineBlend 5, , -50, 260 ' X unknown 
+
+ .CloseAndFinish 
+
+ End With 
+
+  
+
+ Drw.ZoomAll 
+
+ End Sub
+
+================================================================================
+PLIK: Drawing_CreateInvolute
+================================================================================
+
+Drawing.CreateInvolute
+ 
+ 
+
+ Drawing.CreateInvolute
+
+ Create an involute curve and add to geometry database. A Path object will be returned.
+
+ Syntax
+
+ drw.CreateInvolute (BaseCircleDiameter, NumQuads, CenterX, CenterY)
+
+ double BaseCircleDiameter Diameter of base circle
+
+ short NumQuads  Number of quadrants
+
+ double CenterX   X coordinate of center of base circle
+
+ double CenterY   Y coordinate of center of base circle
+
+ [Return] Path  Path object
+
+================================================================================
+PLIK: Drawing_CreateLayer
+================================================================================
+
+Drawing.CreateLayer
+ 
+ 
+
+ Drawing.CreateLayer
+
+ Create a layer (or return existing layer if one exists with the same name). An object of type Layer will be returned. To make it the current layer for the drawing use Drawing.SetLayer. To move a geometry into the layer use Path.SetLayer.
+
+ Syntax
+
+ drw.CreateLayer (Name)
+
+ String  Name Layer name, maximum 31 characters
+
+ [Return] Layer  Layer object 
+
+ Remarks
+
+ See the example.
+
+ AlphaCAM has 6 special layers which always exist. They are:
+
+ APS GEOMETRY
+
+ CONSTRUCTION
+
+ TOOLPATHS
+
+ DIMENSIONS
+
+ SPLINES
+
+ SURFACES
+
+ For example:
+
+ drw.CreateLayer("APS GEOMETRY")
+
+ will return the geometry layer.
+
+================================================================================
+PLIK: Drawing_CreateMaterial
+================================================================================
+
+Drawing.CreateMaterial
+ 
+ 
+
+ Drawing.CreateMaterial
+
+ Create a material that is not in the material data file. A Material object will be returned. Its properties may be set, and it can be made the current material using Drawing.SetMaterial.
+
+ Syntax
+
+ drw.CreateMaterial
+
+ [Return] Material  Material object 
+
+ Example:
+
+  Dim drw As Drawing
+
+  Dim mat As Material
+
+  Set drw = App.ActiveDrawing
+
+  Set mat = drw.CreateMaterial
+
+  mat.Name = "API Material"
+
+  mat.Inch = False
+
+  mat.Speed = 850
+
+  mat.Note(1) = "Created in API"
+
+  drw.SetMaterial mat
+
+================================================================================
+PLIK: Drawing_CreateNestData
+================================================================================
+
+Drawing.CreateNestData
+ 
+ 
+
+ Drawing.CreateNestData
+
+ Create a NestData object to do nesting using a nest list.
+
+ Syntax
+
+ drw.CreateNestData (FileName)
+
+ String FileName Name of nest list file
+
+ [Return] NestData  NestData object
+
+ Remarks
+
+ This and other Nesting objects are defined in the AlphaCam Nesting Type Library. Use Tools | References to add a reference to it if it is not already referenced.
+
+ After calling this method, use NestData.AddSheet and NestData.DoNest to do the nesting.
+
+================================================================================
+PLIK: Drawing_CreatePathCollection
+================================================================================
+
+Drawing.CreatePathCollection
+ 
+ 
+
+ Drawing.CreatePathCollection
+
+ Create an empty Path Collection. The Add method may then be used to add Path objects to it.
+
+ Syntax
+
+ drw.CreatePathCollection
+
+ [Return] Paths  Paths object
+
+================================================================================
+PLIK: Drawing_CreatePolygon
+================================================================================
+
+Drawing.CreatePolygon
+ 
+ 
+
+ Drawing.CreatePolygon
+
+ Create a polygon and add to geometry database. A Path object will be returned.
+
+ Syntax
+
+ drw.CreatePolygon (Diameter, NumSides, InsideCircle, CenterX, CenterY)
+
+ double Diameter  Diameter of base circle
+
+ long NumSides  Number of sides in the polygon
+
+ boolean InsideCircle True if polygon is inside circle.
+
+ double CenterX   X coordinate of center
+
+ double CenterY   Y coordinate of center
+
+ [Return] Path  Path object
+
+ Remarks
+
+ The polygon is created based on the circle center (CenterX, CenterY), diameter Diameter. If InsideCircle is True the polygon points lie on the circle, if False the polygon sides touch the circle.
+
+================================================================================
+PLIK: Drawing_CreateRectangle
+================================================================================
+
+Drawing.CreateRectangle
+ 
+ 
+
+ Drawing.CreateRectangle
+
+ Create a geometry containing a rectangle and add to the AlphaCAM geometry database, and return an object of type Path.
+
+ Syntax
+
+ drw.CreateRectangle (X1, Y1, X2, Y2)
+
+ double X1 X coordinate of corner 1
+
+ double Y1 Y coordinate of corner 1
+
+ double X2 X coordinate of corner 2
+
+ double Y2 Y coordinate of corner 2
+
+ [Return] Path  Path object 
+
+ Remarks
+
+ The rectangle will start at (X1, Y1), which may be any corner. (X2, Y2) should be the opposite corner.
+
+================================================================================
+PLIK: Drawing_CreateSplineCollection
+================================================================================
+
+Drawing.CreateSplineCollection
+ 
+ 
+
+ Drawing.CreateSplineCollection
+
+ Create an empty Spline Collection. The Add method may then be used to add Spline objects to it.
+
+ Syntax
+
+ drw.CreateSplineCollection
+
+ [Return] Splines  Splines object
+
+================================================================================
+PLIK: Drawing_CreateSurfaceCoons3
+================================================================================
+
+Drawing.CreateSurfaceCoons3
+ 
+ 
+
+ Drawing.CreateSurfaceCoons3
+
+ Create a Coons Patch through 3 paths or splines.
+
+ Syntax
+
+ drw.CreateSurfaceCoons3 (Edge1, Edge2, Edge3, Tolerance)
+
+ Object Edge1 Edge 1, as a Path or Spline
+
+ Object Edge2 Edge 2, as a Path or Spline
+
+ Object Edge3 Edge 3, as a Path or Spline
+
+ double Tolerance Tolerance to fit edges
+
+ [Return] Surface The created surface
+
+================================================================================
+PLIK: Drawing_CreateSurfaceCoons4
+================================================================================
+
+Drawing.CreateSurfaceCoons4
+ 
+ 
+
+ Drawing.CreateSurfaceCoons4
+
+ Create a Coons Patch through 4 paths or splines.
+
+ Syntax
+
+ drw.CreateSurfaceCoons4 (Edge1, Edge2, Edge3, Edge4, Tolerance)
+
+ Object Edge1 Edge 1, as a Path or Spline
+
+ Object Edge2 Edge 2, as a Path or Spline
+
+ Object Edge3 Edge 3, as a Path or Spline
+
+ Object Edge4 Edge 4, as a Path or Spline
+
+ double Tolerance Tolerance to fit edges
+
+ [Return] Surface The created surface
+
+================================================================================
+PLIK: Drawing_CreateSurfaceExtruded
+================================================================================
+
+Drawing.CreateSurfaceExtruded
+
+Drawing.CreateSurfaceExtruded
+
+Create an extruded surface for each line or arc in the 
+ given geometry.
+
+Syntax
+
+drw.CreateSurfaceExtruded (Section, ExtrudeDistance)
+
+Path  Section  Path The path to extrude
+
+Double  ExtrudeDistance 
+ Distance to extrude by
+
+[Return] Surfaces The 
+ surfaces
+
+================================================================================
+PLIK: Drawing_CreateSurfaceFillet
+================================================================================
+
+Drawing.CreateSurfaceFillet
+ 
+ 
+
+ Drawing.CreateSurfaceFillet
+
+ Create a fillet surface given 2 surfaces. The 2 surfaces will be trimmed to meet the fillet.
+
+ Syntax
+
+ drw.CreateSurfaceFillet (Surface1, Surface2, StartX, StartY, StartZ, StartRadius, EndRadius, StepLength)
+
+ Surface  Surface1  First Surface
+
+ Surface  Surface2  Second Surface
+
+ double  StartX  X coordinate of start point
+
+ double  StartY  Y coordinate of start point
+
+ double  StartZ  Z coordinate of start point
+
+ double  StartRadius Start radius of fillet
+
+ double  EndRadius End radius of fillet
+
+ double  StepLength Step length
+
+ [Return] Surface The fillet surface
+
+================================================================================
+PLIK: Drawing_CreateSurfaceFlat
+================================================================================
+
+Drawing.CreateSurfaceFlat
+
+Drawing.CreateSurfaceFlat
+
+Create a flat surface given one boundary.
+
+Syntax
+
+drw.CreateSurfaceFlat (Boundary)
+
+Path  Boundary  The boundary of 
+ the surface
+
+[Return] Surface The 
+ surface 
+
+ 
+
+Remarks
+
+This method uses a different algorithm 
+ to CreateFlatSurface2 so 
+ the results for a single surface may not be the same.
+
+================================================================================
+PLIK: Drawing_CreateSurfaceFlat2
+================================================================================
+
+Drawing.CreateSurfaceFlat2
+
+Drawing.CreateSurfaceFlat2
+
+Create a flat surface given one or more boundaries.
+
+Syntax
+
+drw.CreateSurfaceFlat2 (Boundaries)
+
+Paths  Boundaries  Path Collection 
+ containing the boundaries of the surface
+
+[Return] Surface The 
+ surface 
+
+ 
+
+Remarks
+
+This method uses a different algorithm 
+ to CreateFlatSurface so the 
+ results for a single surface may not be the same.
+
+================================================================================
+PLIK: Drawing_CreateSurfaceRevolution
+================================================================================
+
+Drawing.CreateSurfaceRevolution
+ 
+ 
+
+ Drawing.CreateSurfaceRevolution
+
+ Create a surface of revolution.
+
+ Syntax
+
+ drw.CreateSurfaceRevolution (X1, Y1, Z1, X2, Y2, Z2, StartAngle, EndAngle, CrossSection, Tolerance)
+
+ double X1
+
+ double Y1 Global XYZ coordinates of first point on axis
+
+ double Z1
+
+ double X2
+
+ double Y2 Global XYZ coordinates of second point on axis
+
+ double Z2
+
+ double StartAngle Start angle in degrees
+
+ double EndAngle End angle in degrees
+
+ Object CrossSection The cross-section, as a Path or Spline
+
+ double Tolerance Tolerance to fit cross-section
+
+ [Return] Surface The created surface
+
+================================================================================
+PLIK: Drawing_CreateSurfaceRuled
+================================================================================
+
+Drawing.CreateSurfaceRuled
+ 
+ 
+
+ Drawing.CreateSurfaceRuled
+
+ Create a ruled surface.
+
+ Syntax
+
+ drw.CreateSurfaceRuled (StartSection, EndSection, Tolerance)
+
+ Object StartSection Start section, as a Path or Spline
+
+ Object EndSection End section, as a Path or Spline
+
+ double Tolerance Tolerance to fit sections
+
+ [Return] Surface The created surface
+
+================================================================================
+PLIK: Drawing_CreateSurfaceSwept2
+================================================================================
+
+Drawing.CreateSurfaceSwept2
+ 
+ 
+
+ Drawing.CreateSurfaceSwept2
+
+ Create a swept surface given 2 curves.
+
+ Syntax
+
+ drw.CreateSurfaceSwept2 (StartSection, CurveOfSweep, Tolerance, RotateSections)
+
+ Object StartSection Start section, as a Path or Spline
+
+ Object CurveOfSweep Curve of sweep, as a Path or Spline
+
+ double Tolerance Tolerance to fit sections
+
+ boolean  RotateSections True to rotate sections along the sweep
+
+ [Return] Surface The created surface
+
+================================================================================
+PLIK: Drawing_CreateSurfaceSwept3
+================================================================================
+
+Drawing.CreateSurfaceSwept3
+ 
+ 
+
+ Drawing.CreateSurfaceSwept3
+
+ Create a swept surface given 3 curves.
+
+ Syntax
+
+ drw.CreateSurfaceSwept3 (StartSection, CurveOfSweep, FinishSection, Tolerance, RotateSections)
+
+ Object StartSection Start section, as a Path or Spline
+
+ Object CurveOfSweep Curve of sweep, as a Path or Spline
+
+ Object FinishSection Finish section, as Path or Spline
+
+ double Tolerance Tolerance to fit sections
+
+ boolean  RotateSections True to rotate sections along the sweep
+
+ [Return] Surface The created surface
+
+================================================================================
+PLIK: Drawing_CreateSurfaceTriCornerFillet
+================================================================================
+
+Drawing.CreateSurfaceTriCornerFillet
+ 
+ 
+
+ Drawing.CreateSurfaceTriCornerFillet
+
+ Create a tri-corner fillet given 3 surfaces.
+
+ Syntax
+
+ drw.CreateSurfaceTriCornerFillet (Surface1, Surface2, Surface3, Start1X, Start1Y, Start1Z, Start2X, Start2Y, Start2Z, Start3X, Start3Y, Start3Z, Radius, StepLength)
+
+ Surface  Surface1  First Surface
+
+ Surface  Surface2  Second Surface
+
+ Surface  Surface3  Third Surface
+
+ double  Start1X  X coordinate of start point on first surface
+
+ double  Start1Y  Y coordinate of start point on first surface
+
+ double  Start1Z  Z coordinate of start point on first surface
+
+ double  Start2X  X coordinate of start point on second surface
+
+ double  Start2Y  Y coordinate of start point on second surface
+
+ double  Start2Z  Z coordinate of start point on second surface
+
+ double  Start3X  X coordinate of start point on third surface
+
+ double  Start3Y  Y coordinate of start point on third surface
+
+ double  Start3Z  Z coordinate of start point on third surface
+
+ double  Radius  Radius of fillet
+
+ double  StepLength Step length
+
+================================================================================
+PLIK: Drawing_CreateText
+================================================================================
+
+Drawing.CreateText
+ 
+ 
+
+ Drawing.CreateText
+
+ Create text as geometry lines and arcs and add to geometry database. A Paths object representing the geometries will be returned.
+
+ Syntax
+
+ drw.CreateText(Text, X, Y, Height)
+
+ String  Text The text string
+
+ double  X X coordinate of start point of string (Left)
+
+ double  Y Y coordinate of start point of string (Bottom)
+
+ double  Height Height of text
+
+ [Return] Paths  Paths object 
+
+ Remarks
+
+ See Drawing.CreateText2 to create text as a Text object.
+
+ The Font property sets the font to be used. For example:
+
+  Dim drw As Drawing
+
+  Set drw = App.ActiveDrawing
+
+  drw.Font = "AStencil"
+
+  drw.CreateText "AlphaCAM Stencil Font", 0, 0, 10
+
+  drw.Font = "TArial"
+
+  drw.CreateText "TrueType Arial Font", 0, 20, 8
+
+================================================================================
+PLIK: Drawing_CreateText2
+================================================================================
+
+Drawing.CreateText2
+ 
+ 
+
+ Drawing.CreateText2
+
+ Create text as text and add to geometry database. A Text object representing the text will be returned.
+
+ Syntax
+
+ drw.CreateText2(Text, X, Y, Height)
+
+ String  Text The text string
+
+ double  X X coordinate of start point of string (Left)
+
+ double  Y Y coordinate of start point of string (Bottom)
+
+ double  Height Height of text
+
+ [Return] Text  Text object 
+
+ Remarks
+
+ See Drawing.CreateText to create text as geometries for machining.
+
+ The example creates some text and then changes the style of some of it:
+
+ Public Sub InsertText()
+
+ Dim Drw As Drawing 
+
+ Set Drw = App.ActiveDrawing 
+
+ Dim PS As Paths 
+
+ Set PS = Drw.CreateText("Geometry", 0, 40, 10) 
+
+ Dim T As Text 
+
+ Set T = Drw.CreateText2("Text", 0, 20, 10) 
+
+ Set T = Drw.CreateText2("Italic Text", 0, 0, 10) 
+
+ T.Erase 
+
+ T.Font = "TArial" 
+
+ T.Italic = True 
+
+ T.Redraw 
+
+ End Sub
+
+================================================================================
+PLIK: Drawing_CreateTextAlongPath
+================================================================================
+
+Drawing.CreateTextAlongPath
+ 
+ 
+
+ Drawing.CreateTextAlongPath
+
+ Create text along a path and add to geometry database. A Paths object representing the geometries will be returned.
+
+ Syntax
+
+ drw.CreateTextAlongPath(Text, Path, Justify, Height, CharacterGap)
+
+ String   Text The text string
+
+ Path   Path Geometry to create text along
+
+ AcamJustifyType Justify acamJustifyLEFT, RIGHT, CENTER or SCALED
+
+ Double   Height Character height
+
+ Double   CharacterGap Distance between characters
+
+ [Return] Paths  Paths object 
+
+ Remarks
+
+ See Drawing.CreateTextAlongPath2 to create text as a Text object
+
+ The character height will be ignored if Justify = acamJustifySCALED.
+
+ CharacterGap is a multiple of the height, 0.2 is the normal value.
+
+ Example:
+
+ Public Sub TextAlongPath()
+
+ Dim Drw As Drawing 
+
+ Set Drw = App.ActiveDrawing 
+
+  
+
+ Dim G As Geo2D 
+
+ Dim P As Path 
+
+ Set G = Drw.Create2DGeometry(0, 0) 
+
+ G.AddArcPointRadius 50, 0, 75, True, False 
+
+ Set P = G.Finish 
+
+  
+
+ Drw.CreateTextAlongPath "AlphaCAM", P, acamJustifyCENTER, 3, 0.2 
+
+  
+
+ Drw.ZoomAll 
+
+ End Sub
+
+================================================================================
+PLIK: Drawing_CreateTextAlongPath2
+================================================================================
+
+Drawing.CreateTextAlongPath2
+ 
+ 
+
+ Drawing.CreateTextAlongPath2
+
+ Create text along a path as text and add to geometry database. A Text object representing the text will be returned.
+
+ Syntax
+
+ drw.CreateTextAlongPath2(Text, Path, Justify, Height, CharacterGap)
+
+ String   Text The text string
+
+ Path   Path Geometry to create text along
+
+ AcamJustifyType Justify acamJustifyLEFT, RIGHT, CENTER or SCALED
+
+ Double   Height Character height
+
+ Double   CharacterGap Distance between characters
+
+ [Return] Text  Text object 
+
+ Remarks
+
+ See Drawing.CreateTextAlongPath to create text as geometries for machining.
+
+ The character height will be ignored if Justify = acamJustifySCALED.
+
+ CharacterGap is a multiple of the height, 0.2 is the normal value.
+
+ Example:
+
+ Public Sub TextAlongPath()
+
+ Dim Drw As Drawing 
+
+ Set Drw = App.ActiveDrawing 
+
+  
+
+ Dim G As Geo2D 
+
+ Dim P As Path 
+
+ Set G = Drw.Create2DGeometry(0, 0) 
+
+ G.AddArcPointRadius 50, 0, 75, True, False 
+
+ Set P = G.Finish 
+
+  
+
+ Drw.CreateTextAlongPath2 "AlphaCAM", P, acamJustifySCALED, 3, 0.2 
+
+  
+
+ Drw.ZoomAll 
+
+ End Sub
+
+================================================================================
+PLIK: Drawing_CreateTextCollection
+================================================================================
+
+Drawing.CreateTextCollection
+ 
+ 
+
+ Drawing.CreateTextCollection
+
+ Create an empty Text Collection. The Add method may then be used to add Text objects to it.
+
+ Syntax
+
+ drw.CreateTextCollection
+
+ [Return] Texts Texts object
+
+================================================================================
+PLIK: Drawing_CreateWorkPlane
+================================================================================
+
+Drawing.CreateWorkPlane
+ 
+ 
+
+ Drawing.CreateWorkPlane
+
+ Create a work plane and return an object representing it. The object is of type WorkPlane. This method only creates the work plane - it will not make it the current work plane. To make it the current work plane use Drawing.SetWorkPlane, to move a geometry into the work plane use Path.SetWorkPlane
+
+ Syntax
+
+ drw.CreateWorkPlane (X1, Y1, Z1, X2, Y2, Z2, X3, Y3, Z3)
+
+ double X1 X coordinate of Point1
+
+ double Y1 Y coordinate of Point1
+
+ double Z1 Z coordinate of Point1
+
+ double X2 X coordinate of Point2
+
+ double Y2 Y coordinate of Point2
+
+ double Z2 Z coordinate of Point2
+
+ double X3 X coordinate of Point3
+
+ double Y3 Y coordinate of Point3
+
+ double Z3 Z coordinate of Point3
+
+ [Return] WorkPlane  WorkPlane object 
+
+ Remarks
+
+ The three points (always specified in global coordinates) must not lie in a straight line. The local X-axis of the work plane will be the line from Point1 to Point2. The local Y-axis will be the line from Point1 to Point3. The origin will be Point1.
+
+ The local Z-axis will be in the direction that a screw-driver lying along the Z-axis would move if turned from the local X-axis to the local Y-axis.
+
+ If an existing work plane exactly matches the specified one it will be used.
+
+ Example 1 will create a vertical work plane parallel to the global Y-axis, crossing the X-axis at X = 100. The local Z-axis will point along the positive global X-axis. It then makes it the current work plane and draws a circle in it.
+
+  Dim drw As Drawing
+
+  Set drw = App.ActiveDrawing
+
+  Dim wp As WorkPlane
+
+  Set wp = drw.CreateWorkPlane (100, 0, 0, 100, 1, 0, 100, 0, 1)
+
+  drw.SetWorkPlane wp
+
+  drw.CreateCircle 20, 0, 0
+
+  drw.CancelWorkPlane
+
+ Example 2 will create the same work plane but will not make it current. It uses Path.SetWorkPlane to put the circle into the work plane. This avoids unwanted screen redraws.
+
+  Dim drw As Drawing
+
+  Set drw = App.ActiveDrawing
+
+  Dim wp As WorkPlane
+
+  Set wp = drw.CreateWorkPlane (100, 0, 0, 100, 1, 0, 100, 0, 1)
+
+  Dim p As Path
+
+  Set p = drw.CreateCircle (20, 0, 0)
+
+  p.SetWorkPlane wp
+
+================================================================================
+PLIK: Drawing_CreateWorkPlaneDeveloped_Latheonly_
+================================================================================
+
+Drawing.CreateWorkPlaneDeveloped (Lathe only)
+ 
+ 
+
+ Drawing.CreateWorkPlaneDeveloped (Lathe only)
+
+ Create a work plane for a developed side view and return an object representing it. The object is of type WorkPlane. This method only creates the work plane - it will not make it the current work plane. To make it the current work plane use Drawing.SetWorkPlane, to move a geometry into the work plane use Path.SetWorkPlane
+
+ Syntax
+
+ drw.CreateWorkPlaneDeveloped (LineElem)
+
+ Element LineElem Element object for the line to be developed
+
+================================================================================
+PLIK: Drawing_CreateWorkPlaneFromZAxis
+================================================================================
+
+Drawing.CreateWorkPlaneFromZAxis
+ 
+ 
+
+ Drawing.CreateWorkPlaneFromZAxis
+
+ Create a work plane given two points on its local Z-axis and return an object representing it. The object is of type WorkPlane. This method only creates the work plane - it will not make it the current work plane. To make it the current work plane use Drawing.SetWorkPlane, to move a geometry into the work plane use Path.SetWorkPlane
+
+ Syntax
+
+ drw.CreateWorkPlaneFromZAxis (X1, Y1, Z1, X2, Y2, Z2)
+
+ double X1 X coordinate of Point1
+
+ double Y1 Y coordinate of Point1
+
+ double Z1 Z coordinate of Point1
+
+ double X2 X coordinate of Point2
+
+ double Y2 Y coordinate of Point2
+
+ double Z2 Z coordinate of Point2
+
+ [Return] WorkPlane  WorkPlane object
+
+================================================================================
+PLIK: Drawing_DeleteSelected
+================================================================================
+
+Drawing.DeleteSelected
+ 
+ 
+
+ Drawing.DeleteSelected
+
+ Delete selected geometries and tool paths.
+
+ Syntax
+
+ drw.DeleteSelected
+
+ Remarks
+
+ All geometries with the Selected property set will be deleted.
+
+================================================================================
+PLIK: Drawing_DrawCrossHairs
+================================================================================
+
+Drawing.DrawCrossHairs
+ 
+ 
+
+ Drawing.DrawCrossHairs
+
+ Draw cross-hair cursor at given point.
+
+ Syntax
+
+ drw.DrawCrossHairs (X, Y, Z)
+
+ double X X Global coordinate
+
+ double Y Y Global coordinate
+
+ double Z Z Global coordinate
+
+ Remarks
+
+ They will always be drawn in XOR mode, and will be redrawn in the old position to remove them automatically. Drawing.RemoveCrossHairs may be used to remove them if required.
+
+================================================================================
+PLIK: Drawing_DrawTo
+================================================================================
+
+Drawing.DrawTo
+
+Drawing.DrawTo
+
+Draw a line from the current graphics position. See 
+ Drawing.MoveTo and Drawing.SetXORMode.
+
+Syntax
+
+drw.DrawTo (X, Y, Z)
+
+double X X Global coordinate
+
+double Y Y Global coordinate
+
+double Z Z Global coordinate
+
+Remarks
+
+This will draw a line from the current position (set 
+ in MoveTo or by the last call to this routine).
+
+================================================================================
+PLIK: Drawing_DrawToArc
+================================================================================
+
+Drawing.DrawToArc
+
+Drawing.DrawToArc
+
+Draw an arc from the current graphics position. See 
+ Drawing.MoveTo and Drawing.SetXORMode.
+
+Syntax
+
+drw.DrawToArc (X, Y, Z, XCenter, YCenter, CW)
+
+double X X coordinate of end point
+
+double Y Y coordinate of end point
+
+double Z Z coordinate of end point
+
+double XCenter X coordinate of arc centre
+
+double YCenter Y coordinate of arc centre
+
+Boolean CW True if clockwise
+
+Remarks
+
+Coordinates are assumed to be local to the current work 
+ plane if there is one. Current work plane defines axis of arc
+
+================================================================================
+PLIK: Drawing_FindGeoAtPointL
+================================================================================
+
+Drawing.FindGeoAtPointL
+ 
+ 
+
+ Drawing.FindGeoAtPointL
+
+ Find geometry that is closest to given point, and within tolerance given by the FindXYTolerance property.
+
+ Syntax
+
+ drw.FindGeoAtPointL (X, Y)
+
+ double X Local X coordinate of test point
+
+ double Y Local Y coordinate of test point
+
+ [Return] Path  Path object 
+
+ Remarks
+
+ If there is a geometry within the tolerance an object of type Path will be returned. If not the special value Nothing will be returned.
+
+ If there is a current work plane only geometries in the work plane will be searched. If there is no work plane only geometries with no work plane will be searched.
+
+ The coordinates are always Local coordinates.
+
+================================================================================
+PLIK: Drawing_GetAreaOfSelectedGeometries
+================================================================================
+
+Drawing.GetAreaOfSelectedGeometries
+ 
+ 
+
+ Drawing.GetAreaOfSelectedGeometries
+
+ Get the area of the selected geometries.
+
+ Syntax
+
+ Drw.GetAreaOfSelectedGeometries (HatchColor)
+
+ AcamColor HatchColor Color to draw calculation lines in, -1 to suppress
+
+================================================================================
+PLIK: Drawing_GetAreaOfSelectedToolPaths
+================================================================================
+
+Drawing.GetAreaOfSelectedToolPaths
+ 
+ 
+
+ Drawing.GetAreaOfSelectedToolPaths
+
+ Get the area of the selected tool paths.
+
+ Syntax
+
+ Drw.GetAreaOfSelectedToolPaths (HatchColor)
+
+ AcamColor HatchColor Color to draw calculation lines in, -1 to suppress
+
+================================================================================
+PLIK: Drawing_GetClosestSurfacePoint
+================================================================================
+
+Drawing.GetClosestSurfacePoint
+
+Drawing.GetClosestSurfacePoint
+
+Find closest point on selected surfaces.
+
+A limitation of this routine is that it does not take 
+ into account trim boundaries, so the returned point may be in a trimmed 
+ part of the surface. Use the IsPointTrimmed of the returned Surface to 
+ check for this.
+
+Syntax
+
+Drw.GetClosestSurfacePoint(X, Y, Z, ClosestSurface, 
+ XP, YP, ZP, S, T)
+
+double X  X 
+ coordinate of test point
+
+double Y Y coordinate of test point
+
+double Z  Z 
+ coordinate of test point
+
+Surface ClosestSurface Returned closest surface
+
+double XP Returned X coordinate of closest point
+
+double YP Returned Y coordinate of closest point
+
+double ZP Returned Z coordinate of closest point
+
+double S Returned S parameter value of closest point
+
+double T Returned T parameter value of closest point
+
+[Return] boolean  True if a point was found.
+
+================================================================================
+PLIK: Drawing_GetExtent
+================================================================================
+
+Drawing.GetExtent
+ 
+ 
+
+ Drawing.GetExtent
+
+ Get the minimum and maximum values of Global X,Y and Z for the drawing.
+
+ Syntax
+
+ drw.GetExtent (X1, Y1, Z1, X2, Y2, Z2)
+
+ double X1 Returned Minimum Global X
+
+ double Y1 Returned Minimum Global Y
+
+ double Z1 Returned Minimum Global Z
+
+ double X2 Returned Maximum Global X
+
+ double Y2 Returned Maximum Global Y
+
+ double Z2 Returned Maximum Global Z
+
+================================================================================
+PLIK: Drawing_GetFirstGeo
+================================================================================
+
+Drawing.GetFirstGeo
+ 
+ 
+
+ Drawing.GetFirstGeo
+
+ Get the first geometry in the drawing. An object of type Path will be returned.
+
+ Syntax
+
+ drw.GetFirstGeo
+
+ [Return] Path  Path object 
+
+ See Also
+
+ Drawing.GetGeoCount
+
+ Drawing.GetLastGeo
+
+ Drawing.Geometries
+
+================================================================================
+PLIK: Drawing_GetFirstLayer
+================================================================================
+
+Drawing.GetFirstLayer
+ 
+ 
+
+ Drawing.GetFirstLayer
+
+ Get the first layer (AlphaCAM or User layer) in the drawing. An object of type Layer will be returned.
+
+ Syntax
+
+ drw.GetFirstLayer
+
+ [Return] Layer  Layer object 
+
+ See Also
+
+ Drawing.Layers
+
+ Drawing.GetLayerCount
+
+ Layer.GetNext
+
+ Example
+
+================================================================================
+PLIK: Drawing_GetFirstToolPath
+================================================================================
+
+Drawing.GetFirstToolPath
+ 
+ 
+
+ Drawing.GetFirstToolPath
+
+ Get the first tool path in the drawing. An object of type Path will be returned.
+
+ Syntax
+
+ drw.GetFirstToolPath
+
+ [Return] Path  Path object 
+
+ See Also
+
+ Drawing.ToolPaths
+
+ Drawing.GetToolPathCount
+
+ Drawing.GetLastToolPath
+
+================================================================================
+PLIK: Drawing_GetGeoCount
+================================================================================
+
+Drawing.GetGeoCount
+ 
+ 
+
+ Drawing.GetGeoCount
+
+ Get the number of geometries (not splines or surfaces) in the drawing.
+
+ Syntax
+
+ drw.GetGeoCount
+
+ [Return] long  Number of geometries 
+
+ See Also
+
+ Drawing.GetFirstGeo
+
+ Drawing.GetLastGeo
+
+================================================================================
+PLIK: Drawing_GetLastGeo
+================================================================================
+
+Drawing.GetLastGeo
+ 
+ 
+
+ Drawing.GetLastGeo
+
+ Get the last geometry in the drawing. An object of type Path will be returned.
+
+ Syntax
+
+ drw.GetLastGeo
+
+ [Return] Path  Path object 
+
+ See Also
+
+ Drawing.GetGeoCount
+
+ Drawing.GetFirstGeo
+
+================================================================================
+PLIK: Drawing_GetLastToolPath
+================================================================================
+
+Drawing.GetLastToolPath
+ 
+ 
+
+ Drawing.GetLastToolPath
+
+ Get the last tool path in the drawing. An object of type Path will be returned.
+
+ Syntax
+
+ drw.GetLastToolPath
+
+ [Return] Path  Path object 
+
+ See Also
+
+ Drawing.GetToolPathCount
+
+ Drawing.GetFirstToolPath
+
+================================================================================
+PLIK: Drawing_GetLayer
+================================================================================
+
+Drawing.GetLayer
+ 
+ 
+
+ Drawing.GetLayer
+
+ Get the active user layer for the drawing. An object of type Layer will be returned. If there is not an active layer the special value Nothing will be returned, which may be used in tests.
+
+ Syntax
+
+ drw.GetLayer
+
+ [Return] Layer  Layer object 
+
+ The example gets the active user layer and displays the name, or "No active user layer" if there is no active layer.
+
+  Dim drw As Drawing
+
+  Set drw = App.ActiveDrawing
+
+  Dim lyr As Layer
+
+  Set lyr = drw.GetLayer
+
+  If lyr is Nothing then
+
+   MsgBox "No active user layer"
+
+  Else
+
+   MsgBox "Layer name is " & lyr.name
+
+  End If
+
+================================================================================
+PLIK: Drawing_GetLayerCount
+================================================================================
+
+Drawing.GetLayerCount
+ 
+ 
+
+ Drawing.GetLayerCount
+
+ Get the number of layers (AlphaCAM and User layers) in the drawing.
+
+ Syntax
+
+ drw.GetLayerCount
+
+ [Return] long  Number of layers
+
+ See Also
+
+ Drawing.Layers
+
+ Drawing.GetFirstLayer
+
+ Layer.GetNext
+
+ Example
+
+================================================================================
+PLIK: Drawing_GetMaterial
+================================================================================
+
+Drawing.GetMaterial
+ 
+ 
+
+ Drawing.GetMaterial
+
+ Get the current material as a Material object.
+
+ Syntax
+
+ drw.GetMaterial
+
+ [Return] Material  Material object
+
+================================================================================
+PLIK: Drawing_GetMaterialGeo
+================================================================================
+
+Drawing.GetMaterialGeo
+ 
+ 
+
+ Drawing.GetMaterialGeo
+
+ Get the current material geometry as a Path object and top and bottom Z levels.
+
+ Syntax
+
+ drw.GetMaterialGeo (TopZ, BottomZ)
+
+ double* TopZ  Returned Z level of top of material
+
+ double* BottomZ Returned Z level of bottom of material
+
+ [Return] Path  Path object
+
+================================================================================
+PLIK: Drawing_GetNestInformation
+================================================================================
+
+Drawing.GetNestInformation
+ 
+ 
+
+ Drawing.GetNestInformation
+
+ Return a NestInformation object, which gives information about the current nest.
+
+================================================================================
+PLIK: Drawing_GetNextGroupNumberForGeometries
+================================================================================
+
+Drawing.GetNextGroupNumberForGeometries
+ 
+ 
+
+ Drawing.GetNextGroupNumberForGeometries
+
+ Return first group number not used by the geometries. If a new group is to be created use this method to get a unique number.
+
+================================================================================
+PLIK: Drawing_GetNextGroupNumberForSurfaces
+================================================================================
+
+Drawing.GetNextGroupNumberForSurfaces
+
+Drawing.GetNextGroupNumberForSurfaces
+
+Return first group number not used by the surfaces. 
+ If a new surface group is to be created use this method to get a unique 
+ number.
+
+================================================================================
+PLIK: Drawing_GetNextGroupNumberForToolPaths
+================================================================================
+
+Drawing.GetNextGroupNumberForToolPaths
+ 
+ 
+
+ Drawing.GetNextGroupNumberForToolPaths
+
+ Return first group number not used by the tool paths. If a new group is to be created use this method to get a unique number.
+
+================================================================================
+PLIK: Drawing_GetNextOpGroupNumber
+================================================================================
+
+Drawing.GetNextOpGroupNumber
+ 
+ 
+
+ Drawing.GetNextOpGroupNumber
+
+ Return first operation group number not currently being used. Only applies to the Lathe module. If a new operation group is to be created use this method to get a unique number.
+
+================================================================================
+PLIK: Drawing_GetPickElem
+================================================================================
+
+Drawing.GetPickElem
+ 
+ 
+
+ Drawing.GetPickElem
+
+ Get element that was picked by the user in the last call to Drawing.UserSelectOneGeo.
+
+ Syntax
+
+ drw.GetPickElem
+
+ [Return] Element  Element object 
+
+ Remarks
+
+ See also Drawing.GetPickPointX and Drawing.GetPickPointY.
+
+ Example:
+
+  Dim drw As Drawing
+
+  Dim p As Path
+
+  Dim elem As Element
+
+  Set drw = App.ActiveDrawing
+
+  Set p = drw.UserSelectOneGeo("Pick Geometry")
+
+  If p Is Nothing Then End
+
+  Set elem = drw.GetPickElem
+
+  x = drw.GetPickPointX
+
+  y = drw.GetPickPointY
+
+  MsgBox "Pick Point X, Y = " & x & ", " & y
+
+  ' Properties of elem may be accessed as required
+
+================================================================================
+PLIK: Drawing_GetPickPointX
+================================================================================
+
+Drawing.GetPickPointX
+ 
+ 
+
+ Drawing.GetPickPointX
+
+ Get X Local coordinate of point that was picked by the user in the last call to Drawing.UserSelectOneGeo.
+
+ Syntax
+
+ drw.GetPickPointX
+
+ [Return] double  X coordinate
+
+ See Drawing.GetPickElem for example.
+
+================================================================================
+PLIK: Drawing_GetPickPointY
+================================================================================
+
+Drawing.GetPickPointY
+ 
+ 
+
+ Drawing.GetPickPointY
+
+ Get Y Local coordinate of point that was picked by the user in the last call to Drawing.UserSelectOneGeo.
+
+ Syntax
+
+ drw.GetPickPointY
+
+ [Return] double  Y coordinate
+
+ See Drawing.GetPickElem for example.
+
+================================================================================
+PLIK: Drawing_GetToolPathCount
+================================================================================
+
+Drawing.GetToolPathCount
+ 
+ 
+
+ Drawing.GetToolPathCount
+
+ Get the number of tool paths in the drawing.
+
+ Syntax
+
+ drw.GetToolPathCount
+
+ [Return] long  Number of tool paths
+
+ See Also
+
+ Drawing.ToolPaths
+
+ Drawing.GetFirstToolPath
+
+ Drawing.GetLastToolPath
+
+================================================================================
+PLIK: Drawing_GetWorkPlane
+================================================================================
+
+Drawing.GetWorkPlane
+ 
+ 
+
+ Drawing.GetWorkPlane
+
+ Get the current work plane for the drawing. An object of type WorkPlane will be returned. If there is not a current work plane the special value Nothing will be returned, which may be used in tests.
+
+ Syntax
+
+ drw.GetWorkPlane
+
+ [Return] WorkPlane  WorkPlane object 
+
+ The example gets the current work plane and displays the name, or "Flat Land" if there is no current work plane.
+
+  Dim drw As Drawing
+
+  Set drw = App.ActiveDrawing
+
+  Dim wp As WorkPlane
+
+  Set wp = drw.GetWorkPlane
+
+  If wp is Nothing then
+
+   MsgBox "Flat Land"
+
+  Else
+
+   MsgBox "Work plane name is " & wp.name
+
+  End If
+
+================================================================================
+PLIK: Drawing_HatchPath
+================================================================================
+
+Drawing.HatchPath
+ 
+ 
+
+ Drawing.HatchPath
+
+ Hatch a single path.
+
+ Syntax
+
+ Drw.HatchPath (Path, Style, Angle, Spacing, SpacePercent)
+
+ Path Path The geometry to hatch
+
+ AcamHatchStyle Style The hatch style, acamHatchDouble or acamHatchSingle
+
+ double Angle  Hatch angle
+
+ double Spacing  Spacing
+
+ double SpacePercent % of spacing for double lines
+
+ [Return] Paths  The returned hatch paths
+
+ Example
+
+ Public Sub TestHatchPath()
+
+ Dim Drw As Drawing 
+
+ Set Drw = App.ActiveDrawing 
+
+ Dim P As Path 
+
+ Set P = Drw.CreateCircle(100, 0, 0) 
+
+ Dim PS As Paths 
+
+ Set PS = Drw.HatchPath(P, acamHatchSingle, 60, 5, 10) 
+
+ End Sub
+
+================================================================================
+PLIK: Drawing_HatchPoint
+================================================================================
+
+Drawing.HatchPoint
+ 
+ 
+
+ Drawing.HatchPoint
+
+ Hatch geometries starting at a given point.
+
+ Syntax
+
+ Drw.HatchPoint (X, Y, Style, Angle, Spacing, SpacePercent, GapTolerance)
+
+ double  X X coordinate of start point
+
+ double  Y Y coordinate of start point
+
+ AcamHatchStyle Style The hatch style, acamHatchDouble or acamHatchSingle
+
+ double Angle  Hatch angle
+
+ double Spacing  Spacing
+
+ double SpacePercent % of spacing for double lines
+
+ double GapTolerance Gap tolerance for auto-close
+
+ [Return] Paths  The returned hatch paths
+
+ Example
+
+ Public Sub TestHatchPoint()
+
+ Dim Drw As Drawing 
+
+ Set Drw = App.ActiveDrawing 
+
+ Drw.CreateCircle 150, 0, 50 
+
+ Drw.CreateRectangle 30, 30, 60, 60 
+
+ Dim PS As Paths 
+
+ Set PS = Drw.HatchPoint(18, 105, acamHatchSingle, 30, 5, 10, 0.5) 
+
+ End Sub
+
+================================================================================
+PLIK: Drawing_InsertDrawing
+================================================================================
+
+Drawing.InsertDrawing
+ 
+ 
+
+ Drawing.InsertDrawing
+
+ Insert an AlphaCAM drawing into the current drawing.
+
+ Syntax
+
+ drw.InsertDrawing (Name, X, Y, Z)
+
+ String Name Complete path name to insert
+
+ double X Amount to move inserted drawing in X
+
+ double Y Amount to move inserted drawing in Y
+
+ double Z Amount to move inserted drawing in Z
+
+================================================================================
+PLIK: Drawing_Join
+================================================================================
+
+Drawing.Join
+ 
+ 
+
+ Drawing.Join
+
+ Join selected geometries and / or tool paths, producing new geometries or tool paths.
+
+ Syntax
+
+ drw.Join
+
+ [Return] Paths  Returned Paths object (see remarks).
+
+ Remarks
+
+ The returned object is a Paths Collection containing the resulting paths.
+
+ If no tool paths are selected the joined paths will be geometries, else they will be tool paths.
+
+ Example:
+
+ Dim Geos as Paths
+
+ set Geos = drw.Join
+
+================================================================================
+PLIK: Drawing_ListNC
+================================================================================
+
+Drawing.ListNC
+ 
+ 
+
+ Drawing.ListNC
+
+ List the NC code for the current drawing.
+
+ Syntax
+
+ drw.ListNC
+
+================================================================================
+PLIK: Drawing_MirrorSelectedInWorkPlane
+================================================================================
+
+Drawing.MirrorSelectedInWorkPlane
+
+Drawing.MirrorSelectedInWorkPlane
+
+Mirror selected geometries, tool paths and text in given 
+ work plane.
+
+Syntax
+
+drw.MirrorSelectedInWorkPlane (WorkPlane, KeepOriginal)
+
+WorkPlane  WorkPlane 
+ The plane to mirror in
+
+Bool KeepOriginal True to keep original items, False 
+ to delete them
+
+================================================================================
+PLIK: Drawing_MoveTo
+================================================================================
+
+Drawing.MoveTo
+ 
+ 
+
+ Drawing.MoveTo
+
+ Set the current graphics position. See Drawing.DrawTo.
+
+ Syntax
+
+ drw.MoveTo (X, Y, Z)
+
+ double X X Global coordinate
+
+ double Y Y Global coordinate
+
+ double Z Z Global coordinate
+
+================================================================================
+PLIK: Drawing_OrderManual
+================================================================================
+
+Drawing.OrderManual
+ 
+ 
+
+ Drawing.OrderManual
+
+ Order the geometries or tool paths in a specified order.
+
+ Syntax
+
+ drw.OrderManual (Ordered)
+
+ Paths Ordered Paths collection giving required order
+
+ Remarks
+
+ The parameter Ordered contains some or all of the geometries or tool paths (not both) in the drawing. The paths will be ordered to match the order of the paths in this collection.
+
+ This example will reverse the order of the geometries in the drawing:
+
+ Public Sub ReverseGeometryOrder()
+
+ Dim I As Integer 
+
+ Dim PS1 As Paths, PS2 As Paths 
+
+ Set PS1 = App.ActiveDrawing.Geometries 
+
+ Set PS2 = App.ActiveDrawing.CreatePathCollection 
+
+  
+
+ For I = PS1.Count To 1 Step -1 
+
+ PS2.Add PS1(I) 
+
+ Next I 
+
+  
+
+ App.ActiveDrawing.OrderManual PS2 
+
+ End Sub
+
+ This example will order the paths on the second nested sheet on the Y coordinate:
+
+ Public Sub OrderSheetY()
+
+ Dim NI As NestInformation 
+
+ Set NI = App.ActiveDrawing.GetNestInformation 
+
+  
+
+ OrderOnY NI.Sheets(2).Paths 
+
+ End Sub
+
+ ' Order given paths using Y coordinate
+
+ ' PS1 may be some or all of the paths in the drawing,
+
+ ' for example, all the paths in one nested sheet
+
+ Public Sub OrderOnY(PS1 As Paths)
+
+ Dim PS2 As Paths, PS3 As Paths 
+
+ ' Duplicate the collection so that Remove can be used 
+
+ Set PS2 = PS1.Duplicate 
+
+ Dim P As Path, P2 As Path 
+
+ Dim I As Integer 
+
+ Dim YMin As Double, Y As Double 
+
+ Dim MinX As Double, MinY As Double, MaxX As Double, MaxY As Double 
+
+  
+
+ ' Create new collection with paths with lowest Y first 
+
+ ' The path in PS2 with lowest Y will be found and removed from PS2 
+
+ ' and added to PS3 
+
+ Set PS3 = App.ActiveDrawing.CreatePathCollection 
+
+ For I = 1 To PS2.Count 
+
+ Set P2 = Nothing 
+
+ For Each P In PS2 
+
+ If P.GetFeedExtent(MinX, MinY, MaxX, MaxY) Then 
+
+ Y = (MaxY + MinY) * 0.5 
+
+ If P2 Is Nothing Or Y < YMin Then 
+
+ Set P2 = P 
+
+ YMin = Y 
+
+ End If 
+
+ End If 
+
+ Next P 
+
+ If Not (P2 Is Nothing) Then 
+
+ PS2.Remove P2 
+
+ PS3.Add P2 
+
+ End If 
+
+ Next I 
+
+  
+
+ ' Now re-order the paths to match this collection 
+
+ App.ActiveDrawing.OrderManual PS3 
+
+ End Sub
+
+================================================================================
+PLIK: Drawing_OrderSelectedGeometries
+================================================================================
+
+Drawing.OrderSelectedGeometries
+ 
+ 
+
+ Drawing.OrderSelectedGeometries
+
+ Order selected geometries.
+
+ Syntax
+
+ drw.OrderSelectedGeometries (FirstPath)
+
+ Path FirstPath Path to start at
+
+ The example will order the geometries starting with the last one:
+
+ Public Sub OrderTest()
+
+ Dim Drw As Drawing 
+
+ Set Drw = App.ActiveDrawing 
+
+ Dim P As Path 
+
+ Set P = Drw.GetLastGeo 
+
+  
+
+ Drw.SetGeosSelected True 
+
+  
+
+ Drw.OrderSelectedGeometries P 
+
+ End Sub
+
+================================================================================
+PLIK: Drawing_OutputNC
+================================================================================
+
+Drawing.OutputNC
+ 
+ 
+
+ Drawing.OutputNC
+
+ Output the NC code for the current drawing to disk or machine or both.
+
+ Syntax
+
+ drw.OutputNC (Name, OutputTo, VisibleOnly)
+
+ String Name  Complete path name to save code to (unless Machine only)
+
+ short  OutputTo Disk file or machine or both, see remarks
+
+ boolean VisibleOnly True to output visible operations only
+
+ Remarks
+
+ OutputTo takes one of the values:
+
+ acamOutNcFILE = 0 to disk file only
+
+ acamOutNcMC = 1 to machine only
+
+ acamOutNcBOTH = 2 to both
+
+ acamOutNcASK = -1 show dialog box giving above options
+
+================================================================================
+PLIK: Drawing_Path_LayerColours
+================================================================================
+
+Drawing / Path / Layer Colours
+ 
+ 
+
+ Drawing / Path / Layer Colours
+
+ The colour can be set as one of the standard AlphaCAM colours (AcamColor) or as an RGB value (OLE_COLOR). Whichever is last set will be used. An AcamColor can have one of the values below:
+
+ acamBLACK = 0
+
+ acamDARK_BLUE = 1
+
+ acamDARK_GREEN = 2
+
+ acamDARK_CYAN = 3
+
+ acamDARK_RED = 4
+
+ acamDARK_MAGENTA = 5
+
+ acamBROWN = 6
+
+ acamLIGHT_GREY = 7
+
+ acamDARK_GREY = 8
+
+ acamBLUE = 9
+
+ acamGREEN = 10
+
+ acamCYAN = 11
+
+ acamRED = 12
+
+ acamMAGENTA = 13
+
+ acamYELLOW = 14
+
+ acamWHITE = 15
+
+ An RGB colour is a Windows COLORREF value, which stores the Red, Green and Blue components of the colour, each one between 0 and 255. The following function can be used in VBA to define a colour:
+
+ Public Function RGB(Red As Integer, Green As Integer, Blue As Integer) As OLE_COLOR
+
+ If Red < 0 Or Red > 255 Or Green < 0 Or Green > 255 Or Blue < 0 Or Blue > 255 Then 
+
+ RGB = 0 
+
+ Exit Function 
+
+ End If 
+
+ RGB = Red + Green * &H100& + Blue * &H10000 
+
+ End Function
+
+ In C++ use the RGB() macro.
+
+================================================================================
+PLIK: Drawing_PrintOut
+================================================================================
+
+Drawing.PrintOut
+ 
+ 
+
+ Drawing.PrintOut
+
+ Print the drawing to the current printer.
+
+ Syntax
+
+ drw.PrintOut (DrawAxes, Mono, Orientation, [Scale])
+
+ boolean DrawAxes True to draw axes
+
+ boolean Mono  True to only use black
+
+ AcamOrient Orientation acamOrientPORTRAIT or acamOrientLANDSCAPE
+
+ double  Scale  (Optional) Scale for drawing, omit for auto-scale
+
+================================================================================
+PLIK: Drawing_ProjectGeometriesToSurfaces
+================================================================================
+
+Drawing.ProjectGeometriesToSurfaces
+ 
+ 
+
+ Drawing.ProjectGeometriesToSurfaces
+
+ Project selected geometries to selected surfaces.
+
+ Syntax
+
+ drw.ProjectGeometriesToSurfaces (StepLength, Tolerance, Direction)
+
+ double StepLength Step length
+
+ double Tolerance Tolerance
+
+ AcamProjectDirection Direction Project direction, acamProjectDirectionNORMAL_TO_OLD_PLANE or acamProjectDirectionNORMAL_TO_NEW_PLANE
+
+ Remarks
+
+ The geometries to be projected and the surfaces should be selected by setting the Selected property before calling this routine.
+
+================================================================================
+PLIK: Drawing_ProjectGeometriesToSurfaces2
+================================================================================
+
+Drawing.ProjectGeometriesToSurfaces2
+
+Drawing.ProjectGeometriesToSurfaces2
+
+Project selected geometries to selected surfaces.
+
+Syntax
+
+drw.ProjectGeometriesToSurfaces2 (StepLength, Tolerance, 
+ Direction)
+
+double StepLength Step length
+
+double Tolerance Tolerance
+
+AcamProjectDirection Direction Project direction, 
+ acamProjectDirectionNORMAL_TO_OLD_PLANE or acamProjectDirectionNORMAL_TO_NEW_PLANE
+
+[Return] Paths Collection of projected paths
+
+Remarks
+
+The geometries to be projected and the surfaces should 
+ be selected by setting the Selected property before calling this routine.
+
+================================================================================
+PLIK: Drawing_ProjectGeometriesToWorkPlane
+================================================================================
+
+Drawing.ProjectGeometriesToWorkPlane
+ 
+ 
+
+ Drawing.ProjectGeometriesToWorkPlane
+
+ Project selected geometries to given work plane.
+
+ Syntax
+
+ drw.ProjectGeometriesToWorkPlane (WP, StepLength, Tolerance, Direction)
+
+ WorkPlane WP The work plane to project to
+
+ double StepLength Step length
+
+ double Tolerance Tolerance
+
+ AcamProjectDirection Direction Project direction, acamProjectDirectionNORMAL_TO_OLD_PLANE or acamProjectDirectionNORMAL_TO_NEW_PLANE
+
+ Remarks
+
+ The geometries to be projected should be selected by setting the Selected property before calling this routine.
+
+================================================================================
+PLIK: Drawing_ProjectToolPathsToSurfaces
+================================================================================
+
+Drawing.ProjectToolPathsToSurfaces
+ 
+ 
+
+ Drawing.ProjectToolPathsToSurfaces
+
+ Project selected tool paths to selected surfaces.
+
+ Syntax
+
+ drw.ProjectToolPathsToSurfaces (StepLength, Tolerance, Direction, Axis, ToolAngle, ProjectPoint)
+
+ double StepLength Step length
+
+ double Tolerance Tolerance
+
+ AcamProjectDirection Direction Project direction, acamProjectDirectionNORMAL_TO_OLD_PLANE or acamProjectDirectionNORMAL_TO_NEW_PLANE
+
+ AcamAxis Axis Tool axis, acamAxis3, acamAxis5 etc.
+
+ AcamProjectToolAngle ToolAngle Tool angle, acamProjectToolAnglePROJECTION or acamProjectToolAngleSURFACE_NORMAL
+
+ typeAcamProjectPoint ProjectPoint Project tip or contact point, acamProjectTOOL_TIP or acamProjectCONTACT_POINT
+
+ Remarks
+
+ The tool paths to be projected and the surfaces should be selected by setting the Selected property before calling this routine.
+
+================================================================================
+PLIK: Drawing_ProjectToolPathsToWorkPlane
+================================================================================
+
+Drawing.ProjectToolPathsToWorkPlane
+ 
+ 
+
+ Drawing.ProjectToolPathsToWorkPlane
+
+ Project selected tool paths to given work plane.
+
+ Syntax
+
+ drw.ProjectToolPathsToWorkPlane (WP, StepLength, Tolerance, Direction, Axis, ToolAngle)
+
+ WorkPlane WP The work plane to project to
+
+ double StepLength Step length
+
+ double Tolerance Tolerance
+
+ AcamProjectDirection Direction Project direction, acamProjectDirectionNORMAL_TO_OLD_PLANE or acamProjectDirectionNORMAL_TO_NEW_PLANE
+
+ AcamAxis Axis Tool axis, acamAxis3, acamAxis5 etc.
+
+ AcamProjectToolAngle ToolAngle Tool angle, acamProjectToolAnglePROJECTION or acamProjectToolAngleSURFACE_NORMAL
+
+ Remarks
+
+ The tool paths to be projected should be selected by setting the Selected property before calling this routine.
+
+================================================================================
+PLIK: Drawing_Redraw
+================================================================================
+
+Drawing.Redraw
+ 
+ 
+
+ Drawing.Redraw
+
+ Redraw the display.
+
+ Syntax
+
+ drw.Redraw
+
+================================================================================
+PLIK: Drawing_RedrawShadedViews
+================================================================================
+
+Drawing.RedrawShadedViews
+
+Drawing.RedrawShadedViews
+
+Redraw the shaded views only.
+
+Syntax
+
+drw.RedrawShadedViews
+
+Remarks
+
+Use this at the end of a sequence of operations which 
+ may have drawn on the display. It will redraw just the shaded views to 
+ ensure they are uptodate.
+
+================================================================================
+PLIK: Drawing_Refresh
+================================================================================
+
+Drawing.Refresh
+
+Drawing.Refresh
+
+Rebuild the display lists for the shaded views.
+
+Syntax
+
+drw.Refresh
+
+================================================================================
+PLIK: Drawing_RemoveCrossHairs
+================================================================================
+
+Drawing.RemoveCrossHairs
+ 
+ 
+
+ Drawing.RemoveCrossHairs
+
+ Remove cross-hair cursor drawn by Drawing.DrawCrossHairs
+
+ Syntax
+
+ drw.RemoveCrossHairs
+
+================================================================================
+PLIK: Drawing_Save
+================================================================================
+
+Drawing.Save
+ 
+ 
+
+ Drawing.Save
+
+ Save the current drawing using its current file name. If it is a new drawing and does not have a file name the SaveAs dialog box will be shown.
+
+ Syntax
+
+ drw.Save
+
+================================================================================
+PLIK: Drawing_SaveAs
+================================================================================
+
+Drawing.SaveAs
+ 
+ 
+
+ Drawing.SaveAs
+
+ Save the current drawing to given file name.
+
+ Syntax
+
+ drw.SaveAs (Name)
+
+ String Name Complete path name to save to
+
+================================================================================
+PLIK: Drawing_SaveAsEx
+================================================================================
+
+Drawing.SaveAsEx
+ 
+ 
+
+ Drawing.SaveAsEx
+
+ Save the current drawing to given file name, compatible with the specified version.
+
+ Syntax
+
+ drw.SaveAsEx (Name, Version)
+
+ String Name Complete path name to save to
+
+ AcamSaveAsVersion Version 
+
+ Remarks
+
+ Version takes one of the values:
+
+ acamSaveAsCurrent = 0 to use current version (Same as SaveAs)
+
+ acamSaveAsV6 = 1 to use V6 version
+
+ acamSaveAsV7 = 2 to use V7 version
+
+================================================================================
+PLIK: Drawing_SaveDxfFile
+================================================================================
+
+Drawing.SaveDxfFile
+ 
+ 
+
+ Drawing.SaveDxfFile
+
+ Save a DXF File for the current drawing to given file name.
+
+ Syntax
+
+ drw.SaveDxfFile (Name, VisibleOnly, DecimalPlaces)
+
+ String  Name   Complete path name to save to
+
+ boolean VisibleOnly  True to only save visible geometries
+
+ short  DecimalPlaces  Number of decimal places to write
+
+================================================================================
+PLIK: Drawing_SaveEmfFile
+================================================================================
+
+Drawing.SaveEmfFile
+ 
+ 
+
+ Drawing.SaveEmfFile
+
+ Save an Enhanced Meta File for the current drawing to given file name.
+
+ Syntax
+
+ drw.SaveEmfFile (Name, DrawAxes, DrawBackground)
+
+ String  Name   Complete path name to save to
+
+ boolean DrawAxes  True to draw axes
+
+ boolean DrawBackground  True to draw background
+
+ Example.
+
+ To produce a picture suitable for printing, the window background should be white. The example shows how the background colour can be temporarily set to white and then reset. The user will not see the screen colour change, as Redraw is not called.
+
+ Dim Drw As Drawing 
+
+ Set Drw = App.ActiveDrawing 
+
+ Dim SaveCol As Integer 
+
+ SaveCol = Drw.BackgroundColor 
+
+ Drw.BackgroundColor = acamWHITE 
+
+ Drw.SaveEmfFile "C:\temp\123.emf", False, False 
+
+ Drw.BackgroundColor = SaveCol
+
+================================================================================
+PLIK: Drawing_SaveIgesFile
+================================================================================
+
+Drawing.SaveIgesFile
+ 
+ 
+
+ Drawing.SaveIgesFile
+
+ Save an IGES File for the current drawing to given file name.
+
+ Syntax
+
+ drw.SaveIgesFile (Name, VisibleOnly, Units)
+
+ String  Name   Complete path name to save to
+
+ boolean VisibleOnly  True to only save visible geometries
+
+ AcamUnits Units   acamUnitsINCH or acamUnitsMETRIC
+
+================================================================================
+PLIK: Drawing_SaveStlFile
+================================================================================
+
+Drawing.SaveStlFile
+
+Drawing.SaveStlFile
+
+Save an STL File for specified items in the current 
+ drawing to given file name.
+
+Syntax
+
+drw.SaveStlFile (Name, Type, Tolerance)
+
+String  Name   Complete path 
+ name to save to
+
+AcamSTLType Type acamSTLTypeSTL = save the STL model(s), 
+ acamSTLTypeSURFACES = facet the surfaces and save as STL, acamSTLTypePARASOLID 
+ = facet the current Parasolid model(s) and save as STL.
+
+Double Tolerance Facet tolerance
+
+================================================================================
+PLIK: Drawing_SaveWmfFile
+================================================================================
+
+Drawing.SaveWmfFile
+ 
+ 
+
+ Drawing.SaveWmfFile
+
+ Save a Windows Meta File for the current drawing to given file name.
+
+ Syntax
+
+ drw.SaveWmfFile (Name, DrawAxes, DrawBackground)
+
+ String  Name   Complete path name to save to
+
+ boolean DrawAxes  True to draw axes
+
+ boolean DrawBackground  True to draw background
+
+ Example.
+
+ To produce a picture suitable for printing, the window background should be white. The example shows how the background colour can be temporarily set to white and then reset. The user will not see the screen colour change, as Redraw is not called.
+
+ Dim Drw As Drawing 
+
+ Set Drw = App.ActiveDrawing 
+
+ Dim SaveCol As Integer 
+
+ SaveCol = Drw.BackgroundColor 
+
+ Drw.BackgroundColor = acamWHITE 
+
+ Drw.SaveWmfFile "C:\temp\123.wmf", False, False 
+
+ Drw.BackgroundColor = SaveCol
+
+================================================================================
+PLIK: Drawing_SectionGeometryUsingWorkPlane
+================================================================================
+
+Drawing.SectionGeometryUsingWorkPlane
+ 
+ 
+
+ Drawing.SectionGeometryUsingWorkPlane
+
+ Produce a section of all the geometry (surfaces, splines, geometries) in the drawing, using a work plane.
+
+ Syntax
+
+ drw.SectionGeometryUsingWorkPlane (Wp, CircleDiameter)
+
+ WorkPlane Wp  The work plane to slice the geometries with.
+
+ double  CircleDiameter Diameter of circle to draw at geometries intersecting Wp
+
+ [Return] Layer   Returned Layer containing the section paths.
+
+================================================================================
+PLIK: Drawing_SectionSTL
+================================================================================
+
+Drawing.SectionSTL
+ 
+ 
+
+ Drawing.SectionSTL
+
+ Produce sections of the current STL model, parallel to the current work plane.
+
+ Syntax
+
+ drw.SectionSTL (StartDistance, Step)
+
+ double StartDistance Distance from work plane of first section
+
+ double Step  Distance between sections
+
+ [Return] Layers  Returned Layer Collection. Each layer contains paths for one section
+
+================================================================================
+PLIK: Drawing_SectionSurfacesUsingGuideLine
+================================================================================
+
+Drawing.SectionSurfacesUsingGuideLine
+ 
+ 
+
+ Drawing.SectionSurfacesUsingGuideLine
+
+ Produce sections of the currently selected surfaces, perpendicular to the given guide line.
+
+ Syntax
+
+ drw.SectionSurfacesUsingGuideLine(GuideLine, Step)
+
+ Path GuideLine Path to control sections, sections will be perp. to this
+
+ double Step  Distance between sections
+
+ [Return] Paths  Returned Path Collection of sections
+
+================================================================================
+PLIK: Drawing_SelectMaterial
+================================================================================
+
+Drawing.SelectMaterial
+ 
+ 
+
+ Drawing.SelectMaterial
+
+ Select the current material by name.
+
+ Syntax
+
+ drw.SelectMaterial (Name)
+
+ String  Name Name of material in material data file (eg MMAT.DAT)
+
+ The example will make the material "Cast Iron" in the material data file the current material.
+
+  Dim drw As Drawing
+
+  Set drw = App.ActiveDrawing
+
+  drw.SelectMaterial "Cast Iron"
+
+================================================================================
+PLIK: Drawing_SetGeosSelected
+================================================================================
+
+Drawing.SetGeosSelected
+ 
+ 
+
+ Drawing.SetGeosSelected
+
+ Set the selected property for all geometries, and redraw them.
+
+ Syntax
+
+ drw.SetGeosSelected (Selected)
+
+ boolean Selected  Value to set, true or false
+
+================================================================================
+PLIK: Drawing_SetLayer
+================================================================================
+
+Drawing.SetLayer
+ 
+ 
+
+ Drawing.SetLayer
+
+ Set the active user layer for the drawing.
+
+ Syntax
+
+ drw.SetLayer (Layer)
+
+ Layer Layer layer object
+
+ See the example.
+
+================================================================================
+PLIK: Drawing_SetMaterial
+================================================================================
+
+Drawing.SetMaterial
+ 
+ 
+
+ Drawing.SetMaterial
+
+ Set the current material using a Material object.
+
+ Syntax
+
+ drw.SetMaterial (Material)
+
+ Material Material  Material object
+
+ Remarks
+
+ See Drawing.CreateMaterial for an example.
+
+================================================================================
+PLIK: Drawing_SetSnapMode
+================================================================================
+
+Drawing.SetSnapMode
+ 
+ 
+
+ Drawing.SetSnapMode
+
+ Set the snap mode to be used for the next user-input command.
+
+ Syntax
+
+ drw.SetSnapMode (Snap, Sticky, MustSnap)
+
+ AcamSnap Snap The mode to be set eg acamSnapEND
+
+ Boolean Sticky True to leave the snap mode set after the next command (As in eg CTRL-F6)
+
+ Boolean MustSnap True to force the user to use the set snap mode, ie it can not be cancelled
+
+================================================================================
+PLIK: Drawing_SetToolPathsSelected
+================================================================================
+
+Drawing.SetToolPathsSelected
+ 
+ 
+
+ Drawing.SetToolPathsSelected
+
+ Set the selected property for all tool paths, and redraw them.
+
+ Syntax
+
+ drw.SetToolPathsSelected (Selected)
+
+ boolean Selected  Value to set, true or false
+
+================================================================================
+PLIK: Drawing_SetToolSideAuto
+================================================================================
+
+Drawing.SetToolSideAuto
+ 
+ 
+
+ Drawing.SetToolSideAuto
+
+ Set tool side automatically for currently selected geometries.
+
+ Syntax
+
+ drw.SetToolSideAuto (Type)
+
+ boolean Type acamToolSidePOCKET or acamToolSideCUT, see remarks
+
+ Remarks
+
+ If type = acamToolSidePOCKET, the tool will be put on the inside of the outermost geometry, for pocketing, for example. If it is acamToolSideCUT, it will be put on the outside of the outermost geometry, for cutting the shape out of material, for example. The tool will be put on alternate sides of internal geometries.
+
+================================================================================
+PLIK: Drawing_SetWorkPlane
+================================================================================
+
+Drawing.SetWorkPlane
+ 
+ 
+
+ Drawing.SetWorkPlane
+
+ Set the current work plane for the drawing.
+
+ Syntax
+
+ drw.SetWorkPlane wp
+
+ WorkPlane  wp WorkPlane object
+
+ Example 1, create a work plane and make it the current work plane:
+
+  Dim drw As Drawing
+
+  Set drw = App.ActiveDrawing
+
+  Dim wp As WorkPlane
+
+  Set wp = drw.CreateWorkPlane (100, 0, 0, 100, 1, 0, 100, 0, 1)
+
+  drw.SetWorkPlane wp
+
+ Example 2, get the work plane for the last geometry and make it the current work plane:
+
+  Dim drw As Drawing
+
+  Set drw = App.ActiveDrawing
+
+  Dim wp As WorkPlane
+
+  Dim p As Path
+
+  Set p = drw.GetLastGeo
+
+  Set wp = p.GetWorkPlane
+
+  drw.SetWorkPlane wp
+
+ Example 3, do the same as example 2 but with half the code!
+
+  Dim drw As Drawing
+
+  Set drw = App.ActiveDrawing
+
+  drw.SetWorkPlane drw.GetLastGeo.GetWorkPlane
+
+================================================================================
+PLIK: Drawing_SetXORAnyColorMode
+================================================================================
+
+Drawing.SetXORAnyColorMode
+
+Drawing.SetXORAnyColorMode
+
+Set XOR (Exclusive-OR) mode for drawing using Drawing.MoveTo 
+ and Drawing.DrawTo.
+
+SetXORMode automatically sets the colour so that the 
+ lines will be drawn white on the current background. This method allows 
+ any colour to be used, as set by the properties DrawingColor or DrawingColorRGB.
+
+Syntax
+
+drw.SetXORAnyColorMode(On)
+
+boolean On True to set XOR mode, False to 
+ set normal mode
+
+Remarks
+
+XOR mode is used to draw lines that you want to remove 
+ without erasing the drawing underneath. For example, AlphaCAM uses it 
+ to draw the cross-hair cursor. It is drawn at the position of the mouse 
+ and when the mouse moves it is drawn again at the old position, which 
+ removes it, and redrawn at the new position.
+
+================================================================================
+PLIK: Drawing_SetXORMode
+================================================================================
+
+Drawing.SetXORMode
+ 
+ 
+
+ Drawing.SetXORMode
+
+ Set XOR (Exclusive-OR) mode for drawing using Drawing.MoveTo and Drawing.DrawTo.
+
+ Syntax
+
+ drw.SetXORMode(On)
+
+ boolean On True to set XOR mode, False to set normal mode
+
+ Remarks
+
+ XOR mode is used to draw lines that you want to remove without erasing the drawing underneath. For example, AlphaCAM uses it to draw the cross-hair cursor. It is drawn at the position of the mouse and when the mouse moves it is drawn again at the old position, which removes it, and redrawn at the new position.
+
+================================================================================
+PLIK: Drawing_StartDrawingInDC
+================================================================================
+
+Drawing.StartDrawingInDC
+ 
+ 
+
+ Drawing.StartDrawingInDC
+
+ Set the Device Context (DC) to be used for subsequent API drawing methods. This is mainly for C++ users, as VBA does not give access to a DC. It is used to redirect drawing to a window supplied by the Add-In.
+
+ Syntax
+
+ Drw.StartDrawingInDC (Hdc, XPixelLeft, YPixelTop, XPixelRight, YPixelBottom, XUserMin, YUserMin, XUserMax, YUserMax)
+
+ long Hdc Handle of device context
+
+ long XPixelLeft see remarks
+
+ long YPixelTop
+
+ long XPixelRight
+
+ long YPixelBottom
+
+ double XUserMin see remarks
+
+ double YUserMin
+
+ double XUserMax
+
+ double YUserMax
+
+ Remarks
+
+ XPixelLeft, YPixelTop, XPixelRight, YPixelBottom give the pixel client coordinates of the window to be drawn into.
+
+ XUserMin, YUserMin, XUserMax, YUserMax give the user coordinates of the box that is to be scaled to fit the window.
+
+ Drawing.StopDrawingInDC should be called after the required drawing is done.
+
+ See Addin1-2002 in the API02\VisualCPP folder on the AlphaCAM CD for an example.
+
+================================================================================
+PLIK: Drawing_StopDrawingInDC
+================================================================================
+
+Drawing.StopDrawingInDC
+ 
+ 
+
+ Drawing.StopDrawingInDC
+
+ Stop using the Device Context (DC) set in StartDrawingInDC.
+
+ Syntax
+
+ Drw.StopDrawingInDC
+
+ Remarks
+
+ See StartDrawingInDC.
+
+================================================================================
+PLIK: Drawing_SurfaceFromGeoSections
+================================================================================
+
+Drawing.SurfaceFromGeoSections
+ 
+ 
+
+ Drawing.SurfaceFromGeoSections
+
+ Create a surface using the currently selected geometries.
+
+ Syntax
+
+ drw.SurfaceFromGeoSections
+
+================================================================================
+PLIK: Drawing_SurfaceFromGeoSections2
+================================================================================
+
+Drawing.SurfaceFromGeoSections2
+
+Drawing.SurfaceFromGeoSections
+
+Create a surface using the currently selected geometries.
+
+Syntax
+
+drw.SurfaceFromGeoSections2 (Tolerance)
+
+double Tolerance Tolerance for surface fitting
+
+[Return] Surface The fitted surface
+
+================================================================================
+PLIK: Drawing_Undo
+================================================================================
+
+Drawing.Undo
+ 
+ 
+
+ Drawing.Undo
+
+ Do the Undo command, no prompt will be shown.
+
+ Syntax
+
+ Drw.Undo
+
+================================================================================
+PLIK: Drawing_UserGet2DPoint
+================================================================================
+
+Drawing.UserGet2DPoint
+ 
+ 
+
+ Drawing.UserGet2DPoint
+
+ Ask the user for a 2D point, anywhere in the drawing.
+
+ Syntax
+
+ drw.UserGet2DPoint(Prompt, X, Y)
+
+ String Prompt Text to display in prompt bar
+
+ double X Returned X coordinate
+
+ double Y Returned Y coordinate
+
+ [Return] AcamUser  Return value, acamUserSELECT if point selected, acamUserESCAPE if user cancelled, acamUserABORT if the user picked another command.
+
+================================================================================
+PLIK: Drawing_UserGet2DPointWithCallBack
+================================================================================
+
+Drawing.UserGet2DPointWithCallBack
+ 
+ 
+
+ Drawing.UserGet2DPointWithCallBack
+
+ Ask the user for a 2D point, calling a user-defined function as the pointer moves.
+
+ Syntax
+
+ drw.UserGet2DPointWithCallBack (Prompt, Function, X, Y)
+
+ String Prompt Text to display in prompt bar
+
+ String Function  Function to call while pointer moves
+
+ double X Returned X coordinate
+
+ double Y Returned Y coordinate
+
+ [Return] AcamUser  Return value, acamUserSELECT if point selected, acamUserESCAPE if user cancelled, acamUserABORT if the user picked another command.
+
+ Remarks
+
+ For VBA, the project must be in StartUp or Sysmacro, and the function must be in the Events module, and must have the same parameters as in the example.
+
+ The example draws a rectangle while the pointer moves:
+
+ Private X1 As Double
+
+ Private Y1 As Double
+
+ Public Sub DrawShape(Action As Integer, X As Double, Y As Double) 
+
+ ' Draw the shape
+
+ With App.ActiveDrawing 
+
+ .MoveTo X1, Y1, 0 
+
+ .DrawTo X, Y1, 0 
+
+ .DrawTo X, Y, 0 
+
+ .DrawTo X1, Y, 0 
+
+ .DrawTo X1, Y1, 0 
+
+ End With  
+
+ End Sub
+
+ Public Sub TestDrawShape()
+
+ X1 = 50 
+
+ Y1 = 25 
+
+ Dim X As Double, Y As Double 
+
+ Dim Drw As Drawing 
+
+ Set Drw = App.ActiveDrawing 
+
+ Drw.UserGet2DPointWithCallBack "shape", "DrawShape", X, Y 
+
+ MsgBox "X,Y = " & X & ", " & Y 
+
+ End Sub
+
+ The following is an example in a C++ DLL:
+
+ // Function called by AlphaCAM as the pointer moves
+
+ ACAMAPIFUN(void) DrawShape(VARIANT var_acam, short action, double X, double Y) // must put in .DEF file
+
+ {
+
+  AFX_MANAGE_STATE(AfxGetStaticModuleState());
+
+  IAlphaCamAppPtr pApp(var_acam.pdispVal);  // pApp is pointer to Application object
+
+  IDrawingPtr pDrw(pApp->ActiveDrawing);
+
+  pDrw->MoveTo(0., 0., 0.);
+
+  pDrw->DrawTo(X, Y, 0.);
+
+  pDrw->DrawTo(100., 100., 0.);
+
+ }
+
+ ACAMAPIFUN(void) CmdTestDrawShape(VARIANT var_acam) // must put in .DEF file
+
+ {
+
+  AFX_MANAGE_STATE(AfxGetStaticModuleState());
+
+  IAlphaCamAppPtr pApp(var_acam.pdispVal);  // pApp is pointer to Application object
+
+  IDrawingPtr pDrw(pApp->ActiveDrawing);
+
+  double x = 0, y =0;
+
+  AcamUser ret = pDrw->UserGet2DPointWithCallBack("Set Shape Mid-Point", "DrawShape", &x, &y);
+
+  if(ret == acamUserSELECT)
+
+  {
+
+   pDrw->Create2DLine(0., 0., x, y);
+
+   pDrw->Create2DLine(x, y, 100., 100.);
+
+  }
+
+ }
+
+================================================================================
+PLIK: Drawing_UserGet2DPointWithRubberBand
+================================================================================
+
+Drawing.UserGet2DPointWithRubberBand
+ 
+ 
+
+ Drawing.UserGet2DPointWithRubberBand
+
+ Ask the user for a 2D point, drawing a "rubber-band" line or arc from a given point or points.
+
+ Syntax
+
+ drw.UserGet2DPointWithRubberBand(Prompt, Type, X1, Y1, X2, Y2, X, Y)
+
+ String Prompt Text to display in prompt bar
+
+ AcamRubberBandType Type what to draw while pointer moves
+
+ double X1 X coordinate of first point
+
+ double Y1 Y coordinate of first point
+
+ double X2 X coordinate of second point
+
+ double Y2 Y coordinate of second point
+
+ double X Returned X coordinate
+
+ double Y Returned Y coordinate
+
+ [Return] AcamUser  Return value, acamUserSELECT if point selected, acamUserESCAPE if user cancelled, acamUserABORT if the user picked another command.
+
+ Remarks
+
+ The Type parameter determines what is drawn while the mouse pointer moves. It can be:
+
+  AcamRubberBandLINE
+
+  A line is drawn from X1, Y1 to the pointer.
+
+  AcamRubberBand2LINES
+
+  A line is drawn from X1, Y1 to the pointer, and from the pointer to X2, Y2.
+
+  AcamRubberBandRECTANGLE
+
+  A rectangle is drawn with one corner at X1, Y1 and one at the pointer
+
+  AcamRubberBandCIRCLE
+
+  A circle is drawn, through the pointer, centre is X1, Y1.
+
+  AcamRubberBandARC_3POINTS
+
+  An arc is drawn from X1, Y1 through X2, Y2, to the pointer.
+
+  AcamRubberBandARC_CENTER
+
+  An arc is drawn from X1, Y1, centre is X2, Y2
+
+  AcamRubberBandARC_VECTOR
+
+  An arc is drawn from X1, Y1, direction vector is X2, Y2, to the pointer.
+
+  AcamRubberBandARC_2POINTS_CENTER
+
+ An arc is drawn from X1, Y1 to X2, Y2, the centre is the point closest to the pointer on the line of possible centres.
+
+ If X2 and Y2 are not needed, for example for AcamRubberBandLINE, pass 0, 0.
+
+ The example lets the user draw a geometry made up of lines:
+
+ Public Sub TestRubberBandLine()
+
+ Dim Drw As Drawing 
+
+ Set Drw = App.ActiveDrawing 
+
+ Dim X1 As Double, Y1 As Double 
+
+ Dim X3 As Double, Y3 As Double 
+
+ Drw.UserGet2DPoint "Line: First Point", X1, Y1 
+
+ Do 
+
+ Dim Ret As Integer 
+
+ Ret = Drw.UserGet2DPointWithRubberBand("Line: Next Point", AcamRubberBandLINE, X1, Y1, 0, 0, X3, Y3) 
+
+ If Ret = acamUserSELECT Then 
+
+ Dim P As Path 
+
+ Set P = Drw.Create2DLine(X1, Y1, X3, Y3) 
+
+ P.Selected = True ' for Join command at end 
+
+ X1 = X3 
+
+ Y1 = Y3 
+
+ End If 
+
+ Loop Until Ret <> acamUserSELECT 
+
+ Drw.Join 
+
+ End Sub
+
+================================================================================
+PLIK: Drawing_UserGet3DPoint
+================================================================================
+
+Drawing.UserGet3DPoint
+ 
+ 
+
+ Drawing.UserGet3DPoint
+
+ Ask the user for a 3D point, anywhere in the drawing.
+
+ Syntax
+
+ drw.UserGet3DPoint(Prompt, X, Y, Z)
+
+ String Prompt Text to display in prompt bar
+
+ double X Returned X coordinate
+
+ double Y Returned Y coordinate
+
+ double Z Returned Z coordinate
+
+ [Return] AcamUser  Return value, acamUserSELECT if point selected, acamUserESCAPE if user cancelled, acamUserABORT if the user picked another command.
+
+================================================================================
+PLIK: Drawing_UserGet3DPointWithCallBack
+================================================================================
+
+Drawing.UserGet3DPointWithCallBack
+
+Drawing.UserGet3DPointWithCallBack
+
+Ask the user for a 3D point, calling a user-defined 
+ function as the pointer moves.
+
+Syntax
+
+drw.UserGet3DPointWithCallBack (Prompt, Function, 
+ X, Y, Z)
+
+String Prompt Text to display in prompt bar
+
+String Function  Function to call while pointer 
+ moves
+
+double X Returned X coordinate
+
+double Y Returned Y coordinate
+
+double Z Returned Z coordinate
+
+[Return] AcamUser  Return value, acamUserSELECT 
+ if point selected, acamUserESCAPE if user cancelled, acamUserABORT if 
+ the user picked another command.
+
+Remarks
+
+For VBA, the project must be in StartUp or Sysmacro, 
+ and the function must be in the Events module, and must have the same 
+ parameters as in the example.
+
+The example draws a rectangle while the pointer moves:
+
+Private X1 As Double
+
+Private Y1 As Double
+
+Private Z1 As Double
+
+Public Sub DrawShape(Action 
+ As Integer, X As Double, Y As Double, Z As Double) 
+
+' Draw the shape
+
+With App.ActiveDrawing 
+
+.MoveTo X1, Y1, Z 
+
+.DrawTo X, Y1, Z 
+
+.DrawTo X, Y, Z 
+
+.DrawTo X1, Y, Z 
+
+.DrawTo X1, Y1, Z1 
+
+End With  
+
+End Sub
+
+Public Sub TestDrawShape()
+
+X1 = 50 
+
+Y1 = 25 
+
+Z1 = 0
+
+Dim X As Double, Y As Double, 
+ Z As Double
+
+Dim Drw As Drawing 
+
+Set Drw = App.ActiveDrawing 
+
+Drw.UserGet3DPointWithCallBack 
+ "shape", "DrawShape", X, Y, Z
+
+MsgBox "X,Y,Z = " 
+ & X & ", " & Y & ", " & Z
+
+End Sub
+
+The following is an example in a C++ DLL:
+
+// Function called by AlphaCAM as the pointer moves
+
+ACAMAPIFUN(void) DrawShape(VARIANT var_acam, short action, 
+ double X, double Y, double Z) // must put in .DEF file
+
+{
+
+ AFX_MANAGE_STATE(AfxGetStaticModuleState());
+
+ IAlphaCamAppPtr pApp(var_acam.pdispVal);  // 
+ pApp is pointer to Application object
+
+ IDrawingPtr pDrw(pApp->ActiveDrawing);
+
+ pDrw->MoveTo(0., 0., 0.);
+
+ pDrw->DrawTo(X, Y, Z);
+
+ pDrw->DrawTo(100., 100., 0.);
+
+}
+
+ACAMAPIFUN(void) CmdTestDrawShape(VARIANT var_acam) // 
+ must put in .DEF file
+
+{
+
+ AFX_MANAGE_STATE(AfxGetStaticModuleState());
+
+ IAlphaCamAppPtr pApp(var_acam.pdispVal);  // 
+ pApp is pointer to Application object
+
+ IDrawingPtr pDrw(pApp->ActiveDrawing);
+
+ double x = 0, y = 0, z = 0;
+
+ AcamUser ret = pDrw->UserGet3DPointWithCallBack("Set 
+ Shape Mid-Point", "DrawShape", &x, &y, &z);
+
+ if(ret == acamUserSELECT)
+
+ {
+
+// Use x, y, z
+
+ }
+
+}
+
+================================================================================
+PLIK: Drawing_UserSelectMultiAddinObjects
+================================================================================
+
+Drawing.UserSelectMultiAddinObjects
+
+Drawing.UserSelectMultiAddinObjects
+
+Ask the user to select objects supported by the calling 
+ add-in.
+
+Syntax
+
+drw.UserSelectMultiAddinObjects(Prompt, Flags)
+
+String Prompt Text to display in prompt bar
+
+Int Flags reserved, should be 0
+
+[Return] Boolean  True if object selected
+
+================================================================================
+PLIK: Drawing_UserSelectMultiAddinObjects2
+================================================================================
+
+Drawing.UserSelectMultiAddinObjects2
+
+Drawing.UserSelectMultiAddinObjects2
+
+Ask the user to select objects supported by the specified 
+ add-in.
+
+Syntax
+
+drw.UserSelectMultiAddinObjects2(Prompt, Flags, 
+ AddinFileName)
+
+String Prompt Text to display in prompt bar
+
+Int Flags reserved, should be 0
+
+String AddinFileName File name (no path or extension) 
+ or complete path name of add-in
+
+[Return] Boolean  True if object selected
+
+================================================================================
+PLIK: Drawing_UserSelectMultiGeos
+================================================================================
+
+Drawing.UserSelectMultiGeos
+ 
+ 
+
+ Drawing.UserSelectMultiGeos
+
+ Ask the user to select multiple geometries.
+
+ Syntax
+
+ drw.UserSelectMultiGeos (Prompt, Flags)
+
+ String Prompt Text to display in prompt bar
+
+ long  Flags Reserved - should be 0
+
+ [Return] boolean  True if OK, False if user cancels
+
+ Remarks
+
+ The user will be prompted to select geometries using the normal AlphaCAM selection routine, allowing picking one at time or using a window. 
+
+ See Drawing.UserAction.
+
+ If the return value is True then the geometries should be looped through, testing the Selected property, as in the example below. Note that the Selected property on each geometry should be reset, otherwise the selected geometries will be drawn selected on redraws.
+
+ Dim drw As Drawing 
+
+ Set drw = App.ActiveDrawing 
+
+  
+
+ If drw.UserSelectMultiGeos("Select Geometries", 0) Then 
+
+ Dim Geo As Path 
+
+ For Each Geo In drw.Geometries 
+
+ If Geo.Selected Then 
+
+ ' do something with geo. 
+
+ Geo.Selected = False 
+
+ Geo.Redraw 
+
+ End If 
+
+ Next Geo 
+
+ End If
+
+================================================================================
+PLIK: Drawing_UserSelectMultiGeosCollection
+================================================================================
+
+Drawing.UserSelectMultiGeosCollection
+ 
+ 
+
+ Drawing.UserSelectMultiGeosCollection
+
+ Ask the user to select multiple geometries, and return a Paths Collection.
+
+ Syntax
+
+ drw.UserSelectMultiGeosCollection(Prompt, Flags)
+
+ String Prompt Text to display in prompt bar
+
+ long  Flags Reserved - should be 0
+
+ [Return] Paths  Paths object
+
+ Remarks
+
+ The user will be prompted to select geometries using the normal AlphaCAM selection routine, allowing picking one at time or using a window. 
+
+ See Drawing.UserAction.
+
+ The selected geometries will be returned as a Paths Collection. Note that the Selected property will NOT be set. They may be accessed as shown in the example below.
+
+ If no geometries are selected an empty collection will be returned ie the Count property will be 0.
+
+ Example 1:
+
+ Public Sub SelectCollection()
+
+ Dim drw As Drawing 
+
+ Set drw = App.ActiveDrawing 
+
+  
+
+ Dim Geos as Paths 
+
+ Set Geos = drw.UserSelectMultiGeosCollection("Select Geometries", 0) 
+
+ If Geos.Count > 0 Then 
+
+ Dim Geo As Path 
+
+ For Each Geo In Geos 
+
+ ' do something with Geo 
+
+ Geo.ScaleL 0.5, 0, 0 
+
+ Next Geo 
+
+ End If 
+
+ End Sub
+
+ Example 2:
+
+ Do multiple rough/finish paths on selected geometries. The geometries are selected using a Paths Collection so they can be reselected with a single command.
+
+ Public Sub CollectionExample2()
+
+ Const NPass As Integer = 5 
+
+ Const StockStep As Double = 0.5 
+
+ Dim IPass As Integer 
+
+ Dim Drw As Drawing 
+
+ Set Drw = App.ActiveDrawing 
+
+  
+
+ Dim Geos As Paths 
+
+ Set Geos = Drw.UserSelectMultiGeosCollection("Multi Finish: Select Geometries", 0) 
+
+ If Geos.Count = 0 Then End 
+
+  
+
+ ' Set tool sides for rough/finish 
+
+ Geos.Selected = True 
+
+ Drw.SetToolSideAuto acamToolSideCUT 
+
+  
+
+ App.SelectTool App.LicomdatPath & "LICOMDAT\MTOOLS.ALP\Flat - 10mm.amt" 
+
+  
+
+ For IPass = 1 To NPass 
+
+ Dim MD As MillData 
+
+ Set MD = App.CreateMillData 
+
+ MD.SafeRapidLevel = 25 
+
+ MD.RapidDownTo = 2 
+
+ MD.FinalDepth = -8 
+
+  
+
+ MD.Stock = StockStep * (NPass - IPass) 
+
+  
+
+ Geos.Selected = True ' select all the paths in the collection 
+
+  
+
+ MD.RoughFinish 
+
+ Next IPass 
+
+ End Sub
+
+================================================================================
+PLIK: Drawing_UserSelectMultiGeosCollection2
+================================================================================
+
+Drawing.UserSelectMultiGeosCollection2
+
+Drawing.UserSelectMultiGeosCollection2
+
+Ask the user to select multiple geometries, and return 
+ a Paths Collection.
+
+Syntax
+
+drw.UserSelectMultiGeosCollection2(Prompt, Flags)
+
+String Prompt Text to display in prompt bar
+
+long  Flags see remarks
+
+[Return] Paths  Paths object
+
+Remarks
+
+As UserSelectMultiGeosCollection but no selection flags 
+ are set. Flags consists of values from AcamSelectFlags combined using 
+ "or". If Flags is passed as (acamSelectDRAW_SELECTED Or acamSelectDONT_CHANGE_WP 
+ Or acamSelectSELECT_ANY_WP) then this is equivalent to UserSelectMultiGeosCollection.
+
+================================================================================
+PLIK: Drawing_UserSelectMultiObjects
+================================================================================
+
+Drawing.UserSelectMultiObjects
+ 
+ 
+
+ Drawing.UserSelectMultiObjects
+
+ Ask the user to select multiple geometries, tool paths, and optionally, text, splines and surfaces.
+
+ Syntax
+
+ drw.UserSelectMultiObjects (Prompt, Flags)
+
+ String Prompt Text to display in prompt bar
+
+ long  Flags 0, or acamSelectTEXT or acamSelectSPLINES or acamSelectSURFACES (or the sum)
+
+ [Return] boolean  True if OK, False if user cancels
+
+ Remarks
+
+ The user will be prompted to select using the normal AlphaCAM selection routine, allowing picking one at time or using a window. 
+
+ See Drawing.UserAction.
+
+ If the return value is True then the Drawing collections (Geometries, ToolPaths) should be looped through, testing the Selected property, as in the example for UserSelectMultiGeos. Note that the Selected property on each object should be reset, otherwise the selected objects will be drawn selected on redraws. If acamSelectTEXT is specified for the Flags parameter, then the Text collection should also be checked. If acamSelectSPLINES is specified for the Flags parameter, then the Splines collection should also be checked. If acamSelectSURFACES is specified then the Surfaces collection should also be checked. To allow both splines and surfaces use acamSelectSPLINES + acamSelectSURFACES. Add acamSelectTEXT if text is also required.
+
+================================================================================
+PLIK: Drawing_UserSelectMultiSplines
+================================================================================
+
+Drawing.UserSelectMultiSplines
+ 
+ 
+
+ Drawing.UserSelectMultiSplines
+
+ Ask the user to select multiple splines.
+
+ Syntax
+
+ drw.UserSelectMultiSplines (Prompt, Flags)
+
+ String Prompt Text to display in prompt bar
+
+ long  Flags Reserved - should be 0
+
+ [Return] boolean  True if OK, False if user cancels
+
+ Remarks
+
+ The user will be prompted to select splines using the normal AlphaCAM selection routine, allowing picking one at time or using a window. 
+
+ See Drawing.UserAction.
+
+ If the return value is True then the splines collection should be looped through, testing the Selected property. Note that the Selected property on each spline should be reset, otherwise the selected splines will be drawn selected on redraws.
+
+================================================================================
+PLIK: Drawing_UserSelectMultiSurfaces
+================================================================================
+
+Drawing.UserSelectMultiSurfaces
+ 
+ 
+
+ Drawing.UserSelectMultiSurfaces
+
+ Ask the user to select multiple surfaces.
+
+ Syntax
+
+ drw.UserSelectMultiSurfaces (Prompt, Flags)
+
+ String Prompt Text to display in prompt bar
+
+ long  Flags Reserved - should be 0
+
+ [Return] boolean  True if OK, False if user cancels
+
+ Remarks
+
+ The user will be prompted to select surfaces using the normal AlphaCAM selection routine, allowing picking one at time or using a window. 
+
+ See Drawing.UserAction.
+
+ If the return value is True then the surfaces collection should be looped through, testing the Selected property. Note that the Selected property on each surface should be reset, otherwise the selected surfaces will be drawn selected on redraws.
+
+================================================================================
+PLIK: Drawing_UserSelectMultiText
+================================================================================
+
+Drawing.UserSelectMultiText
+ 
+ 
+
+ Drawing.UserSelectMultiText
+
+ Ask the user to select multiple text objects.
+
+ Syntax
+
+ drw.UserSelectMultiText (Prompt, Flags)
+
+ String Prompt Text to display in prompt bar
+
+ long  Flags Reserved - should be 0
+
+ [Return] boolean  True if OK, False if user cancels
+
+ Remarks
+
+ The user will be prompted to select text using the normal AlphaCAM selection routine, allowing picking one at time or using a window. 
+
+ See Drawing.UserAction.
+
+ If the return value is True then the text should be looped through, testing the Selected property, as in the example below. Note that the Selected property on each text object should be reset, otherwise the selected text will be drawn selected on redraws.
+
+ Dim drw As Drawing 
+
+ Set drw = App.ActiveDrawing 
+
+  
+
+ If drw.UserSelectMultiText("Select Text", 0) Then 
+
+ Dim T as Text 
+
+ For Each T In drw.Text 
+
+ If T.Selected Then 
+
+ ' do something with T. 
+
+ T.Selected = False 
+
+ T.Redraw 
+
+ End If 
+
+ Next T 
+
+ End If
+
+================================================================================
+PLIK: Drawing_UserSelectMultiToolPaths
+================================================================================
+
+Drawing.UserSelectMultiToolPaths
+ 
+ 
+
+ Drawing.UserSelectMultiToolPaths
+
+ Ask the user to select multiple tool paths.
+
+ Syntax
+
+ drw.UserSelectMultiToolPaths (Prompt, Flags)
+
+ String Prompt Text to display in prompt bar
+
+ long  Flags Reserved - should be 0
+
+ [Return] boolean  True if OK, False if user cancels
+
+ Remarks
+
+ The user will be prompted to select tool paths using the normal AlphaCAM selection routine, allowing picking one at time or using a window. 
+
+ See Drawing.UserAction.
+
+ If the return value is True then the tool paths should be looped through, testing the Selected property, as in the example below. Note that the Selected property on each tool path should be reset, otherwise the selected tool paths will be drawn selected on redraws.
+
+ Dim drw As Drawing 
+
+ Set drw = App.ActiveDrawing 
+
+  
+
+ If drw.UserSelectMultiToolPaths("Select Tool Paths", 0) Then 
+
+ Dim Tp As Path 
+
+ For Each Tp In drw.ToolPaths 
+
+ If Tp.Selected Then 
+
+ ' do something with Tp. 
+
+ Tp.Selected = False 
+
+ Tp.Redraw 
+
+ End If 
+
+ Next Tp 
+
+ End If
+
+================================================================================
+PLIK: Drawing_UserSelectOneAddinObject
+================================================================================
+
+Drawing.UserSelectOneAddinObject
+
+Drawing.UserSelectOneAddinObject
+
+Ask the user to select one object supported by the calling 
+ add-in.
+
+Syntax
+
+drw.UserSelectOneAddinObject(Prompt, Flags)
+
+String Prompt Text to display in prompt bar
+
+Int Flags reserved, should be 0
+
+[Return] Boolean  True if object selected
+
+================================================================================
+PLIK: Drawing_UserSelectOneClamp
+================================================================================
+
+Drawing.UserSelectOneClamp
+ 
+ 
+
+ Drawing.UserSelectOneClamp
+
+ Ask the user to select one clamp.
+
+ Syntax
+
+ drw.UserSelectOneClamp (Prompt)
+
+ String Prompt Text to display in prompt bar
+
+ [Return] Clamp  Clamp object
+
+ Remarks
+
+ Ask the user to select a single clamp. A Clamp object will be returned. If user cancels (ESC key or mouse right-button) the special value Nothing will be returned which can be tested for.
+
+================================================================================
+PLIK: Drawing_UserSelectOneElement
+================================================================================
+
+Drawing.UserSelectOneElement
+
+Drawing.UserSelectOneElement
+
+Ask the user to select one element of a geometry or 
+ tool path.
+
+Syntax
+
+drw.UserSelectOneElement (Prompt, Path)
+
+String Prompt Text to display in prompt bar
+
+Path Path Returned path containing the selected element
+
+[Return] Element  Element object
+
+Remarks
+
+Ask the user to select a single element that may be 
+ in a geometry or construction or tool path. An Element 
+ object will be returned. If user cancels (ESC key or mouse right-button) 
+ the special value Nothing will 
+ be returned which can be tested for.
+
+See also Drawing.GetPickPointX, 
+ Drawing.GetPickPointY, and Drawing.UserAction.
+
+================================================================================
+PLIK: Drawing_UserSelectOneGeo
+================================================================================
+
+Drawing.UserSelectOneGeo
+ 
+ 
+
+ Drawing.UserSelectOneGeo
+
+ Ask the user to select one geometry.
+
+ Syntax
+
+ drw.UserSelectOneGeo (Prompt)
+
+ String Prompt Text to display in prompt bar
+
+ [Return] Path  Path object
+
+ Remarks
+
+ Ask the user to select a single geometry. A Path object will be returned. If user cancels (ESC key or mouse right-button) the special value Nothing will be returned which can be tested for.
+
+ See also Drawing.GetPickElem, Drawing.GetPickPointX, Drawing.GetPickPointY, and Drawing.UserAction.
+
+ Example:
+
+  Dim drw As Drawing
+
+  Dim p As Path
+
+  Set drw = App.ActiveDrawing
+
+  Set p = drw.UserSelectOneGeo("Pick Geometry")
+
+  If p Is Nothing Then End
+
+  ' Do something with path
+
+  p.Selected = True
+
+================================================================================
+PLIK: Drawing_UserSelectOneGeoOrSpline
+================================================================================
+
+Drawing.UserSelectOneGeoOrSpline
+
+Drawing.UserSelectOneGeoOrSpline
+
+Ask the user to select a geometry or spline.
+
+Syntax
+
+drw.UserSelectOneGeoOrSpline (Prompt)
+
+String Prompt Text to display in prompt bar
+
+[Return] Object  Path or Spline object
+
+Remarks
+
+Ask the user to select a single geometry or spline. 
+ An object will be returned which will be either a Path or a Spline. See 
+ the examples below to see how to extract the Path or Spline. If the user 
+ cancels (ESC key or mouse right-button) the special value Nothing 
+ will be returned which can be tested for.
+
+See also Drawing.GetPickElem, 
+ Drawing.GetPickPointX, Drawing.GetPickPointY, 
+ and Drawing.UserAction.
+
+VBA Example:
+
+    Dim 
+ O As Object
+
+    Set 
+ O = App.ActiveDrawing.UserSelectOneGeoOrSpline("Select a Geometry 
+ or Spline")
+
+    Dim 
+ P As Path
+
+    Dim 
+ S As Spline
+
+    On 
+ Error Resume Next
+
+    Set 
+ P = O
+
+    Set 
+ S = O
+
+    On 
+ Error GoTo 0
+
+    If 
+ Not (P Is Nothing) Then
+
+        MsgBox 
+ "Geometry " & P.Name
+
+    End 
+ If
+
+    If 
+ Not (S Is Nothing) Then
+
+        MsgBox 
+ "Spline"
+
+    End 
+ If
+
+ 
+
+C++ Example:
+
+ 
+
+IDispatchPtr pDisp = pDrw->UserSelectOneGeoOrSpline("Select 
+ a Geometry or Spline");
+
+IPathPtr pPath = pDisp;
+
+ISplinePtr pSpline = pDisp;
+
+if(pPath != NULL)
+
+{
+
+// Geometry Selected
+
+pPath->MoveL(1000., 1000);
+
+}
+
+else if(pSpline != NULL)
+
+{
+
+// Spline Selected
+
+pSpline->MoveG(1000., 1000., 0.);
+
+}
+
+else
+
+{
+
+// Nothing selected
+
+}
+
+================================================================================
+PLIK: Drawing_UserSelectOnePath
+================================================================================
+
+Drawing.UserSelectOnePath
+ 
+ 
+
+ Drawing.UserSelectOnePath
+
+ Ask the user to select one geometry or tool path.
+
+ Syntax
+
+ drw.UserSelectOnePath (Prompt)
+
+ String Prompt Text to display in prompt bar
+
+ [Return] Path  Path object
+
+ Remarks
+
+ Ask the user to select a single path that may be a geometry or construction or tool path. A Path object will be returned. If user cancels (ESC key or mouse right-button) the special value Nothing will be returned which can be tested for.
+
+ See also Drawing.GetPickElem, Drawing.GetPickPointX, Drawing.GetPickPointY, and Drawing.UserAction.
+
+ The example shows how to determine the type of path selected
+
+ Dim Drw As Drawing 
+
+ Dim P As Path 
+
+ Set Drw = App.ActiveDrawing 
+
+ Set P = Drw.UserSelectOnePath("Select a geometry or tool path") 
+
+ If P Is Nothing Then End 
+
+ If P.IsToolPath Then 
+
+ MsgBox "Toolpath" 
+
+ ElseIf P.Construction Then 
+
+ MsgBox "Construction" 
+
+ Else 
+
+ MsgBox "Geometry" 
+
+ End If
+
+================================================================================
+PLIK: Drawing_UserSelectOneSpline
+================================================================================
+
+Drawing.UserSelectOneSpline
+ 
+ 
+
+ Drawing.UserSelectOneSpline
+
+ Ask the user to select one spline.
+
+ Syntax
+
+ drw.UserSelectOneSpline (Prompt)
+
+ String Prompt Text to display in prompt bar
+
+ [Return] Spline  Spline object
+
+ Remarks
+
+ Ask the user to select a single spline. A Spline object will be returned. If user cancels (ESC key or mouse right-button) the special value Nothing will be returned which can be tested for.
+
+================================================================================
+PLIK: Drawing_UserSelectOneSurface
+================================================================================
+
+Drawing.UserSelectOneSurface
+ 
+ 
+
+ Drawing.UserSelectOneSurface
+
+ Ask the user to select one surface.
+
+ Syntax
+
+ drw.UserSelectOneSurface (Prompt)
+
+ String Prompt Text to display in prompt bar
+
+ [Return] Surface Surface object
+
+ Remarks
+
+ Ask the user to select a single surface. A Surface object will be returned. If user cancels (ESC key or mouse right-button) the special value Nothing will be returned which can be tested for.
+
+================================================================================
+PLIK: Drawing_UserSelectOneToolPath
+================================================================================
+
+Drawing.UserSelectOneToolPath
+ 
+ 
+
+ Drawing.UserSelectOneToolPath
+
+ Ask the user to select one tool path.
+
+ Syntax
+
+ drw.UserSelectOneToolPath (Prompt)
+
+ String Prompt Text to display in prompt bar
+
+ [Return] Path  Path object
+
+ Remarks
+
+ Ask the user to select a single tool path. A Path object will be returned. If user cancels (ESC key or mouse right-button) the special value Nothing will be returned which can be tested for.
+
+ See also Drawing.GetPickElem, Drawing.GetPickPointX, Drawing.GetPickPointY, and Drawing.UserAction.
+
+ Example:
+
+  Dim drw As Drawing
+
+  Dim p As Path
+
+  Set drw = App.ActiveDrawing
+
+  Set p = drw.UserSelectOneToolPath("Pick Tool Path")
+
+  If p Is Nothing Then End
+
+  ' Do something with path
+
+  p.Selected = True
+
+================================================================================
+PLIK: Drawing_WrapGeometriesOnToSurfaces
+================================================================================
+
+Drawing.WrapGeometriesOnToSurfaces
+ 
+ 
+
+ Drawing.WrapGeometriesOnToSurfaces
+
+ Wrap selected geometries on to selected surfaces.
+
+ Syntax
+
+ drw.WrapGeometriesOnToSurfaces (StepLength, Tolerance, XRef, YRef, ZRef)
+
+ double StepLength Step length
+
+ double Tolerance Tolerance
+
+ double XRef  X coordinate of reference point
+
+ double YRef  Y coordinate of reference point
+
+ double ZRef  Z coordinate of reference point
+
+ Remarks
+
+ The geometries to be wrapped and the surfaces should be selected by setting the Selected property before calling this routine.
+
+================================================================================
+PLIK: Drawing_WrapToolPathsOnToSurfaces
+================================================================================
+
+Drawing.WrapToolPathsOnToSurfaces
+ 
+ 
+
+ Drawing.WrapToolPathsOnToSurfaces
+
+ Wrap selected tool paths on to selected surfaces.
+
+ Syntax
+
+ drw.WrapToolPathsOnToSurfaces (StepLength, Tolerance, Axis, XRef, YRef, ZRef)
+
+ double StepLength Step length
+
+ double Tolerance Tolerance
+
+ AcamAxis Axis Tool axis, acamAxis3, acamAxis5 etc.
+
+ double XRef  X coordinate of reference point
+
+ double YRef  Y coordinate of reference point
+
+ double ZRef  Z coordinate of reference point
+
+ Remarks
+
+ The tool paths to be wrapped and the surfaces should be selected by setting the Selected property before calling this routine.
+
+================================================================================
+PLIK: Drawing_ZoomAll
+================================================================================
+
+Drawing.ZoomAll
+ 
+ 
+
+ Drawing.ZoomAll
+
+ Zoom the display to fit the drawing extents.
+
+ Syntax
+
+ drw.ZoomAll
+
+================================================================================
+PLIK: Drawing_ZoomToBox
+================================================================================
+
+Drawing.ZoomToBox
+ 
+ 
+
+ Drawing.ZoomToBox
+
+ Zoom the XY window to fit the given box.
+
+ Syntax
+
+ drw.ZoomToBox (X1, Y1, X2, Y2, MarginPerCent)
+
+ double X1 Minimum X coordinate
+
+ double Y1 Minimum Y coordinate
+
+ double X2 Maximum X coordinate
+
+ double Y2 Maximum Y coordinate
+
+ double MarginPerCent Margin to leave, as a percentage, 0 - 99, 0 for no margin
+
+================================================================================
+PLIK: Drawing_ZoomToElement
+================================================================================
+
+Drawing.ZoomToElement
+
+Drawing.ZoomToElement
+
+Zoom the windows to fit the given element
+
+Syntax
+
+drw.ZoomToElement (Element Elem)
+
+Element Elem the element
+
+================================================================================
+PLIK: Drawing_ZoomToPath
+================================================================================
+
+Drawing.ZoomToPath
+
+Drawing.ZoomToPath
+
+Zoom the windows to fit the given path
+
+Syntax
+
+drw.ZoomToPath (Path Path)
+
+Path Path the path
+
+================================================================================
+PLIK: DrawingObject
+================================================================================
+
+Drawing Object
+
+Drawing Object
+
+The drawing (or document) - contains the geometries 
+ and tool paths
+
+More:
+
+Drawing Properties
+
+================================================================================
+PLIK: DrawingOptionsObject
+================================================================================
+
+DrawingOptions Object
+ 
+ 
+
+ DrawingOptions Object
+
+ Object containing properties which control the display options.
+
+ For example, set the ShowTools property to True to display the tools. The drawing will not be automatically redrawn. Use Drawing.Redraw to redraw it, as in the example below:
+
+ Dim Drw As Drawing 
+
+ Set Drw = App.ActiveDrawing 
+
+ Drw.Options.ShowTools = True 
+
+ Drw.Redraw 
+
+ More:
+
+ DrawingOptions Properties
+
+================================================================================
+PLIK: Path_MoveToDrawing
+================================================================================
+
+Path.MoveToDrawing
+ 
+ 
+
+ Path.MoveToDrawing
+
+ Move the path to another drawing.
+
+ Syntax
+
+ geo.MoveToDrawing NewDrawing
+
+ Drawing NewDrawing The drawing to move the path to
+
+ Remarks
+
+ This can be used to move paths between drawings for example, from the active drawing to a drawing opened with OpenTempDrawing, or the other way.
+
+================================================================================
+PLIK: Spline_MoveToDrawing
+================================================================================
+
+Spline.MoveToDrawing
+ 
+ 
+
+ Spline.MoveToDrawing
+
+ Move the spline to another drawing.
+
+ Syntax
+
+ spline.MoveToDrawing NewDrawing
+
+ Drawing NewDrawing The drawing to move the spline to
+
+ Remarks
+
+ This can be used to move splines between drawings for example, from the active drawing to a drawing opened with OpenTempDrawing, or the other way.
+
+================================================================================
+PLIK: Surface_MoveToDrawing
+================================================================================
+
+Surface.MoveToDrawing
+ 
+ 
+
+ Surface.MoveToDrawing
+
+ Move the surface to another drawing.
+
+ Syntax
+
+ surface.MoveToDrawing NewDrawing
+
+ Drawing NewDrawing The drawing to move the surface to
+
+ Remarks
+
+ This can be used to move surfaces between drawings for example, from the active drawing to a drawing opened with OpenTempDrawing, or the other way.
+
+================================================================================
+PLIK: Text_MoveToDrawing
+================================================================================
+
+Text.MoveToDrawing
+ 
+ 
+
+ Text.MoveToDrawing
+
+ Move the text to another drawing.
+
+ Syntax
+
+ Text.MoveToDrawing NewDrawing
+
+ Drawing NewDrawing The drawing to move the text to
+
+ Remarks
+
+ This can be used to move text between drawings for example, from the active drawing to a drawing opened with OpenTempDrawing, or the other way.
+
+================================================================================
+
+

@@ -1,0 +1,104 @@
+================================================================================
+SEKCJA: 03_Application_Properties.txt
+Wygenerowano z acAPI.bas
+================================================================================
+
+PLIK: ApplicationProperties
+================================================================================
+
+Application Properties
+
+Application Properties
+
+ActiveDrawing - (Drawing) Drawing object - the active 
+ drawing or document. (AlphaCAM currently only has one drawing at a time) 
+ (read-only)
+
+AlphacamVersion - (VersionInformation) Version of the 
+ Alphacam exe
+
+ApiVersion - (Long) API Date Code (eg 20030423)
+
+CadInputSettings - (CadInputSettings) CadInputSettings 
+ Object to set CAD Input settings(read-only)
+
+ChangeNumber - (Long) The number of changes made to 
+ the drawing, NOT including changes to the display eg Zoom. (read-only)
+
+CommandNumber - (Long) The number of commands used. 
+ (read-only)
+
+DisableUndo - (Bool) True to disable undo.
+
+FileVersion - (VersionInformation) Version of specified 
+ file.
+
+Example
+
+Dim VerInfo As VersionInformation
+
+Set VerInfo = App.FileVersion("feature.dll")
+
+Because no path is specified this will get the information 
+ for the version of Feature.dll which is loaded by Alphacam.
+
+A path can be specified if you want to get information 
+ about a DLL that is not loaded by Alphacam.
+
+Frame - (Frame) Frame object. (read-only)
+
+FullName - (String) The full file name of the application 
+ (read-only)
+
+InAParametricMacro - (boolean) True if currently running 
+ a Parametric Macro (not a VBA macro) (read-only)
+
+IsAlphaCad - True if this is the AlphaCAD module
+
+IsAlphaNest - True if this is the AlphaNest module
+
+LicomdatPath - (String) Location of default Licomdat 
+ eg "C:\"; (read-only)
+
+LicomdirPath - (String) Location of default Licomdir 
+ eg "C:\" (read-only)
+
+MachiningDefaults - (MachiningDefaults) Object to get 
+ or set Machining Defaults (read-only)
+
+MaxNumberOfUndos - (Long) Maximum number of undos allowed
+
+MillMachiningStyles - Collection of Machining Styles
+
+Name - (String) The title of the application (read-only)
+
+Online - (boolean) True if this is AlphaCAM Online (read-only)
+
+Path - (String) The path of the application (eg "C:\Program 
+ Files\Alpha03") (read-only)
+
+PostFileName - (String)The full name of the post (read-only)
+
+PreviewFlag - (Bool) True if Previews are shown and 
+ saved with AlphaCAM drawings
+
+ProgramLetter - (Integer) ASCII value of module letter, 
+ eg 77 = 'M' = Mill (read-only)
+
+ProgramLevel - (Integer) Level of AlphaCAM program , 
+ acamLevelBASIC = 1, acamLevelSTANDARD = 2, acamLevelADVANCED = 3, acamLevelADVANCED3D3AXIS 
+ = 4, acamLevelADVANCED3D5AXIS = 5  (read-only)
+
+SpecialKey - (Long) Non-zero if the security key is 
+ a special key, bit values are 1 = Dealer key, 2 = Education key, (4 = 
+ down count key, removed in V7.5), 8 = OnePost key or license  (read-only)
+
+Visible - (boolean) True if AlphaCAM should be visible 
+ on the screen, False to hide AlphaCAM
+
+WindowState - (AcamWindowState) State of main AlphaCAM 
+ window, acamWindowStateNormal, acamWindowStateMaximize or acamWindowStateMinimize
+
+================================================================================
+
+
