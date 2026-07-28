@@ -37,7 +37,13 @@ jobs:
         with:
           python-version: "3.11"
       - run: pip install -e ".[dev]"
-      - run: pytest tests/unit/ -v
+      - run: pytest tests/unit/ --cov --cov-report=term --cov-report=xml -v
+      - uses: codecov/codecov-action@v4
+        if: ${{ matrix.os == 'ubuntu-latest' }}
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          file: ./coverage.xml
+          fail_ci_if_error: false
       - name: Integration tests
         if: ${{ github.event_name == 'workflow_dispatch' && inputs.integration && matrix.os == 'windows-latest' }}
         run: pytest tests/integration/ -v

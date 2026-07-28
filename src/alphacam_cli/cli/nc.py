@@ -4,9 +4,14 @@ import os
 
 import typer
 
-from alphacam_cli.cli.common import console, get_visible, handle_com_errors, require_platform
+from alphacam_cli.cli.common import (
+    console,
+    get_visible,
+    handle_com_errors,
+    require_platform,
+    resolve_app,
+)
 from alphacam_cli.com.manager import alphacam_context
-from alphacam_cli.core.application import Application
 
 app = typer.Typer(help="NC output operations")
 
@@ -20,7 +25,7 @@ def output(
     """Generate NC code from active drawing."""
     require_platform()
     with alphacam_context(visible=get_visible()) as raw:
-        ac = Application(raw)
+        ac = resolve_app(raw)
         if post:
             ac.select_post(post)
             console.print(f"[green]Post selected: {post}[/green]")

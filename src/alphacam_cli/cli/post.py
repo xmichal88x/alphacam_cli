@@ -6,9 +6,14 @@ import os
 import typer
 from rich.table import Table
 
-from alphacam_cli.cli.common import console, get_visible, handle_com_errors, require_platform
+from alphacam_cli.cli.common import (
+    console,
+    get_visible,
+    handle_com_errors,
+    require_platform,
+    resolve_app,
+)
 from alphacam_cli.com.manager import alphacam_context
-from alphacam_cli.core.application import Application
 
 app = typer.Typer(help="Post-processor operations")
 
@@ -19,7 +24,7 @@ def list() -> None:
     """List available post-processors in the AlphaCAM posts directory."""
     require_platform()
     with alphacam_context(visible=get_visible()) as raw:
-        ac = Application(raw)
+        ac = resolve_app(raw)
         posts_dir = os.path.join(ac.licomdir_path, "posts")
 
         if not os.path.isdir(posts_dir):

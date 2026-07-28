@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import queue
+import time
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -105,6 +106,39 @@ def test_alphacam_context_owned_true_calls_quit(mock_com: MagicMock) -> None:
         app.Quit.assert_called_once()
 
 
+def test_alphacam_context_keep_alive_prevents_quit(mock_com: MagicMock) -> None:
+    """When keep_alive=True and owned=True, Quit should NOT be called."""
+    with mock_com:
+        from alphacam_cli.com.manager import alphacam_context
+
+        with alphacam_context(keep_alive=True):
+            pass
+
+        mock_com.return_value.Quit.assert_not_called()
+
+
+def test_alphacam_context_marshal_failure_cleanup(mock_com: MagicMock) -> None:
+    """When CoGetInterfaceAndReleaseStream fails, marshal data is released."""
+    with mock_com:
+        from alphacam_cli.com.manager import alphacam_context
+
+        fake_stream = MagicMock()
+        with (
+            patch("sys.platform", "win32"),
+            patch("pythoncom.CoMarshalInterThreadInterfaceInStream", return_value=fake_stream),
+            patch(
+                "pythoncom.CoGetInterfaceAndReleaseStream",
+                side_effect=Exception("Unmarshal failed"),
+            ),
+            patch("pythoncom.CoReleaseMarshalData") as mock_release,
+            pytest.raises(Exception, match="Unmarshal failed"),
+            alphacam_context(),
+        ):
+            pass
+
+        mock_release.assert_called_once_with(fake_stream)
+
+
 def test_alphacam_context_owned_false_skips_quit(mock_com: MagicMock) -> None:
     with patch("win32com.client.GetActiveObject") as mock_get:
         app = MagicMock()
@@ -165,11 +199,37 @@ def test_co_uninitialize_not_called_on_init_failure(mock_com: MagicMock) -> None
         with (
             patch("pythoncom.CoInitializeEx") as mock_init,
             patch("pythoncom.CoUninitialize") as mock_uninit,
-            pytest.raises(pythoncom.com_error),
         ):
-            mock_init.side_effect = pythoncom.com_error(-2147221005)
+            mock_init.side_effect = pythoncom.com_error(
+                -2147221005,
+                0,
+                None,
+                "CoInitializeEx failed",
+            )
 
-            with alphacam_context():
+            with pytest.raises(pythoncom.com_error), alphacam_context():
                 pass
 
             mock_uninit.assert_not_called()
+
+
+def test_sta_worker_late_error_handled(mock_com: MagicMock) -> None:
+    """When STA worker crashes after result delivery, context exits cleanly."""
+    from alphacam_cli.com.manager import alphacam_context
+
+    with mock_com:
+        call_count = 0
+
+        def failing_pump() -> None:
+            nonlocal call_count
+            call_count += 1
+            if call_count > 1:
+                raise RuntimeError
+
+        with (
+            patch("pythoncom.PumpWaitingMessages", side_effect=failing_pump),
+            alphacam_context(keep_alive=True),
+        ):
+            time.sleep(0.15)
+
+        assert call_count > 1, "Pump should have been called multiple times"

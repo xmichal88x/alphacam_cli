@@ -2,7 +2,13 @@ from __future__ import annotations
 
 import typer
 
-from alphacam_cli.cli.common import console, get_visible, handle_com_errors, require_platform
+from alphacam_cli.cli.common import (
+    console,
+    get_visible,
+    handle_com_errors,
+    require_platform,
+    resolve_app,
+)
 from alphacam_cli.com.constants import (
     ACAM_DRILL,
     ACAM_PECK,
@@ -12,7 +18,6 @@ from alphacam_cli.com.constants import (
     ACAM_TOOL_OUTSIDE,
 )
 from alphacam_cli.com.manager import alphacam_context
-from alphacam_cli.core.application import Application
 from alphacam_cli.core.logger import logger
 
 app = typer.Typer(help="Milling operations")
@@ -57,7 +62,7 @@ def rough(
     _validate_feed(down_feed)
     require_platform()
     with alphacam_context(visible=get_visible()) as raw:
-        ac = Application(raw)
+        ac = resolve_app(raw)
         drw = ac.get_active_drawing()
         if drw is None:
             console.print("[red]No active drawing[/red]")
@@ -116,7 +121,7 @@ def pocket(
     _validate_feed(feed)
     require_platform()
     with alphacam_context(visible=get_visible()) as raw:
-        ac = Application(raw)
+        ac = resolve_app(raw)
         drw = ac.get_active_drawing()
         if drw is None:
             console.print("[red]No active drawing[/red]")
@@ -159,7 +164,7 @@ def drill(
 
     require_platform()
     with alphacam_context(visible=get_visible()) as raw:
-        ac = Application(raw)
+        ac = resolve_app(raw)
         drw = ac.get_active_drawing()
         if drw is None:
             console.print("[red]No active drawing[/red]")

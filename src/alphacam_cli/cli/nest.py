@@ -8,9 +8,14 @@ from typing import Any
 import typer
 from rich.table import Table
 
-from alphacam_cli.cli.common import console, get_visible, handle_com_errors, require_platform
+from alphacam_cli.cli.common import (
+    console,
+    get_visible,
+    handle_com_errors,
+    require_platform,
+    resolve_app,
+)
 from alphacam_cli.com.manager import alphacam_context
-from alphacam_cli.core.application import Application
 
 app = typer.Typer(help="Nesting operations")
 
@@ -61,7 +66,7 @@ def run(
         raise typer.Exit(code=1)
 
     with alphacam_context(visible=get_visible()) as raw:
-        ac = Application(raw)
+        ac = resolve_app(raw)
 
         # Create sheet geometry
         drw = ac.create_temp_drawing()
@@ -97,23 +102,16 @@ def run(
 
 
 @app.command("list")
+@handle_com_errors
 def list_nests() -> None:
     """List available nest lists in the working directory."""
-    # Intentionally no @handle_com_errors — no COM calls, pure file-system listing
-    try:
-        files = sorted(glob.glob("*.anl"))
-        if not files:
-            console.print("[yellow]No .anl nest list files found in current directory[/yellow]")
-            return
+    files = sorted(glob.glob("*.anl"))
+    if not files:
+        console.print("[yellow]No .anl nest list files found in current directory[/yellow]")
+        return
 
-        t = Table(title="Nest Lists")
-        t.add_column("File", style="cyan")
-        for f in files:
-            t.add_row(f)
-        console.print(t)
-
-    except typer.Exit:
-        raise
-    except Exception as e:
-        console.print(f"[red]Error:[/red] {e}")
-        raise typer.Exit(code=1) from e
+    t = Table(title="Nest Lists")
+    t.add_column("File", style="cyan")
+    for f in files:
+        t.add_row(f)
+    console.print(t)

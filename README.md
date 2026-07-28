@@ -1,17 +1,18 @@
 # alphacam-cli
 
-CLI tool for automating **AlphaCAM** — a CAM software for woodworking and CNC machining — via its COM API. Runs on Windows and connects to AlphaCAM through `pywin32`.
+CLI tool for automating **AlphaCAM** — a CAM software for woodworking and CNC machining — via its COM API. Runs on **Windows** (native COM) or **Linux/macOS** (remote gateway via Tailscale).
 
 ---
 
 ## Requirements
 
-| Component | Requirement |
-|-----------|-------------|
-| OS | **Windows** (AlphaCAM COM API requires Windows) |
-| AlphaCAM | Installed with a valid license (any module: Router, Nesting, etc.) |
-| Python | 3.11 or later |
-| Dependencies | `typer`, `rich`, `pywin32` (auto-installed) |
+| Component | Local (Windows) | Remote (Linux/macOS) |
+|-----------|:----------------:|:--------------------:|
+| OS | **Windows** | **Linux / macOS** |
+| AlphaCAM | Installed + licensed | — (on Windows server) |
+| Python | 3.11+ | 3.11+ |
+| Dependencies | `typer`, `rich`, `pywin32` | `typer`, `rich` |
+| Gateway | — | `alphacam` + Tailscale |
 
 ---
 
@@ -62,13 +63,81 @@ alphacam nc output mypart.nc
 
 ---
 
-## Global Options
+## Remote Gateway
+
+Run CLI commands from **any machine (Linux, macOS)** while AlphaCAM runs on a separate Windows computer connected via Tailscale, LAN, or VPN.
+
+### Architecture
+
+```
+┌─────────────────┐     Tailscale / LAN      ┌──────────────────┐
+│  Your Machine   │  ──── TCP :8721 ──────►  │  Windows Server  │
+│  alphacam CLI   │                           │  alphacam-gateway │
+│  (Linux/macOS)  │                           │  → AlphaCAM COM  │
+└─────────────────┘                           └──────────────────┘
+```
+
+### Server Setup (Windows)
+
+Install on the Windows machine that has AlphaCAM:
+
+```bash
+pip install alphacam-cli
+python -m alphacam_cli.gateway.service  # starts on :8721
+```
+
+Make sure port `8721` is accessible over Tailscale (Tailscale does this automatically — no firewall config needed).
+
+### Client Usage (Linux / macOS)
+
+```bash
+# Connect to gateway through Tailscale IP
+alphacam --remote --host 100.x.x.x connect info
+
+# Or set config file for persistent remote mode
+alphacam --remote --host 100.x.x.x drawing create -w 200 -h 100
+alphacam --remote --host 100.x.x.x mill rough --depth -5
+
+# Batch processing via remote
+alphacam --remote --host 100.x.x.x batch process ./parts/ --post fanuc
+```
+
+### Configuration (persistent remote mode)
+
+Save remote settings to `~/.alphacam/config.json`:
+
+```json
+{
+  "remote_mode": true,
+  "remote_host": "100.x.x.x",
+  "remote_port": 8721
+}
+```
+
+After setting this, you can omit `--remote` and `--host`:
+
+```bash
+alphacam connect info
+```
+
+### How it works
+
+- The **gateway server** runs on Windows, maintains a persistent COM session in a STA thread, and exposes AlphaCAM operations via JSON-RPC 2.0 over TCP
+- The **CLI client** connects through the length-prefixed frame protocol — no HTTP, no extra dependencies
+- **No AlphaCAM license needed on the client machine** — all COM calls happen on the server
+- Works over **Tailscale, ZeroTier, LAN, or any TCP network**
+- The server listens on `0.0.0.0:8721` by default and handles one client at a time (AlphaCAM is single-instance)
+
+---
 
 | Option | Description |
 |--------|-------------|
 | `--version`, `-V` | Show program version |
 | `--verbose`, `-v` | Enable debug logging |
 | `--visible` | Show the AlphaCAM window during operations |
+| `--remote` | Connect to remote AlphaCAM gateway |
+| `--host` | Remote gateway hostname/IP (default: `127.0.0.1`) |
+| `--port`, `-p` | Remote gateway port (default: `8721`) |
 | `--help` | Show help message |
 
 ---
@@ -437,25 +506,25 @@ AlphaCAM Diagnostics
 
 ### Command Reference
 
-| Command | Description | Requires COM |
-|---------|-------------|:------------:|
-| `alphacam connect info` | Test COM connection, show AlphaCAM version | Yes |
-| `alphacam drawing create` | Create drawing with rectangle | Yes |
-| `alphacam drawing save` | Save active drawing to `.amd` | Yes |
-| `alphacam drawing open` | Open `.amd` file | Yes |
-| `alphacam drawing info` | Show active drawing info | Yes |
-| `alphacam tool list` | List available tool files | Yes |
-| `alphacam tool select` | Select tool by name | Yes |
-| `alphacam tool current` | Show selected tool | Yes |
-| `alphacam mill rough` | Rough/finish machining | Yes |
-| `alphacam mill pocket` | Pocket machining | Yes |
-| `alphacam mill drill` | Drill/tap/peck | Yes |
-| `alphacam nc output` | Generate NC code | Yes |
-| `alphacam batch process` | Batch `.amd` → `.nc` | Yes |
-| `alphacam nest run` | Run nesting from CSV | Yes |
-| `alphacam nest list` | List `.anl` files | No |
-| `alphacam post list` | List post-processors | Yes |
-| `alphacam diagnose` | System diagnostics | No (graceful) |
+| Command | Description | Requires COM | Remote |
+|---------|-------------|:------------:|:------:|
+| `alphacam connect info` | Test COM connection, show AlphaCAM version | Yes | ✅ |
+| `alphacam drawing create` | Create drawing with rectangle | Yes | ✅ |
+| `alphacam drawing save` | Save active drawing to `.amd` | Yes | ✅ |
+| `alphacam drawing open` | Open `.amd` file | Yes | ✅ |
+| `alphacam drawing info` | Show active drawing info | Yes | ✅ |
+| `alphacam tool list` | List available tool files | Yes | ✅ |
+| `alphacam tool select` | Select tool by name | Yes | ✅ |
+| `alphacam tool current` | Show selected tool | Yes | ✅ |
+| `alphacam mill rough` | Rough/finish machining | Yes | ✅ |
+| `alphacam mill pocket` | Pocket machining | Yes | ✅ |
+| `alphacam mill drill` | Drill/tap/peck | Yes | ✅ |
+| `alphacam nc output` | Generate NC code | Yes | ✅ |
+| `alphacam batch process` | Batch `.amd` → `.nc` | Yes | ✅ |
+| `alphacam nest run` | Run nesting from CSV | Yes | ✅ |
+| `alphacam nest list` | List `.anl` files | No | ✅ |
+| `alphacam post list` | List post-processors | Yes | ✅ |
+| `alphacam diagnose` | System diagnostics | No (graceful) | ❌ |
 
 ---
 
@@ -476,6 +545,11 @@ alphacam mill --depth <Tab>  # shows option help
 ```
 
 Supported shells: Bash, Zsh, Fish, PowerShell.
+
+You can also view the shell completion configuration without installing it:
+```bash
+alphacam --show-completion
+```
 
 ---
 
@@ -545,7 +619,16 @@ The output is `dist/alphacam.exe`. By default, the console window is hidden (use
 
 ### `Error: AlphaCAM CLI requires Windows`
 
-This tool depends on the AlphaCAM COM API, which is only available on Windows. Run it on a Windows machine with AlphaCAM installed.
+Without `--remote`, this tool requires the AlphaCAM COM API (Windows only).
+
+**Fix:** Use `--remote --host <tailscale-ip>` to connect to a Windows gateway server.
+
+### `Cannot connect to remote gateway`
+
+- Verify the gateway server is running on Windows: `python -m alphacam_cli.gateway.service`
+- Check connectivity: `ping 100.x.x.x` (Tailscale IP)
+- Verify port: `nc -zv 100.x.x.x 8721`
+- Ensure Tailscale is connected on both machines
 
 ### `FAIL: Could not connect to AlphaCAM`
 
@@ -599,12 +682,55 @@ pip install pywin32
 
 ## Testing
 
+### Unit tests (Linux & Windows)
+
+184+ unit tests covering CLI, COM manager, drawing, tool, application, machining, nesting, events, config, and remote gateway modules.
+
 ```bash
 pip install -e ".[dev]"
-pytest tests/ -v
+pytest tests/unit/ -v           # 184 tests, 91%+ coverage
+pytest tests/unit/ --cov        # with coverage report
 ```
 
-20+ unit tests covering CLI, COM manager, drawing, tool, application, and machining modules.
+All unit tests run on both Linux and Windows (COM is mocked). No AlphaCAM required.
+
+### Integration tests (Windows only, requires AlphaCAM)
+
+Run on a Windows machine with AlphaCAM installed and licensed:
+
+```bash
+# 1. Verify COM connection first
+alphacam connect info
+
+# 2. Run all integration tests
+pytest tests/integration/ -v
+
+# 3. Run specific workflow
+pytest tests/integration/ -k "test_full_workflow_create_mill_nc" -v
+```
+
+Integration tests cover:
+- **Full workflow**: create drawing → rough mill → NC output
+- **Batch processing**: process multiple `.amd` files with post-processor
+- **Nesting from CSV**: import part list, run nesting, verify sheet layout
+
+### Manual COM verification
+
+```bash
+# Quick COM connection test (any platform)
+alphacam diagnose diagnose
+
+# Windows-only: verify COM marshaling mode
+alphacam connect info --verbose   # shows marshaled vs simple mode
+```
+
+### Pre-commit checks (all platforms)
+
+```bash
+ruff check src/ tests/
+mypy src/ tests/
+pytest tests/unit/ --cov --cov-report=term-missing
+```
 
 ---
 

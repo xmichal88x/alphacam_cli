@@ -3,9 +3,14 @@ from __future__ import annotations
 import typer
 from rich.table import Table
 
-from alphacam_cli.cli.common import console, get_visible, handle_com_errors, require_platform
+from alphacam_cli.cli.common import (
+    console,
+    get_visible,
+    handle_com_errors,
+    require_platform,
+    resolve_app,
+)
 from alphacam_cli.com.manager import alphacam_context
-from alphacam_cli.core.application import Application
 
 app = typer.Typer(help="Drawing operations")
 
@@ -21,7 +26,7 @@ def create(
     """Create a new drawing with a rectangle and optional fillet and text."""
     require_platform()
     with alphacam_context(visible=get_visible()) as raw:
-        ac = Application(raw)
+        ac = resolve_app(raw)
         drw = ac.create_temp_drawing()
         if drw is None:
             console.print("[red]Failed to create drawing[/red]")
@@ -55,7 +60,7 @@ def save(
     """Save the active drawing to a file."""
     require_platform()
     with alphacam_context(visible=get_visible()) as raw:
-        ac = Application(raw)
+        ac = resolve_app(raw)
         drw = ac.get_active_drawing()
         if drw is None:
             console.print("[red]No active drawing[/red]")
@@ -73,7 +78,7 @@ def open(
     """Open an existing drawing."""
     require_platform()
     with alphacam_context(visible=get_visible()) as raw:
-        ac = Application(raw)
+        ac = resolve_app(raw)
         drw = ac.open_drawing(path)
         if drw is None:
             console.print(f"[red]Failed to open: {path}[/red]")
@@ -95,7 +100,7 @@ def info() -> None:
     """Show active drawing info."""
     require_platform()
     with alphacam_context(visible=get_visible()) as raw:
-        ac = Application(raw)
+        ac = resolve_app(raw)
         drw = ac.get_active_drawing()
         if drw is None:
             console.print("[yellow]No active drawing[/yellow]")

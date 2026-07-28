@@ -44,10 +44,26 @@ def main(
     ),
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Enable debug logging"),
     visible: bool = typer.Option(False, "--visible", help="Show AlphaCAM window"),
+    remote: bool = typer.Option(False, "--remote", help="Connect to remote AlphaCAM gateway"),
+    host: str = typer.Option("127.0.0.1", "--host", help="Remote gateway host"),
+    port: int = typer.Option(8721, "--port", "-p", help="Remote gateway port"),
 ) -> None:
     setup_logger(verbose)
     effective = _get_config().merge_with_cli(visible=visible or None)
     common.set_visible(effective.visible)
+    if remote:
+        from alphacam_cli.com.manager import set_remote_mode
+
+        set_remote_mode(host, port)
+        logger.debug("Remote mode: %s:%s", host, port)
+    else:
+        if effective.remote_mode:
+            from alphacam_cli.com.manager import set_remote_mode
+
+            set_remote_mode(effective.remote_host, effective.remote_port)
+            logger.debug(
+                "Remote mode (config): %s:%s", effective.remote_host, effective.remote_port
+            )
     logger.debug("AlphaCAM CLI started (verbose mode)")
 
 

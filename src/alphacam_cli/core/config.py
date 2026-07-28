@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 from dataclasses import asdict, dataclass
 from pathlib import Path
 
@@ -14,6 +15,9 @@ class AlphaCamConfig:
     default_post: str = ""
     default_spindle_speed: int = 12000
     default_feed: float = 3000.0
+    remote_mode: bool = False
+    remote_host: str = "127.0.0.1"
+    remote_port: int = 8721
 
     @classmethod
     def load(cls) -> AlphaCamConfig:
@@ -35,8 +39,6 @@ class AlphaCamConfig:
                 encoding="utf-8",
             )
         except OSError:
-            import logging
-
             logging.getLogger("alphacam").exception("Failed to save config")
 
     def merge_with_cli(self, *, visible: bool | None = None, **kwargs: object) -> AlphaCamConfig:

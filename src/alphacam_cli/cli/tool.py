@@ -5,9 +5,14 @@ import os
 import typer
 from rich.table import Table
 
-from alphacam_cli.cli.common import console, get_visible, handle_com_errors, require_platform
+from alphacam_cli.cli.common import (
+    console,
+    get_visible,
+    handle_com_errors,
+    require_platform,
+    resolve_app,
+)
 from alphacam_cli.com.manager import alphacam_context
-from alphacam_cli.core.application import Application
 
 app = typer.Typer(help="Tool operations")
 
@@ -20,7 +25,7 @@ def list(
     """List available tools from the AlphaCAM tool library."""
     require_platform()
     with alphacam_context(visible=get_visible()) as raw:
-        ac = Application(raw)
+        ac = resolve_app(raw)
         files = ac.find_tool_files(pattern)
 
         if not files:
@@ -45,7 +50,7 @@ def select(
     """Select a tool by name (partial match against library)."""
     require_platform()
     with alphacam_context(visible=get_visible()) as raw:
-        ac = Application(raw)
+        ac = resolve_app(raw)
         files = ac.find_tool_files()
 
         basename_lower = name.lower()
@@ -95,7 +100,7 @@ def current() -> None:
     """Show currently selected tool."""
     require_platform()
     with alphacam_context(visible=get_visible()) as raw:
-        ac = Application(raw)
+        ac = resolve_app(raw)
         tool = ac.get_current_tool()
         if tool is None:
             console.print("[yellow]No tool selected.[/yellow]")

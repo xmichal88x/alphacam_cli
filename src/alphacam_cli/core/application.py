@@ -145,7 +145,7 @@ class Application:
         "F": "ftools.alp",
     }
 
-    def find_tool_files(self, pattern: str = "*.amt") -> list[str]:
+    def find_tool_files(self, pattern: str = "*.art") -> list[str]:
         sub_dir = type(self)._TOOL_DIRS.get(self.module_type, "mtools.alp")
         base = os.path.join(self.licomdat_path, sub_dir)
         return sorted(glob.glob(os.path.join(base, pattern)))

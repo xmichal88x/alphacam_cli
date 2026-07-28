@@ -8,9 +8,14 @@ from typing import Any
 import typer
 from rich.progress import Progress
 
-from alphacam_cli.cli.common import console, get_visible, handle_com_errors, require_platform
+from alphacam_cli.cli.common import (
+    console,
+    get_visible,
+    handle_com_errors,
+    require_platform,
+    resolve_app,
+)
 from alphacam_cli.com.manager import alphacam_context
-from alphacam_cli.core.application import Application
 
 STATUS_OK = "OK"
 STATUS_FAIL = "FAIL"
@@ -19,7 +24,7 @@ app = typer.Typer(help="Batch processing")
 
 
 def _process_file(
-    ac: Application,
+    ac: Any,
     file_path: str,
     output_dir: str,
 ) -> dict[str, Any]:
@@ -74,7 +79,7 @@ def process(
 
     results: list[dict[str, Any]] = []
     with alphacam_context(visible=get_visible()) as raw:
-        ac = Application(raw)
+        ac = resolve_app(raw)
         if post:
             ac.select_post(post)
             console.print(f"[green]Post selected: {post}[/green]")
@@ -88,11 +93,12 @@ def process(
                 results.append(result)
                 progress.advance(task)
 
-                if result["status"] == "FAIL" and not continue_on_error:
+                if result["status"] == STATUS_FAIL and not continue_on_error:
+                    progress.update(task, description=f"Failed: {basename}")
                     break
 
-    ok_count = sum(1 for r in results if r["status"] == "OK")
-    fail_count = sum(1 for r in results if r["status"] == "FAIL")
+    ok_count = sum(1 for r in results if r["status"] == STATUS_OK)
+    fail_count = sum(1 for r in results if r["status"] == STATUS_FAIL)
     console.print()
     console.print("[bold]Batch Summary[/bold]")
     console.print(f"  [green]OK:[/green] {ok_count}  [red]FAIL:[/red] {fail_count}")
@@ -101,7 +107,7 @@ def process(
             console.print(f"  [red]  {r['file']}: {r['error']}[/red]")
     console.print(f"[green]Done:[/green] {len(results)} files -> {out}")
 
-    if fail_count:
+    if any(r["error"] for r in results):
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         log_path = os.path.join(out, f"batch-errors-{timestamp}.log")
         with open(log_path, "w") as log_f:

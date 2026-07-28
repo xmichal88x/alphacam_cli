@@ -8,7 +8,7 @@ from typing import Any, TypeVar
 import typer
 from rich.console import Console
 
-from alphacam_cli.com.manager import AlphacamComError, AlphacamConnectionError
+from alphacam_cli.com.manager import AlphacamComError, AlphacamConnectionError, is_remote
 
 console: Console = Console(stderr=True)
 
@@ -27,12 +27,23 @@ def set_visible(value: bool) -> None:
 
 def require_platform() -> None:
     """Check we're on Windows before trying COM operations."""
+    if is_remote():
+        return
     if sys.platform != "win32":
         console.print(
             "[red]Error:[/red] AlphaCAM CLI requires Windows + AlphaCAM software.\n"
             f"Detected platform: [yellow]{sys.platform}[/yellow]"
         )
         raise typer.Exit(code=1)
+
+
+def resolve_app(raw: Any) -> Any:
+    from alphacam_cli.core.application import Application
+    from alphacam_cli.gateway.remote import RemoteApplication
+
+    if isinstance(raw, RemoteApplication):
+        return raw
+    return Application(raw)
 
 
 F = TypeVar("F", bound=Callable[..., Any])

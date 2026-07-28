@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import contextlib
+import logging
 import queue
 import sys
 import threading
@@ -9,7 +10,7 @@ from typing import Any
 
 from alphacam_cli.com.constants import PROG_IDS
 
-CONNECT_TIMEOUT = 30
+CONNECT_TIMEOUT = 180
 _RPC_E_CHANGED_MODE = -2147417850
 
 
@@ -25,29 +26,56 @@ class AlphacamComError(Exception):
         super().__init__(message)
 
 
+_REMOTE_MODE: bool = False
+_REMOTE_HOST: str = "127.0.0.1"
+_REMOTE_PORT: int = 8721
+
+
+def set_remote_mode(host: str | None = None, port: int | None = None) -> None:
+    global _REMOTE_MODE, _REMOTE_HOST, _REMOTE_PORT
+    _REMOTE_MODE = True
+    if host is not None:
+        _REMOTE_HOST = host
+    if port is not None:
+        _REMOTE_PORT = port
+
+
+def clear_remote_mode() -> None:
+    global _REMOTE_MODE
+    _REMOTE_MODE = False
+
+
+def is_remote() -> bool:
+    return _REMOTE_MODE
+
+
 @contextlib.contextmanager
 def alphacam_context(
     visible: bool = False,
     prog_id: str | None = None,
+    keep_alive: bool = False,
 ) -> Iterator[Any]:
-    """
-    Context manager for AlphaCAM COM connection.
+    if is_remote():
+        from alphacam_cli.gateway.client import RemoteSession
+        from alphacam_cli.gateway.remote import RemoteApplication
 
-    Uses a dedicated STA thread with message pump for COM apartment correctness.
-    The COM dispatch is created in a long-lived STA thread and marshaled to the
-    caller's thread via CoMarshalInterThreadInterfaceInStream. The STA thread
-    stays alive (pumping COM messages) until the context exits.
+        session = RemoteSession(_REMOTE_HOST, _REMOTE_PORT)
+        try:
+            session.connect()
+            yield RemoteApplication(session)
+        finally:
+            session.close()
+        return
 
-    Yields the raw COM dispatch object.
-    """
     import pythoncom  # type: ignore[import-untyped]
     import win32com.client as win32  # type: ignore[import-untyped]
+
+    logger = logging.getLogger("alphacam")
 
     result_queue: queue.Queue[Any] = queue.Queue()
     stop_event = threading.Event()
 
     def sta_worker() -> None:
-        result_sent = False
         try:
             com_initialized = False
             ac_app = None
@@ -86,9 +114,9 @@ def alphacam_context(
                     result_queue.put(("error", exc))
                     return
 
-                # Marshal for cross-thread COM access
-                # On Windows with real COM: CoMarshalInterThreadInterfaceInStream
-                # On non-Windows or mock dispatch: pass directly
+                with contextlib.suppress(Exception):
+                    ac_app.Visible = visible  # type: ignore[attr-defined]
+
                 if sys.platform == "win32":
                     try:
                         stream = pythoncom.CoMarshalInterThreadInterfaceInStream(
@@ -97,33 +125,24 @@ def alphacam_context(
                         )
                     except (TypeError, pythoncom.com_error):
                         result_queue.put(("simple", ac_app, owned))
-                        result_sent = True
                     else:
                         result_queue.put(("marshaled", stream, owned))
-                        result_sent = True
                 else:
                     result_queue.put(("simple", ac_app, owned))
-                    result_sent = True
 
-                # Message pump — keep STA apartment alive for cross-thread COM
                 while not stop_event.is_set():
                     pythoncom.PumpWaitingMessages()
                     stop_event.wait(0.05)
 
             finally:
-                if owned and ac_app is not None:
+                if owned and not keep_alive and ac_app is not None:
                     with contextlib.suppress(Exception):
                         ac_app.Quit()  # type: ignore[attr-defined]
                 if com_initialized:
                     pythoncom.CoUninitialize()  # type: ignore[attr-defined]
         except Exception as exc:
-            import logging
-
-            logger = logging.getLogger("alphacam")
-            logger.exception("STA thread in alphacam_context() failed unexpectedly")
-            if not result_sent:
-                with contextlib.suppress(Exception):
-                    result_queue.put(("error", exc))
+            with contextlib.suppress(Exception):
+                result_queue.put_nowait(("error", exc))
 
     thread = threading.Thread(target=sta_worker, daemon=True)
     thread.start()
@@ -131,6 +150,8 @@ def alphacam_context(
     try:
         result = result_queue.get(timeout=CONNECT_TIMEOUT)
     except queue.Empty:
+        stop_event.set()
+        thread.join(timeout=5)
         raise AlphacamConnectionError(  # noqa: TRY003
             f"Timed out after {CONNECT_TIMEOUT}s connecting to AlphaCAM.\n"
             "Check: (1) AlphaCAM is not hung, "
@@ -145,10 +166,17 @@ def alphacam_context(
 
     ac_app = result[1]
     if status == "marshaled":
-        ac_app = pythoncom.CoGetInterfaceAndReleaseStream(result[1], pythoncom.IID_IDispatch)
+        try:
+            raw = pythoncom.CoGetInterfaceAndReleaseStream(result[1], pythoncom.IID_IDispatch)
+            ac_app = win32.Dispatch(raw)
+        except Exception:
+            with contextlib.suppress(Exception):
+                pythoncom.CoReleaseMarshalData(result[1])
+            stop_event.set()
+            thread.join(timeout=5)
+            raise
 
     try:
-        ac_app.Visible = visible  # type: ignore[attr-defined]
         yield ac_app
 
     except AlphacamConnectionError:
@@ -162,3 +190,8 @@ def alphacam_context(
     finally:
         stop_event.set()
         thread.join(timeout=5)
+        with contextlib.suppress(queue.Empty):
+            while True:
+                late = result_queue.get_nowait()
+                if late[0] == "error":
+                    logger.error("STA thread: late error after yield", exc_info=late[1])

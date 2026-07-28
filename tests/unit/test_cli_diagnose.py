@@ -65,3 +65,26 @@ def test_diagnose_no_com_connection() -> None:
         result = runner.invoke(app, [])
     assert result.exit_code == 1
     assert "No AlphaCAM COM connection" in result.stderr
+
+
+def test_diagnose_win32com_not_installed() -> None:
+    with patch("alphacam_cli.cli.diagnose.win32com", None), _mock_alphacam_context():
+        result = runner.invoke(app, [])
+    assert result.exit_code == 0
+    assert "NOT INSTALLED" in result.stderr
+
+
+def test_diagnose_create_temp_drawing_none() -> None:
+    with _mock_alphacam_context() as app_mock:
+        app_mock.CreateTempDrawing.return_value = None
+        result = runner.invoke(app, [])
+    assert result.exit_code == 0
+    assert "CreateTempDrawing returned None" in result.stderr
+
+
+def test_diagnose_create_mill_data_fails() -> None:
+    with _mock_alphacam_context() as app_mock:
+        app_mock.CreateMillData.side_effect = Exception("Simulated failure")
+        result = runner.invoke(app, [])
+    assert result.exit_code == 0
+    assert "create failed" in result.stderr
