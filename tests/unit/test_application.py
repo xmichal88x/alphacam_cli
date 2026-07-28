@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+from unittest.mock import MagicMock
+
 from alphacam_cli.core.application import Application
 
 
-def test_application_properties(mock_com):
+def test_application_properties(mock_com: MagicMock) -> None:
     """Test Application wrapper properties."""
     with mock_com:
         from alphacam_cli.com.manager import alphacam_context
@@ -24,7 +26,7 @@ def test_application_properties(mock_com):
             assert ac.is_mill is False
 
 
-def test_application_visible_setter(mock_com):
+def test_application_visible_setter(mock_com: MagicMock) -> None:
     with mock_com:
         from alphacam_cli.com.manager import alphacam_context
 
@@ -36,7 +38,7 @@ def test_application_visible_setter(mock_com):
             assert ac.visible is False
 
 
-def test_get_active_drawing(mock_com):
+def test_get_active_drawing(mock_com: MagicMock) -> None:
     with mock_com:
         from alphacam_cli.com.manager import alphacam_context
 

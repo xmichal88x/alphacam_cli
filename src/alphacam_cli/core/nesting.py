@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     import win32com.client as win32  # type: ignore[import-untyped]
 
-    from alphacam_cli.core.drawing import Path
+from alphacam_cli.core.drawing import CamPath
 
 
 class Nesting:
@@ -23,18 +23,26 @@ class Nesting:
 
     def new_nest_list(self, path: str) -> NestList:
         raw = self._n.NewNestList(path)  # type: ignore[attr-defined]
+        if raw is None:
+            raise RuntimeError("Failed to create nest list")  # noqa: TRY003
         return NestList(raw)
 
     def new_sheet_list(self) -> SheetList:
         raw = self._n.NewSheetList()  # type: ignore[attr-defined]
+        if raw is None:
+            raise RuntimeError("Failed to create sheet list")  # noqa: TRY003
         return SheetList(raw)
 
     def nest(self, nest_list: NestList, sheet_list: SheetList) -> NestList:
         raw = self._n.Nest(nest_list.raw_dispatch, sheet_list.raw_dispatch)  # type: ignore[attr-defined]
+        if raw is None:
+            raise RuntimeError("Nesting operation returned None")  # noqa: TRY003
         return NestList(raw)
 
     def load_nest_list(self, filename: str) -> NestList:
         raw = self._n.LoadNestList(filename)  # type: ignore[attr-defined]
+        if raw is None:
+            raise RuntimeError("Failed to load nest list")  # noqa: TRY003
         return NestList(raw)
 
     @property
@@ -64,12 +72,10 @@ class NestList:
     def total_time(self) -> int:
         return int(self._nl.TotalTime)  # type: ignore[attr-defined]
 
-    @total_time.setter
-    def total_time(self, value: int) -> None:
-        self._nl.TotalTime = value  # type: ignore[attr-defined]
-
     def add_file(self, filename: str) -> NestPart:
         raw = self._nl.AddFile(filename)  # type: ignore[attr-defined]
+        if raw is None:
+            raise RuntimeError("Failed to add file to nest list")  # noqa: TRY003
         return NestPart(raw)
 
     def save(self, filename: str | None = None) -> None:
@@ -119,12 +125,12 @@ class SheetList:
     def count(self) -> int:
         return int(self._sl.Count)  # type: ignore[attr-defined]
 
-    def add(self, geometry: Path | Any) -> NestSheet:
-        """Add a geometry (Path or raw COM object) as a sheet."""
-        from alphacam_cli.core.drawing import Path
-
-        raw_geo = geometry._path if isinstance(geometry, Path) else geometry
+    def add(self, geometry: CamPath | Any) -> NestSheet:
+        """Add a geometry (CamPath or raw COM object) as a sheet."""
+        raw_geo = geometry.raw_dispatch if isinstance(geometry, CamPath) else geometry
         raw = self._sl.Add(raw_geo)  # type: ignore[attr-defined]
+        if raw is None:
+            raise RuntimeError("Failed to add sheet")  # noqa: TRY003
         return NestSheet(raw)
 
 

@@ -10,6 +10,8 @@ class MillData:
     """Typed wrapper around AlphaCAM MillData COM object."""
 
     def __init__(self, dispatch: win32.CDispatch) -> None:
+        if dispatch is None:
+            raise ValueError("MillData dispatch object is None")  # noqa: TRY003
         self._md = dispatch
 
     # --- Properties ---
@@ -95,11 +97,11 @@ class MillData:
 
     @property
     def process_type(self) -> int:
-        return int(self._md.ProcessType2)  # type: ignore[attr-defined]
+        return int(self._md.ProcessType2)  # ProcessType2 is the current API
 
     @process_type.setter
     def process_type(self, value: int) -> None:
-        self._md.ProcessType2 = value  # type: ignore[attr-defined]
+        self._md.ProcessType2 = value  # ProcessType2 is the current API
 
     @property
     def pocket_type(self) -> int:

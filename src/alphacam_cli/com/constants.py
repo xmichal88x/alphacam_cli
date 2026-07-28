@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 PROG_IDS = [
     "Ar5axaps.Application",
     "am5axaps.Application",
@@ -31,6 +29,7 @@ ACAM_POCKET_PARALLEL = 4
 # ToolInOut
 ACAM_TOOL_OUTSIDE = -1
 ACAM_TOOL_INSIDE = 1
+ACAM_TOOL_CENTER = 0
 
 # Drill types
 ACAM_DRILL = 0

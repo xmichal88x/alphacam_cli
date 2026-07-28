@@ -10,6 +10,8 @@ class Tool:
     """Typed wrapper around AlphaCAM MillTool COM object."""
 
     def __init__(self, dispatch: win32.CDispatch) -> None:
+        if dispatch is None:
+            raise ValueError("Tool dispatch object is None")  # noqa: TRY003
         self._tool = dispatch
 
     @property

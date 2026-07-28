@@ -1,0 +1,59 @@
+name: CI
+
+on:
+  push:
+    branches: [master, main]
+  pull_request:
+    branches: [master, main]
+  workflow_dispatch:
+    inputs:
+      integration:
+        description: "Run integration tests (Windows only, requires AlphaCAM)"
+        type: boolean
+        default: false
+  release:
+    types: [published]
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install -e ".[dev]"
+      - run: ruff check src/ tests/
+      - run: mypy src/ tests/
+
+  test:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install -e ".[dev]"
+      - run: pytest tests/unit/ -v
+      - name: Integration tests
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.integration && matrix.os == 'windows-latest' }}
+        run: pytest tests/integration/ -v
+
+  build:
+    needs: [lint, test]
+    runs-on: windows-latest
+    if: startsWith(github.ref, 'refs/tags/')
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install -e ".[dev,build]"
+      - run: pyinstaller alphacam.spec
+      - uses: actions/upload-artifact@v4
+        with:
+          name: alphacam-cli-windows
+          path: dist/alphacam.exe

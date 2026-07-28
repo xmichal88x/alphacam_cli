@@ -3,14 +3,14 @@ from __future__ import annotations
 from alphacam_cli.com.constants import PROG_IDS
 
 
-def test_prog_ids_defined():
+def test_prog_ids_defined() -> None:
     assert len(PROG_IDS) == 3
     assert "Ar5axaps.Application" in PROG_IDS
     assert "am5axaps.Application" in PROG_IDS
     assert "aroutaps.Application" in PROG_IDS
 
 
-def test_module_constants():
+def test_module_constants() -> None:
     from alphacam_cli.com.constants import (
         ACAM_OUT_NC_FILE,
         ACAM_POCKET_CONTOUR,

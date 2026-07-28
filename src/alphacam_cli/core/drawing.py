@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     import win32com.client as win32  # type: ignore[import-untyped]
@@ -12,6 +12,8 @@ class Drawing:
     """Typed wrapper around AlphaCAM Drawing COM object."""
 
     def __init__(self, dispatch: win32.CDispatch) -> None:
+        if dispatch is None:
+            raise ValueError("dispatch cannot be None")  # noqa: TRY003
         self._drw = dispatch
 
     @property
@@ -22,27 +24,37 @@ class Drawing:
     def tool_paths_count(self) -> int:
         return int(self._drw.ToolPaths.Count)  # type: ignore[attr-defined]
 
-    def create_rectangle(self, x1: float, y1: float, x2: float, y2: float) -> Path:
+    def create_rectangle(self, x1: float, y1: float, x2: float, y2: float) -> CamPath:
         raw = self._drw.CreateRectangle(x1, y1, x2, y2)  # type: ignore[attr-defined]
-        return Path(raw)
+        if raw is None:
+            raise RuntimeError("Failed to create rectangle")  # noqa: TRY003
+        return CamPath(raw)
 
-    def create_circle(self, radius: float, cx: float, cy: float) -> Path:
+    def create_circle(self, radius: float, cx: float, cy: float) -> CamPath:
         raw = self._drw.CreateCircle(radius, cx, cy)  # type: ignore[attr-defined]
-        return Path(raw)
+        if raw is None:
+            raise RuntimeError("Failed to create circle")  # noqa: TRY003
+        return CamPath(raw)
 
     def create_text(self, text: str, x: float, y: float, height: float) -> Text:
         raw = self._drw.CreateText2(text, x, y, height)  # type: ignore[attr-defined]
+        if raw is None:
+            raise RuntimeError("Failed to create text")  # noqa: TRY003
         return Text(raw)
 
     def create_2d_geometry(self, x: float, y: float) -> Geo2D:
         raw = self._drw.Create2DGeometry(x, y)  # type: ignore[attr-defined]
+        if raw is None:
+            raise RuntimeError("Failed to create 2D geometry")  # noqa: TRY003
         return Geo2D(raw)
 
     def create_polygon(
         self, radius: float, sides: int, circumscribed: bool, cx: float, cy: float
-    ) -> Path:
+    ) -> CamPath:
         raw = self._drw.CreatePolygon(radius, sides, circumscribed, cx, cy)  # type: ignore[attr-defined]
-        return Path(raw)
+        if raw is None:
+            raise RuntimeError("Failed to create polygon")  # noqa: TRY003
+        return CamPath(raw)
 
     def zoom_all(self) -> None:
         self._drw.ZoomAll()  # type: ignore[attr-defined]
@@ -51,6 +63,14 @@ class Drawing:
         self._drw.SaveAs(path)  # type: ignore[attr-defined]
 
     def output_nc(self, path: str) -> None:
+        self._drw.OutputNC(path, ACAM_OUT_NC_FILE, False)  # type: ignore[attr-defined]
+
+    def output_nc_with_events(self, path: str, app_dispatch: Any) -> None:
+        from win32com.client import DispatchWithEvents  # type: ignore[import-untyped]
+
+        from alphacam_cli.core.events import NcEventHandler
+
+        _ = DispatchWithEvents(app_dispatch, NcEventHandler)
         self._drw.OutputNC(path, ACAM_OUT_NC_FILE, False)  # type: ignore[attr-defined]
 
     def clear(
@@ -75,19 +95,25 @@ class Drawing:
             text,
         )
 
-    def geometries(self) -> list[Path]:
+    def geometries(self) -> list[CamPath]:
         coll = self._drw.Geometries  # type: ignore[attr-defined]
         count = int(coll.Count)
-        return [Path(coll(i)) for i in range(1, count + 1)]
+        return [CamPath(coll.Item(i)) for i in range(1, count + 1)]
 
     def select_all_geometries(self) -> None:
         for geo in self.geometries():
             geo.selected = True
 
 
-class Path:
+class CamPath:
     def __init__(self, dispatch: win32.CDispatch) -> None:
+        if dispatch is None:
+            raise ValueError("dispatch cannot be None")  # noqa: TRY003
         self._path = dispatch
+
+    @property
+    def raw_dispatch(self) -> Any:
+        return self._path
 
     @property
     def selected(self) -> bool:
@@ -114,6 +140,8 @@ class Path:
 
 class Geo2D:
     def __init__(self, dispatch: win32.CDispatch) -> None:
+        if dispatch is None:
+            raise ValueError("dispatch cannot be None")  # noqa: TRY003
         self._geo = dispatch
 
     def add_line(self, x: float, y: float) -> None:
@@ -122,17 +150,23 @@ class Geo2D:
     def add_arc_2point(self, end_x: float, end_y: float, arc_x: float, arc_y: float) -> None:
         self._geo.AddArc2Point(end_x, end_y, arc_x, arc_y)  # type: ignore[attr-defined]
 
-    def close_and_finish_line(self) -> Path:
+    def close_and_finish_line(self) -> CamPath:
         raw = self._geo.CloseAndFinishLine()  # type: ignore[attr-defined]
-        return Path(raw)
+        if raw is None:
+            raise RuntimeError("Failed to close and finish line")  # noqa: TRY003
+        return CamPath(raw)
 
-    def finish(self) -> Path:
+    def finish(self) -> CamPath:
         raw = self._geo.Finish()  # type: ignore[attr-defined]
-        return Path(raw)
+        if raw is None:
+            raise RuntimeError("Failed to finish geometry")  # noqa: TRY003
+        return CamPath(raw)
 
 
 class Text:
     def __init__(self, dispatch: win32.CDispatch) -> None:
+        if dispatch is None:
+            raise ValueError("dispatch cannot be None")  # noqa: TRY003
         self._text = dispatch
 
     @property

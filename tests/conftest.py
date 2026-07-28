@@ -1,11 +1,21 @@
 from __future__ import annotations
 
 import sys
+from collections.abc import Iterator
 from unittest.mock import MagicMock, patch
 
 import pytest
 
+
 # --- Fake win32com/pythoncom modules for Linux testing ---
+class ComError(Exception):
+    """Fake pythoncom.com_error for testing."""
+
+    def __init__(self, hresult: int = -2147417830, *args: object) -> None:
+        self.hresult = hresult
+        super().__init__(*args)
+
+
 _win32com = MagicMock(name="win32com")
 _win32com.client = MagicMock(name="win32com.client")
 _win32com.client.gencache = MagicMock(name="win32com.client.gencache")
@@ -13,17 +23,28 @@ _win32com.client.gencache.EnsureDispatch = MagicMock(name="EnsureDispatch")
 
 _pythoncom = MagicMock(name="pythoncom")
 _pythoncom.CoInitialize = MagicMock(name="CoInitialize")
+_pythoncom.com_error = ComError
 
-sys.modules["win32com"] = _win32com
-sys.modules["win32com.client"] = _win32com.client
-sys.modules["win32com.client.gencache"] = _win32com.client.gencache
-sys.modules["pythoncom"] = _pythoncom
+
+def pytest_configure() -> None:
+    """Inject COM mocks on non-Windows platforms before test collection."""
+    if sys.platform != "win32":
+        sys.modules.setdefault("win32com", _win32com)
+        sys.modules.setdefault("win32com.client", _win32com.client)
+        sys.modules.setdefault("win32com.client.gencache", _win32com.client.gencache)
+        sys.modules.setdefault("pythoncom", _pythoncom)
 
 
 @pytest.fixture
-def mock_com():
-    """Mock win32com.client.gencache.EnsureDispatch for testing without AlphaCAM."""
-    with patch("win32com.client.gencache.EnsureDispatch") as mock:
+def mock_com() -> Iterator[MagicMock]:
+    """Mock win32com.client for testing without AlphaCAM."""
+    with (
+        patch("win32com.client.Dispatch") as mock_dispatch,
+        patch("win32com.client.GetActiveObject") as mock_get_active,
+    ):
+        # Simulate that AlphaCAM is NOT already running
+        mock_get_active.side_effect = Exception("No active object")
+
         app = MagicMock()
         app.Visible = False
         app.AlphacamVersion = "2024.1"
@@ -58,7 +79,7 @@ def mock_com():
         tool.Note = ""
         tool.NumberOfTeeth = 2
         app.SelectTool.return_value = tool
-        app.GetCurrentTool = tool
+        app.GetCurrentTool.return_value = tool
 
         # MillData mock
         md = MagicMock()
@@ -83,12 +104,21 @@ def mock_com():
         # Nesting mock
         nest = MagicMock()
         nest.SuppressDialogs = False
-        nl = MagicMock()
+
+        nl = MagicMock(name="NestList")
         nl.Count = 0
         nl.TotalTime = 0
+
+        sl = MagicMock(name="SheetList")
+        sl.Count = 0
+
         nest.NewNestList.return_value = nl
-        nest.NewSheetList.return_value = MagicMock()
+        nest.NewSheetList.return_value = sl
+        nest.Nest.return_value = nl
+        nest.LoadNestList.return_value = nl
         app.Nesting = nest
 
-        mock.return_value = app
-        yield mock
+        # Make Dispatch return the configured app mock
+        mock_dispatch.return_value = app
+
+        yield mock_dispatch

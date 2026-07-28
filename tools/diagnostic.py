@@ -132,17 +132,19 @@ def test_pywin32() -> bool:
         import pythoncom  # noqa: F401
         import win32com  # noqa: F401
         import win32com.client  # noqa: F401
-
-        ver = getattr(pythoncom, "__version__", "unknown")
     except ImportError as e:
         log_fail("ENV", f"pywin32 not found: {e}")
         return False
-    except Exception as e:
-        log_fail("ENV", f"pywin32 error: {e}")
-        return False
-    else:
-        log_ok("ENV", f"pywin32 {ver} (pythoncom, win32com.client)")
-        return True
+
+    try:
+        from importlib.metadata import version
+
+        ver = version("pywin32")
+    except Exception:
+        ver = getattr(pythoncom, "__version__", "unknown")
+
+    log_ok("ENV", f"pywin32 {ver} (pythoncom, win32com.client)")
+    return True
 
 
 def test_temp_permissions() -> bool:
@@ -242,7 +244,10 @@ def test_com_reference_counting() -> bool:
 
             app = win32.gencache.EnsureDispatch(_com_progid_used)
             app.Visible = False
-            counts.append(pythoncom._GetInterfaceCount())
+            try:
+                counts.append(pythoncom._GetInterfaceCount())
+            except AttributeError:
+                counts.append("N/A")
             app.Quit()
             del app
             import gc
@@ -522,7 +527,7 @@ def test_tools(app, props) -> dict:
 
     # 5d. GetCurrentTool
     try:
-        current = app.GetCurrentTool
+        current = app.GetCurrentTool()
         if current is not None:
             name = str(current.Name)
             log_ok("TOOL", f"GetCurrentTool: {name}")
@@ -785,7 +790,10 @@ def test_stress(app) -> dict:
             for i in range(10):
                 drw = app.CreateTempDrawing()
                 drw.CreateRectangle(0, 0, 100 + i * 10, 50 + i * 10)
-                counts.append(pythoncom._GetInterfaceCount())
+                try:
+                    counts.append(pythoncom._GetInterfaceCount())
+                except AttributeError:
+                    counts.append("N/A")
                 drw = None
             log_ok(
                 "STRESS", f"10x create+rect: interface counts stable ({counts[0]}...{counts[-1]})"
@@ -956,6 +964,12 @@ def main():
         traceback.print_exc()
 
     _save_log()
+    try:
+        import pythoncom
+
+        pythoncom.CoUninitialize()
+    except Exception:
+        pass
 
 
 def _save_log():

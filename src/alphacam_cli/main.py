@@ -5,9 +5,21 @@ from rich.console import Console
 from rich.traceback import install as install_rich_traceback
 
 import alphacam_cli.cli.common as common
+from alphacam_cli.core.config import AlphaCamConfig
+from alphacam_cli.core.logger import logger, setup_logger
 
-install_rich_traceback(show_locals=True, width=120)
+install_rich_traceback(show_locals=False, width=120)
 console = Console(stderr=True)
+
+_config: AlphaCamConfig | None = None
+
+
+def _get_config() -> AlphaCamConfig:
+    global _config
+    if _config is None:
+        _config = AlphaCamConfig.load()
+    return _config
+
 
 app = typer.Typer(
     name="alphacam",
@@ -30,9 +42,13 @@ def main(
     version: bool = typer.Option(
         False, "--version", "-V", help="Show version", callback=_version_callback
     ),
+    verbose: bool = typer.Option(False, "--verbose", "-v", help="Enable debug logging"),
     visible: bool = typer.Option(False, "--visible", help="Show AlphaCAM window"),
 ) -> None:
-    common._visible = visible
+    setup_logger(verbose)
+    effective = _get_config().merge_with_cli(visible=visible or None)
+    common.set_visible(effective.visible)
+    logger.debug("AlphaCAM CLI started (verbose mode)")
 
 
 def _load_typer(module_path: str, name: str = "app") -> typer.Typer:
@@ -40,11 +56,24 @@ def _load_typer(module_path: str, name: str = "app") -> typer.Typer:
     return getattr(mod, name)  # type: ignore[no-any-return]
 
 
-app.add_typer(_load_typer("alphacam_cli.cli.connect"), name="connect")
-app.add_typer(_load_typer("alphacam_cli.cli.drawing"), name="drawing")
-app.add_typer(_load_typer("alphacam_cli.cli.tool"), name="tool")
-app.add_typer(_load_typer("alphacam_cli.cli.mill"), name="mill")
-app.add_typer(_load_typer("alphacam_cli.cli.nc"), name="nc")
-app.add_typer(_load_typer("alphacam_cli.cli.batch"), name="batch")
-app.add_typer(_load_typer("alphacam_cli.cli.nest"), name="nest")
-app.add_typer(_load_typer("alphacam_cli.cli.post"), name="post")
+_SUBCOMMANDS: list[tuple[str, str]] = [
+    ("alphacam_cli.cli.connect", "connect"),
+    ("alphacam_cli.cli.drawing", "drawing"),
+    ("alphacam_cli.cli.tool", "tool"),
+    ("alphacam_cli.cli.mill", "mill"),
+    ("alphacam_cli.cli.nc", "nc"),
+    ("alphacam_cli.cli.batch", "batch"),
+    ("alphacam_cli.cli.diagnose", "diagnose"),
+    ("alphacam_cli.cli.nest", "nest"),
+    ("alphacam_cli.cli.post", "post"),
+]
+
+for module_path, name in _SUBCOMMANDS:
+    try:
+        app.add_typer(_load_typer(module_path), name=name)
+    except ImportError:
+        logger.warning("Subcommand '%s' not available (module: %s)", name, module_path)
+        console.print(f"[yellow]Warning:[/yellow] '{name}' command unavailable (import error)")
+    except Exception:
+        logger.exception("Failed to load subcommand '%s'", name)
+        console.print(f"[yellow]Warning:[/yellow] '{name}' command failed to load")

@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+from unittest.mock import MagicMock
+
 from alphacam_cli.core.machining import MillData
 
 
-def test_mill_data_properties(mock_com):
+def test_mill_data_properties(mock_com: MagicMock) -> None:
     with mock_com:
         from alphacam_cli.com.manager import alphacam_context
 

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import glob
 import os
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, ClassVar
 
 if TYPE_CHECKING:
     import win32com.client as win32  # type: ignore[import-untyped]
@@ -13,6 +13,10 @@ if TYPE_CHECKING:
     from alphacam_cli.core.tool import Tool
 
 from alphacam_cli.com.constants import MODULE_MILL, MODULE_ROUTER
+from alphacam_cli.core.drawing import Drawing
+from alphacam_cli.core.machining import MillData
+from alphacam_cli.core.nesting import Nesting
+from alphacam_cli.core.tool import Tool
 
 
 class Application:
@@ -86,57 +90,54 @@ class Application:
         return self.program_letter == MODULE_ROUTER
 
     def get_active_drawing(self) -> Drawing | None:
-        from alphacam_cli.core.drawing import Drawing
-
         raw = self._app.ActiveDrawing  # type: ignore[attr-defined]
         if raw is None:
             return None
         return Drawing(raw)
 
     def create_temp_drawing(self) -> Drawing | None:
-        from alphacam_cli.core.drawing import Drawing
-
         raw = self._app.CreateTempDrawing()  # type: ignore[attr-defined]
         if raw is None:
             return None
         return Drawing(raw)
 
     def open_drawing(self, path: str) -> Drawing | None:
-        from alphacam_cli.core.drawing import Drawing
-
         raw = self._app.OpenDrawing(path)  # type: ignore[attr-defined]
         if raw is None:
             return None
         return Drawing(raw)
 
     def select_tool(self, path: str) -> Tool | None:
-        from alphacam_cli.core.tool import Tool
-
         raw = self._app.SelectTool(path)  # type: ignore[attr-defined]
         if raw is None:
             return None
         return Tool(raw)
 
     def get_current_tool(self) -> Tool | None:
-        from alphacam_cli.core.tool import Tool
-
-        raw = self._app.GetCurrentTool  # type: ignore[attr-defined]
+        raw = self._app.GetCurrentTool()  # type: ignore[attr-defined]
         if raw is None:
             return None
         return Tool(raw)
 
     def create_mill_data(self) -> MillData:
-        from alphacam_cli.core.machining import MillData
-
-        return MillData(self._app.CreateMillData())  # type: ignore[attr-defined]
+        raw = self._app.CreateMillData()  # type: ignore[attr-defined]
+        if raw is None:
+            raise RuntimeError("Failed to create mill data")  # noqa: TRY003
+        return MillData(raw)
 
     def new_drawing(self) -> None:
-        self._app.New()  # type: ignore[attr-defined]
+        try:
+            self._app.New()  # type: ignore[attr-defined]
+        except Exception as e:
+            raise RuntimeError(f"Failed to create new drawing: {e}") from e  # noqa: TRY003
 
     def quit(self) -> None:
-        self._app.Quit()  # type: ignore[attr-defined]
+        try:
+            self._app.Quit()  # type: ignore[attr-defined]
+        except Exception as e:
+            raise RuntimeError(f"Failed to quit application: {e}") from e  # noqa: TRY003
 
-    _TOOL_DIRS = {
+    _TOOL_DIRS: ClassVar[dict[str, str]] = {
         "M": "mtools.alp",
         "R": "rtools.alp",
         "L": "ltools.alp",
@@ -145,18 +146,22 @@ class Application:
     }
 
     def find_tool_files(self, pattern: str = "*.amt") -> list[str]:
-        sub_dir = self._TOOL_DIRS.get(self.module_type, "mtools.alp")
-        base = os.path.join(self.licomdat_path, "licomdat", sub_dir)
+        sub_dir = type(self)._TOOL_DIRS.get(self.module_type, "mtools.alp")
+        base = os.path.join(self.licomdat_path, sub_dir)
         return sorted(glob.glob(os.path.join(base, pattern)))
 
     def get_nesting(self) -> Nesting:
-        from alphacam_cli.core.nesting import Nesting
-
-        return Nesting(self._app.Nesting)  # type: ignore[attr-defined]
+        raw = self._app.Nesting  # type: ignore[attr-defined]
+        if raw is None:
+            raise RuntimeError("Failed to get nesting")  # noqa: TRY003
+        return Nesting(raw)
 
     def select_post(self, name: str) -> None:
-        self._app.SelectPost(name)  # type: ignore[attr-defined]
+        try:
+            self._app.SelectPost(name)  # type: ignore[attr-defined]
+        except Exception as e:
+            raise RuntimeError(f"Failed to select post '{name}': {e}") from e  # noqa: TRY003
 
     def find_drawing_files(self, pattern: str = "*.amd") -> list[str]:
-        base = os.path.join(self.licomdir_path, "licomdir", "parts")
+        base = os.path.join(self.licomdir_path, "parts")
         return sorted(glob.glob(os.path.join(base, pattern)))
