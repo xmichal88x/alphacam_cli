@@ -11,9 +11,10 @@ import pytest
 class ComError(Exception):
     """Fake pythoncom.com_error for testing."""
 
-    def __init__(self, hresult: int = -2147417830, *args: object) -> None:
+    def __init__(self, hresult: int = -2147417830, description: str = "", *args: object) -> None:
         self.hresult = hresult
-        super().__init__(*args)
+        self.strerror = description or str(hresult)
+        super().__init__(description)
 
 
 _win32com = MagicMock(name="win32com")

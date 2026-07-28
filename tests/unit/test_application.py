@@ -47,3 +47,128 @@ def test_get_active_drawing(mock_com: MagicMock) -> None:
             drw = ac.get_active_drawing()
             assert drw is not None
             assert drw.geometries_count == 0
+
+
+def test_new_drawing(mock_com: MagicMock) -> None:
+    with mock_com:
+        from alphacam_cli.com.manager import alphacam_context
+
+        with alphacam_context() as raw:
+            ac = Application(raw)
+            ac.new_drawing()
+            raw.New.assert_called_once()
+
+
+def test_quit(mock_com: MagicMock) -> None:
+    with mock_com:
+        from alphacam_cli.com.manager import alphacam_context
+
+        with alphacam_context() as raw:
+            ac = Application(raw)
+            ac.quit()
+            raw.Quit.assert_called_once()
+
+
+def test_select_tool(mock_com: MagicMock) -> None:
+    with mock_com:
+        from alphacam_cli.com.manager import alphacam_context
+
+        with alphacam_context() as raw:
+            ac = Application(raw)
+            tool = ac.select_tool("flat_10mm.amt")
+            assert tool is not None
+            assert tool.name == "Flat - 10mm"
+            raw.SelectTool.assert_called_once_with("flat_10mm.amt")
+
+
+def test_get_current_tool(mock_com: MagicMock) -> None:
+    with mock_com:
+        from alphacam_cli.com.manager import alphacam_context
+
+        with alphacam_context() as raw:
+            ac = Application(raw)
+            tool = ac.get_current_tool()
+            assert tool is not None
+            assert tool.name == "Flat - 10mm"
+
+
+def test_find_tool_files(mock_com: MagicMock) -> None:
+    with mock_com:
+        from alphacam_cli.com.manager import alphacam_context
+
+        with alphacam_context() as raw:
+            ac = Application(raw)
+            files = ac.find_tool_files()
+            assert isinstance(files, list)
+
+
+def test_find_drawing_files(mock_com: MagicMock) -> None:
+    with mock_com:
+        from alphacam_cli.com.manager import alphacam_context
+
+        with alphacam_context() as raw:
+            ac = Application(raw)
+            files = ac.find_drawing_files()
+            assert isinstance(files, list)
+
+
+def test_get_nesting(mock_com: MagicMock) -> None:
+    with mock_com:
+        from alphacam_cli.com.manager import alphacam_context
+
+        with alphacam_context() as raw:
+            ac = Application(raw)
+            nesting = ac.get_nesting()
+            assert nesting is not None
+
+
+def test_select_post(mock_com: MagicMock) -> None:
+    with mock_com:
+        from alphacam_cli.com.manager import alphacam_context
+
+        with alphacam_context() as raw:
+            ac = Application(raw)
+            ac.select_post("fanuc")
+            raw.SelectPost.assert_called_once_with("fanuc")
+
+
+def test_open_drawing(mock_com: MagicMock) -> None:
+    with mock_com:
+        from alphacam_cli.com.manager import alphacam_context
+
+        with alphacam_context() as raw:
+            ac = Application(raw)
+            drw = ac.open_drawing("test.amd")
+            assert drw is not None
+            raw.OpenDrawing.assert_called_once_with("test.amd")
+
+
+def test_open_drawing_none(mock_com: MagicMock) -> None:
+    with mock_com:
+        from alphacam_cli.com.manager import alphacam_context
+
+        with alphacam_context() as raw:
+            ac = Application(raw)
+            raw.OpenDrawing.return_value = None
+            result = ac.open_drawing("missing.amd")
+            assert result is None
+
+
+def test_create_temp_drawing(mock_com: MagicMock) -> None:
+    with mock_com:
+        from alphacam_cli.com.manager import alphacam_context
+
+        with alphacam_context() as raw:
+            ac = Application(raw)
+            drw = ac.create_temp_drawing()
+            assert drw is not None
+
+
+def test_create_mill_data(mock_com: MagicMock) -> None:
+    with mock_com:
+        from alphacam_cli.com.manager import alphacam_context
+
+        with alphacam_context() as raw:
+            ac = Application(raw)
+            md = ac.create_mill_data()
+            assert md is not None

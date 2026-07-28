@@ -12,12 +12,46 @@ from alphacam_cli.cli.common import console, get_visible, handle_com_errors, req
 from alphacam_cli.com.manager import alphacam_context
 from alphacam_cli.core.application import Application
 
+STATUS_OK = "OK"
+STATUS_FAIL = "FAIL"
+
 app = typer.Typer(help="Batch processing")
+
+
+def _process_file(
+    ac: Application,
+    file_path: str,
+    output_dir: str,
+) -> dict[str, Any]:
+    basename = os.path.splitext(os.path.basename(file_path))[0]
+    result: dict[str, Any] = {"file": file_path, "status": STATUS_OK, "error": ""}
+
+    try:
+        drw = ac.open_drawing(file_path)
+    except Exception as ex:
+        return {**result, "status": STATUS_FAIL, "error": f"Failed to open drawing: {ex}"}
+
+    if drw is None:
+        return {**result, "status": STATUS_FAIL, "error": "Could not open drawing"}
+
+    nc_path = os.path.join(output_dir, f"{basename}.nc")
+    try:
+        drw.output_nc(nc_path)
+    except Exception as ex:
+        return {**result, "status": STATUS_FAIL, "error": f"NC output failed: {ex}"}
+
+    try:
+        drw.save_as(os.path.join(output_dir, f"{basename}.amd"))
+    except Exception as ex:
+        result["error"] = f"Drawing save failed (NC generated): {ex}"
+
+    return result
 
 
 @app.command()
 @handle_com_errors
 def process(
+    ctx: typer.Context,
     input_dir: str = typer.Argument(..., help="Directory with .amd files"),
     output_dir: str = typer.Option(
         "", "--output", "-o", help="Output directory (default: same as input)"
@@ -49,52 +83,32 @@ def process(
             task = progress.add_task("Processing...", total=len(files))
             for f in files:
                 basename = os.path.splitext(os.path.basename(f))[0]
-                nc_path = os.path.join(out, f"{basename}.nc")
                 progress.update(task, description=f"Processing {basename}...")
-
-                _should_exit = False
-                try:
-                    drw = ac.open_drawing(f)
-                    if drw is None:
-                        results.append(
-                            {"file": f, "status": "FAIL", "error": "Could not open drawing"}
-                        )
-                        if not continue_on_error:
-                            _should_exit = True
-                        else:
-                            continue
-
-                    if not _should_exit:
-                        drw.output_nc(nc_path)
-                        drw.save_as(os.path.join(out, f"{basename}.amd"))
-                        results.append({"file": f, "status": "OK", "error": ""})
-
-                except Exception as ex:
-                    results.append({"file": f, "status": "FAIL", "error": str(ex)})
-                    if not continue_on_error:
-                        console.print(f"[red]FAIL:[/red] {f}: {ex}")
-                        raise typer.Exit(code=1) from ex
-
-                if _should_exit:
-                    raise typer.Exit(code=1)
-
+                result = _process_file(ac, f, out)
+                results.append(result)
                 progress.advance(task)
 
-            ok_count = sum(1 for r in results if r["status"] == "OK")
-            fail_count = sum(1 for r in results if r["status"] == "FAIL")
-            console.print()
-            console.print("[bold]Batch Summary[/bold]")
-            console.print(f"  [green]OK:[/green] {ok_count}  [red]FAIL:[/red] {fail_count}")
+                if result["status"] == "FAIL" and not continue_on_error:
+                    break
+
+    ok_count = sum(1 for r in results if r["status"] == "OK")
+    fail_count = sum(1 for r in results if r["status"] == "FAIL")
+    console.print()
+    console.print("[bold]Batch Summary[/bold]")
+    console.print(f"  [green]OK:[/green] {ok_count}  [red]FAIL:[/red] {fail_count}")
+    for r in results:
+        if r["error"]:
+            console.print(f"  [red]  {r['file']}: {r['error']}[/red]")
+    console.print(f"[green]Done:[/green] {len(results)} files -> {out}")
+
+    if fail_count:
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        log_path = os.path.join(out, f"batch-errors-{timestamp}.log")
+        with open(log_path, "w") as log_f:
             for r in results:
                 if r["error"]:
-                    console.print(f"  [red]  {r['file']}: {r['error']}[/red]")
-            console.print(f"[green]Done:[/green] {len(files)} files -> {out}")
+                    log_f.write(f"{r['file']}: {r['error']}\n")
+        console.print(f"  [yellow]Errors logged: {log_path}[/yellow]")
 
-            if fail_count:
-                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-                log_path = os.path.join(out, f"batch-errors-{timestamp}.log")
-                with open(log_path, "w") as log_f:
-                    for r in results:
-                        if r["error"]:
-                            log_f.write(f"{r['file']}: {r['error']}\n")
-                console.print(f"  [yellow]Errors logged: {log_path}[/yellow]")
+    if fail_count:
+        ctx.exit(1)

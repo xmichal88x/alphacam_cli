@@ -1,10 +1,111 @@
 from __future__ import annotations
 
+from collections.abc import Iterator
+from contextlib import ExitStack, contextmanager
+from unittest.mock import MagicMock, mock_open, patch
+
 from typer.testing import CliRunner
 
 from alphacam_cli.main import app
 
 runner = CliRunner()
+
+
+def _make_app_mock() -> MagicMock:
+    app = MagicMock()
+    app.Visible = False
+    app.AlphacamVersion = "2024.1"
+    app.FullName = "C:\\AlphaCAM\\alphaCAM.exe"
+    app.Name = "AlphaCAM"
+    app.ProgramLevel = 3
+    app.ProgramLetter = 82
+    app.LicomdatPath = "C:\\Licomdat"
+    app.LicomdirPath = "C:\\Licomdir"
+    app.PostFileName = "fanuc.pst"
+    app.ApiVersion = 20240315
+
+    drw = MagicMock()
+    drw.Geometries.Count = 0
+    drw.ToolPaths.Count = 0
+    app.ActiveDrawing = drw
+    app.CreateTempDrawing.return_value = drw
+    app.OpenDrawing.return_value = drw
+
+    tool = MagicMock()
+    tool.Diameter = 10.0
+    tool.Name = "Flat - 10mm"
+    tool.Number = 1
+    tool.Length = 50.0
+    tool.Type = 0
+    app.SelectTool.return_value = tool
+    app.GetCurrentTool.return_value = tool
+
+    md = MagicMock()
+    md.SafeRapidLevel = 10.0
+    md.RapidDownTo = 2.0
+    md.FinalDepth = -10.0
+    md.SpindleSpeed = 12000
+    md.DownFeed = 2000.0
+    md.CutFeed = 3000.0
+    md.MaterialTop = 0.0
+    md.MaxDepthPerCut = 2.5
+    md.WidthOfCut = 5.0
+    md.Stock = 0.5
+    md.PocketType = 0
+    md.BottomOfHole = -15.0
+    md.DrillType = 0
+    app.CreateMillData.return_value = md
+
+    return app
+
+
+_MOCK_PATCHES = [
+    ("alphacam_cli.cli.common", "require_platform"),
+    ("alphacam_cli.cli.connect", "require_platform"),
+    ("alphacam_cli.cli.connect", "alphacam_context"),
+    ("alphacam_cli.cli.drawing", "require_platform"),
+    ("alphacam_cli.cli.drawing", "alphacam_context"),
+    ("alphacam_cli.cli.tool", "require_platform"),
+    ("alphacam_cli.cli.tool", "alphacam_context"),
+    ("alphacam_cli.cli.mill", "require_platform"),
+    ("alphacam_cli.cli.mill", "alphacam_context"),
+    ("alphacam_cli.cli.nc", "require_platform"),
+    ("alphacam_cli.cli.nc", "alphacam_context"),
+    ("alphacam_cli.cli.diagnose", "alphacam_context"),
+    ("alphacam_cli.com.manager", "alphacam_context"),
+]
+
+
+@contextmanager
+def _mock_com(app_mock: MagicMock | None = None) -> Iterator[MagicMock]:
+    """Mock both require_platform and alphacam_context for CLI testing.
+
+    Usage::
+
+        with _mock_com() as app:
+            result = runner.invoke(app, ["connect", "info"])
+        assert result.exit_code == 0
+
+    For tests that need custom mock config::
+
+        with _mock_com() as app:
+            app.ActiveDrawing.Geometries.Count = 5
+            result = runner.invoke(app, ["mill", "rough", ...])
+    """
+    if app_mock is None:
+        app_mock = _make_app_mock()
+
+    @contextmanager
+    def fake_context(visible: bool = False, prog_id: str | None = None) -> Iterator[MagicMock]:  # noqa: ARG001
+        yield app_mock
+
+    with ExitStack() as stack:
+        for mod, attr in _MOCK_PATCHES:
+            if attr == "alphacam_context":
+                stack.enter_context(patch(f"{mod}.{attr}", fake_context))
+            else:
+                stack.enter_context(patch(f"{mod}.{attr}"))
+        yield app_mock
 
 
 def test_version() -> None:
@@ -85,3 +186,173 @@ def test_diagnose_no_com() -> None:
     runner = CliRunner()
     result = runner.invoke(diagnose_app, [])
     assert result.exit_code in (0, 1)
+
+
+# =============================================================================
+# Testy logiki CLI z mockowanym COM
+# =============================================================================
+
+
+def test_connect_info():
+    with _mock_com():
+        result = runner.invoke(app, ["connect", "info"])
+    assert result.exit_code == 0
+    assert "Name" in result.stderr
+    assert "Version" in result.stderr
+    assert "Module" in result.stderr
+
+
+def test_connect_info_custom_prog_id():
+    with _mock_com():
+        result = runner.invoke(app, ["connect", "info", "--progid", "Custom.App"])
+    assert result.exit_code == 0
+    assert "Name" in result.stderr
+    assert "AlphaCAM" in result.stderr
+
+
+def test_drawing_create():
+    with _mock_com():
+        result = runner.invoke(app, ["drawing", "create", "-w", "200", "-h", "100"])
+    assert result.exit_code == 0
+    assert "200" in result.stderr
+    assert "100" in result.stderr
+
+
+def test_drawing_create_with_fillet_text():
+    with _mock_com():
+        result = runner.invoke(
+            app, ["drawing", "create", "-w", "200", "-h", "100", "--fillet", "5", "--text", "Hello"]
+        )
+    assert result.exit_code == 0
+    assert "Fillet" in result.stderr
+    assert "5.0" in result.stderr
+
+
+def test_drawing_save():
+    with _mock_com():
+        result = runner.invoke(app, ["drawing", "save", "output.amd"])
+    assert result.exit_code == 0
+    assert "Saved to" in result.stderr
+
+
+def test_drawing_open():
+    with _mock_com():
+        result = runner.invoke(app, ["drawing", "open", "test.amd"])
+    assert result.exit_code == 0
+    assert "Geometries" in result.stderr
+    assert "ToolPaths" in result.stderr
+
+
+def test_drawing_info():
+    with _mock_com():
+        result = runner.invoke(app, ["drawing", "info"])
+    assert result.exit_code == 0
+    assert "Geometries" in result.stderr
+    assert "ToolPaths" in result.stderr
+
+
+def test_tool_list():
+    paths = ["C:\\tools\\Flat-10mm.amt", "C:\\tools\\Ball-6mm.amt"]
+    with (
+        _mock_com(),
+        patch("alphacam_cli.core.application.Application.find_tool_files", return_value=paths),
+    ):
+        result = runner.invoke(app, ["tool", "list"])
+    assert result.exit_code == 0
+    assert "Flat-10mm" in result.stderr
+    assert "Ball-6mm" in result.stderr
+
+
+def test_tool_list_empty():
+    with _mock_com():
+        result = runner.invoke(app, ["tool", "list"])
+    assert result.exit_code == 0
+    assert "No tools found" in result.stderr
+
+
+def test_tool_select_by_name():
+    paths = ["C:\\tools\\Flat-10mm.amt", "C:\\tools\\Ball-6mm.amt"]
+    with (
+        _mock_com(),
+        patch("alphacam_cli.core.application.Application.find_tool_files", return_value=paths),
+    ):
+        result = runner.invoke(app, ["tool", "select", "Flat-10mm"])
+    assert result.exit_code == 0
+    assert "Flat" in result.stderr or "Diameter" in result.stderr
+
+
+def test_tool_select_no_match():
+    paths = ["C:\\tools\\Flat-10mm.amt", "C:\\tools\\Ball-6mm.amt"]
+    with (
+        _mock_com(),
+        patch("alphacam_cli.core.application.Application.find_tool_files", return_value=paths),
+    ):
+        result = runner.invoke(app, ["tool", "select", "NotFound"])
+    assert result.exit_code == 1
+    assert "No tool matching" in result.stderr
+
+
+def test_tool_current():
+    with _mock_com():
+        result = runner.invoke(app, ["tool", "current"])
+    assert result.exit_code == 0
+    assert "Flat" in result.stderr
+    assert "Diameter" in result.stderr
+
+
+def test_mill_rough():
+    with _mock_com() as app_mock:
+        app_mock.ActiveDrawing.Geometries.Count = 3
+        result = runner.invoke(app, ["mill", "rough", "-d", "-10", "-s", "12000"])
+    assert result.exit_code == 0
+    assert "ToolPaths" in result.stderr
+
+
+def test_mill_rough_no_geometries():
+    with _mock_com():
+        result = runner.invoke(app, ["mill", "rough", "-d", "-10", "-s", "12000"])
+    assert result.exit_code == 0
+    assert "No geometries" in result.stderr
+
+
+def test_mill_pocket():
+    with _mock_com() as app_mock:
+        app_mock.ActiveDrawing.Geometries.Count = 2
+        result = runner.invoke(app, ["mill", "pocket"])
+    assert result.exit_code == 0
+    assert "Pocket done" in result.stderr
+
+
+def test_mill_drill():
+    with _mock_com() as app_mock:
+        app_mock.ActiveDrawing.Geometries.Count = 4
+        result = runner.invoke(app, ["mill", "drill"])
+    assert result.exit_code == 0
+    assert "Drill done" in result.stderr
+
+
+def test_mill_rough_invalid_depth() -> None:
+    result = runner.invoke(app, ["mill", "rough", "--depth", "5"])
+    assert result.exit_code == 2
+    assert "Depth must be negative" in result.stderr
+
+
+def test_mill_rough_invalid_speed() -> None:
+    result = runner.invoke(app, ["mill", "rough", "--spindle", "200000"])
+    assert result.exit_code == 2
+    assert "Spindle speed out of range" in result.stderr
+
+
+def test_nc_output():
+    m = mock_open(read_data="N100 G0 X0 Y0\n")
+    with _mock_com(), patch("os.path.exists", return_value=True), patch("builtins.open", m):
+        result = runner.invoke(app, ["nc", "output", "test.nc"])
+    assert result.exit_code == 0
+    assert "NC output generated" in result.stderr
+
+
+def test_diagnose():
+    with _mock_com():
+        result = runner.invoke(app, ["diagnose", "diagnose"])
+    assert result.exit_code == 0
+    assert "AlphaCAM Diagnostics" in result.stderr

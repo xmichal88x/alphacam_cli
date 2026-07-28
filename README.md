@@ -499,6 +499,48 @@ The `.spec` file is included in the project root with all necessary hidden impor
 
 ---
 
+## Windows Setup
+
+### Prerequisites
+
+- **Windows 10/11** (64-bit)
+- **AlphaCAM** (any module: Router, Nesting, Router, Mill) installed with a valid license
+- **Python 3.11+** installed from [python.org](https://python.org) or Microsoft Store
+- **Microsoft Visual C++ Redistributable** (required by pywin32) — download from [Microsoft](https://aka.ms/vs/17/release/vc_redist.x64.exe)
+
+### COM Registration
+
+AlphaCAM registers its COM components during installation. If you encounter connection errors:
+
+1. Verify AlphaCAM COM registration:
+   ```powershell
+   Get-CimInstance -Class Win32_ProgID | Where-Object { $_.Name -like "*aps*" }
+   ```
+
+2. Expected ProgIDs: `Ar5axaps.Application`, `am5axaps.Application`, `aroutaps.Application`
+
+3. If ProgIDs are missing, reinstall AlphaCAM or run:
+   ```powershell
+   & "C:\Program Files\AlphaCAM\AlphaCAM.exe" /RegServer
+   ```
+
+### PyInstaller Build
+
+To build a standalone `.exe`:
+
+```bash
+pip install -e ".[build]"
+pyinstaller alphacam.spec
+```
+
+The output is `dist/alphacam.exe`. By default, the console window is hidden (use `alphacam.spec` with `console=True` for debugging).
+
+### Troubleshooting
+
+- **"pywin32 not found"**: Run `pip install pywin32` then `python Scripts/pywin32_postinstall.py -install`
+- **"COM Error: Class not registered"**: Run AlphaCAM once manually to complete COM registration
+- **"Connection timed out"**: Check if AlphaCAM is running and not blocked by another process
+
 ## Troubleshooting
 
 ### `Error: AlphaCAM CLI requires Windows`

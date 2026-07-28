@@ -104,7 +104,7 @@ def list_nests() -> None:
         files = sorted(glob.glob("*.anl"))
         if not files:
             console.print("[yellow]No .anl nest list files found in current directory[/yellow]")
-            raise typer.Exit(code=0)  # noqa: TRY301
+            return
 
         t = Table(title="Nest Lists")
         t.add_column("File", style="cyan")

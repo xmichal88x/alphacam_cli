@@ -70,7 +70,8 @@ class Drawing:
 
         from alphacam_cli.core.events import NcEventHandler
 
-        _ = DispatchWithEvents(app_dispatch, NcEventHandler)
+        handler = DispatchWithEvents(app_dispatch, NcEventHandler)
+        handler.nc_path = path
         self._drw.OutputNC(path, ACAM_OUT_NC_FILE, False)  # type: ignore[attr-defined]
 
     def clear(

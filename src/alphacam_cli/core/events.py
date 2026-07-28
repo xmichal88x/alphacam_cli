@@ -7,7 +7,7 @@ class NcEventHandler:
     Handles BeforeOutputNcDialogBox to prevent blocking on modal dialogs.
     """
 
-    def __init__(self, nc_path: str) -> None:
+    def __init__(self, nc_path: str = "") -> None:
         self.nc_path = nc_path
 
     def OnBeforeOutputNcDialogBox(self) -> int:  # noqa: N802

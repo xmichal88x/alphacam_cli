@@ -53,7 +53,7 @@ def handle_com_errors(func: F) -> F:
             func(*args, **kwargs)
         except AlphacamComError as e:
             console.print(f"[red]COM Error:[/red] {e}")
-            if hasattr(e, "hresult") and e.hresult:
+            if e.hresult:
                 console.print(f"      HRESULT: [yellow]0x{e.hresult:08X}[/yellow]")
             console.print("      [dim]Try restarting AlphaCAM or check the connection.[/dim]")
             raise typer.Exit(code=4) from e
@@ -61,7 +61,9 @@ def handle_com_errors(func: F) -> F:
             console.print(f"[red]Connection Error:[/red] {e}")
             console.print("      [dim]Make sure AlphaCAM is installed and licensed.[/dim]")
             raise typer.Exit(code=3) from e
-        except typer.Exit:
+        except typer.Exit as e:
+            if e.exit_code != 0:
+                console.print(f"[dim]Exiting with code {e.exit_code}[/dim]")
             raise
         except Exception as e:
             console.print(f"[red]Error:[/red] {e}")

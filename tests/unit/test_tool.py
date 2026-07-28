@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock
 
+import pytest
+
 from alphacam_cli.core.tool import Tool
 
 
@@ -22,3 +24,22 @@ def test_tool_properties(mock_com: MagicMock) -> None:
             assert tool.corner_radius == 0.0
             assert tool.note == ""
             assert tool.number_of_teeth == 2
+
+
+def test_tool_init_none() -> None:
+    with pytest.raises(ValueError, match="Tool dispatch object is None"):
+        Tool(None)
+
+
+def test_tool_empty_name() -> None:
+    dispatch = MagicMock()
+    dispatch.Name = ""
+    tool = Tool(dispatch)
+    assert tool.name == ""
+
+
+def test_tool_zero_diameter() -> None:
+    dispatch = MagicMock()
+    dispatch.Diameter = 0.0
+    tool = Tool(dispatch)
+    assert tool.diameter == 0.0
