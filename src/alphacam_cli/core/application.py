@@ -95,11 +95,16 @@ class Application:
             return None
         return Drawing(raw)
 
+    def set_active_drawing(self, drawing: Drawing) -> None:
+        self._app.ActiveDrawing = drawing._drw  # type: ignore[attr-defined]
+
     def create_temp_drawing(self) -> Drawing | None:
         raw = self._app.CreateTempDrawing()  # type: ignore[attr-defined]
         if raw is None:
             return None
-        return Drawing(raw)
+        drw = Drawing(raw)
+        self.set_active_drawing(drw)
+        return drw
 
     def open_drawing(self, path: str) -> Drawing | None:
         raw = self._app.OpenDrawing(path)  # type: ignore[attr-defined]
