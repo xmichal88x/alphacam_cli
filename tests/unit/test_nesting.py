@@ -181,8 +181,8 @@ def test_nest_list_save(mock_com: MagicMock) -> None:
         with alphacam_context() as raw:
             n = Nesting(raw.Nesting)
             nl = n.new_nest_list("test.nst")
-            nl.save("output.nst")
-            nl._nl.Save.assert_called_once_with("output.nst")
+            nl.save()
+            nl._nl.Save.assert_called_once_with()
 
 
 def test_nest_list_save_no_filename(mock_com: MagicMock) -> None:

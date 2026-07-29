@@ -60,10 +60,8 @@ class TestProductionWorkflows:
         # Create geometry
         path = drw.create_rectangle(0, 0, 200, 100)
         assert path is not None
-        # Select geometry via the drawing's collection (required by RoughFinish)
-        for geo in drw.geometries():
-            geo.tool_in_out = ACAM_TOOL_OUTSIDE
-            geo.selected = True
+        path.tool_in_out = ACAM_TOOL_OUTSIDE
+        path.selected = True
 
         # Select a tool — search multiple extensions, including subdirectories
         import glob as _glob
@@ -217,7 +215,7 @@ class TestProductionWorkflows:
             assert result_list.count > 0
 
             # Save nest list
-            result_list.save(anl_path)
+            result_list.save()
             assert os.path.exists(anl_path)
         finally:
             import shutil

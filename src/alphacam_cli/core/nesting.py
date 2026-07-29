@@ -78,11 +78,8 @@ class NestList:
             raise RuntimeError("Failed to add file to nest list")  # noqa: TRY003
         return NestPart(raw)
 
-    def save(self, filename: str | None = None) -> None:
-        if filename:
-            self._nl.Save(filename)  # type: ignore[attr-defined]
-        else:
-            self._nl.Save()  # type: ignore[attr-defined]
+    def save(self) -> None:
+        self._nl.Save()  # type: ignore[attr-defined]
 
     def sort(self, method: int = 0) -> None:
         self._nl.Sort(method)  # type: ignore[attr-defined]

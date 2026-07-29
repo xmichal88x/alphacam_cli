@@ -123,7 +123,7 @@ def alphacam_context(
                             pythoncom.IID_IDispatch,
                             ac_app,  # type: ignore[arg-type]
                         )
-                    except (TypeError, pythoncom.com_error):
+                    except (TypeError, ValueError, pythoncom.com_error):
                         result_queue.put(("simple", ac_app, owned))
                     else:
                         result_queue.put(("marshaled", stream, owned))
