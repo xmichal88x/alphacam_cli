@@ -175,17 +175,24 @@ def test_select_all_geometries(mock_com: MagicMock) -> None:
 
         with alphacam_context() as raw:
             drw = Drawing(raw.CreateTempDrawing())
-            geo1 = MagicMock()
-            geo2 = MagicMock()
-            geometries_mock = MagicMock()
-            geometries_mock.Count = 2
-            geometries_mock.Item.side_effect = lambda i: geo1 if i == 1 else geo2
-            drw._drw.Geometries = geometries_mock
-
             drw.select_all_geometries()
+            drw._drw.SetGeosSelected.assert_called_once_with(True)
 
-            assert geo1.Selected is True
-            assert geo2.Selected is True
+
+def test_select_geometry(mock_com: MagicMock) -> None:
+    with mock_com:
+        from alphacam_cli.com.manager import alphacam_context
+        from alphacam_cli.core.drawing import Drawing
+
+        with alphacam_context() as raw:
+            drw = Drawing(raw.CreateTempDrawing())
+            coll = drw._drw.Geometries
+            coll.Count = 3
+
+            drw.select_geometry(2)
+            coll.Item.assert_called_once_with(2)
+            item = coll.Item(2)
+            assert item.Selected is True
 
 
 def test_cam_path_properties(mock_com: MagicMock) -> None:

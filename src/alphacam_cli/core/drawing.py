@@ -102,8 +102,14 @@ class Drawing:
         return [CamPath(coll.Item(i)) for i in range(1, count + 1)]
 
     def select_all_geometries(self) -> None:
-        for geo in self.geometries():
-            geo.selected = True
+        self._drw.SetGeosSelected(True)  # type: ignore[attr-defined]
+
+    def select_geometry(self, index: int = 1) -> None:
+        coll = self._drw.Geometries  # type: ignore[attr-defined]
+        count = int(coll.Count)
+        if index < 1 or index > count:
+            raise IndexError(f"Geometry index {index} out of range (1-{count})")  # noqa: TRY003
+        coll.Item(index).Selected = True  # type: ignore[attr-defined]
 
 
 class CamPath:

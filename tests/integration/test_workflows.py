@@ -61,7 +61,7 @@ class TestProductionWorkflows:
         path = drw.create_rectangle(0, 0, 200, 100)
         assert path is not None
         path.tool_in_out = ACAM_TOOL_OUTSIDE
-        path.selected = True
+        drw.select_geometry(1)
 
         # Select a tool — search multiple extensions, including subdirectories
         import glob as _glob
