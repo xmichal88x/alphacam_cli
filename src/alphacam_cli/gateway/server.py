@@ -677,6 +677,9 @@ class GatewayServer:
                 _am_log("am_get_addins", False, repr(e))
                 out["am_get_addins"] = f"FAIL: {e!r}"
         if addins is not None:
+            ncman: Any = None
+            astyles: Any = None
+            reports: Any = None
             try:
                 ncman = addins.GetNcOutputManagerAddIn()
                 _am_log("am_nc_output_manager", True, repr(ncman))
@@ -698,6 +701,48 @@ class GatewayServer:
             except Exception as e:
                 _am_log("am_reports", False, repr(e))
                 out["am_reports"] = f"FAIL: {e!r}"
+            try:
+                coll = ncman.GetOutputConfigurationsCollection()
+                _am_log("am_nc_coll", True, repr(coll.Count))
+                out["am_nc_coll"] = f"OK: {coll.Count!r}"
+            except Exception as e:
+                _am_log("am_nc_coll", False, repr(e))
+                out["am_nc_coll"] = f"FAIL: {e!r}"
+            try:
+                if app3 is not None and app3.ActiveDrawing is not None:
+                    ops = ncman.GetOperationsCollection(app3.ActiveDrawing)
+                    _am_log("am_nc_ops", True, repr(ops))
+                    out["am_nc_ops"] = f"OK: {ops!r}"
+                else:
+                    _am_log("am_nc_ops", True, "SKIP: no active drawing")
+                    out["am_nc_ops"] = "SKIP: no active drawing"
+            except Exception as e:
+                _am_log("am_nc_ops", False, repr(e))
+                out["am_nc_ops"] = f"FAIL: {e!r}"
+            try:
+                import pythoncom  # type: ignore[import-untyped]
+
+                fname = astyles.GetAutoStylesFileName(0, "", pythoncom.Missing)
+                _am_log("am_astyles_file", True, repr(fname))
+                out["am_astyles_file"] = f"OK: {fname!r}"
+            except Exception as e:
+                _am_log("am_astyles_file", False, repr(e))
+                out["am_astyles_file"] = f"FAIL: {e!r}"
+            try:
+                drw = app3.ActiveDrawing if app3 is not None else None
+                rjob = reports.CreateReportsJob(drw, False, True)
+                _am_log("am_reports_job", True, repr(rjob))
+                out["am_reports_job"] = f"OK: {rjob!r}"
+                try:
+                    rjob.CreateReports()
+                    _am_log("am_reports_create", True, "")
+                    out["am_reports_create"] = "OK"
+                except Exception as e2:
+                    _am_log("am_reports_create", False, repr(e2))
+                    out["am_reports_create"] = f"FAIL: {e2!r}"
+            except Exception as e:
+                _am_log("am_reports_job", False, repr(e))
+                out["am_reports_job"] = f"FAIL: {e!r}"
         am: Any = None
         if addins is not None:
             try:
