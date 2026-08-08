@@ -886,7 +886,8 @@ class GatewayServer:
                         addins = ai.GetAddInsInterface(app2)
                         _am_log("cdm_get_addins", True, repr(addins))
                         out["cdm_get_addins"] = f"OK: {addins!r}"
-                        am = addins.GetAutomationManagerAddIn()
+                        _am_log("cdm_get_am_before", True, "")
+                        am = addins.GetAutomationManagerAddInGUI()
                         _am_log("cdm_get_am", True, repr(am))
                         out["cdm_get_am"] = f"OK: {am!r}"
                         if am is not None:
@@ -898,6 +899,20 @@ class GatewayServer:
                                 out["cdm_customers_count"] = f"OK: {am.Customers.Count}"
                             except Exception as e:
                                 out["cdm_customers_count"] = f"FAIL: {e!r}"
+                            try:
+                                out["cdm_jobs_count"] = f"OK: {am.Jobs.Count}"
+                            except Exception as e:
+                                out["cdm_jobs_count"] = f"FAIL: {e!r}"
+                            try:
+                                job = am.NewCDMJob()
+                                out["cdm_new_job"] = f"OK: {job!r}"
+                            except Exception as e:
+                                out["cdm_new_job"] = f"FAIL: {e!r}"
+                            try:
+                                db = am.ImportCDMDatabase()
+                                out["cdm_import_db"] = f"OK: {db!r}"
+                            except Exception as e:
+                                out["cdm_import_db"] = f"FAIL: {e!r}"
                             out["result"] = "CDM_OK"
                     except Exception as e:
                         _am_log("cdm_flow", False, repr(e))
