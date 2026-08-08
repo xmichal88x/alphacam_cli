@@ -436,6 +436,99 @@ class GatewayServer:
                         out["donest_collection"] = f"OK: {r!r}"
                     except Exception as e:
                         out["donest_collection"] = f"FAIL: {e!r}"
+                nst: Any = None
+                try:
+                    nst = n
+                    out["nestlist_nesting"] = f"OK: {nst!r}"
+                except Exception as e:
+                    out["nestlist_nesting"] = f"FAIL: {e!r}"
+                if nst is not None:
+                    try:
+                        nst.SuppressDialogs = True
+                        out["nestlist_suppress"] = f"OK: {nst.SuppressDialogs!r}"
+                    except Exception as e:
+                        out["nestlist_suppress"] = f"FAIL: {e!r}"
+                    nl: Any = None
+                    try:
+                        nl = nst.NewNestList(r"C:\temp\nest_out\nest_full.anl")
+                        out["nestlist_new"] = f"OK: {nl!r}"
+                    except Exception as e:
+                        out["nestlist_new"] = f"FAIL: {e!r}"
+                    np: Any = None
+                    if nl is not None:
+                        try:
+                            np = nl.AddFile(r"C:\Users\48797\Documents\Kmil elementy\cz1.ard")
+                            out["nestlist_addfile"] = f"OK: {np!r}"
+                        except Exception as e:
+                            out["nestlist_addfile"] = f"FAIL: {e!r}"
+                        try:
+                            np.Required = 2
+                            out["nestlist_required"] = f"OK: {np.Required!r}"
+                        except Exception as e:
+                            out["nestlist_required"] = f"FAIL: {e!r}"
+                        for attr_name, key, value in (
+                            ("TotalTime", "nestlist_total_time", 15),
+                            ("OptimiseLevel", "nestlist_opt_level", 1),
+                            ("PartGap", "nestlist_part_gap", 5.0),
+                            ("EdgeGap", "nestlist_edge_gap", 10.0),
+                            ("LeadInGap", "nestlist_lead_gap", 1.5),
+                            ("CutWidth", "nestlist_cut_width", 0.0),
+                            ("NestingMethod", "nestlist_method", 0),
+                            ("OptimiseForCuts", "nestlist_opt_cuts", 0),
+                            ("UseSubroutines", "nestlist_subroutines", False),
+                            ("PreventApertureNest", "nestlist_no_aperture", True),
+                            ("OrderByPart", "nestlist_order_part", False),
+                            ("SelectBestSheet", "nestlist_best_sheet", 0),
+                        ):
+                            try:
+                                setattr(nl, attr_name, value)
+                                out[key] = f"OK: {getattr(nl, attr_name)!r}"
+                            except Exception as e:
+                                out[key] = f"FAIL: {e!r}"
+                        sl: Any = None
+                        try:
+                            sl = nst.NewSheetList()
+                            out["nestlist_sheetlist"] = f"OK: {sl!r}"
+                        except Exception as e:
+                            out["nestlist_sheetlist"] = f"FAIL: {e!r}"
+                        ns: Any = None
+                        if sl is not None:
+                            try:
+                                ns = sl.Add(paths2.Item(1))
+                                out["nestlist_sheet_add"] = f"OK: {ns!r}"
+                            except Exception as e:
+                                out["nestlist_sheet_add"] = f"FAIL: {e!r}"
+                            try:
+                                ns.Required = 1
+                                ns.Thickness = 18.0
+                                out["nestlist_sheet_params"] = (
+                                    f"OK: required={ns.Required!r} thickness={ns.Thickness!r}"
+                                )
+                            except Exception as e:
+                                out["nestlist_sheet_params"] = f"FAIL: {e!r}"
+                            result: Any = None
+                            try:
+                                result = nst.Nest(nl, sl)
+                                out["nestlist_nest"] = f"OK: {result!r}"
+                            except Exception as e:
+                                out["nestlist_nest"] = f"FAIL: {e!r}"
+                            try:
+                                out["nestlist_result_count"] = f"OK: {result.Count}"
+                            except Exception as e:
+                                out["nestlist_result_count"] = f"FAIL: {e!r}"
+                            try:
+                                drw4 = com_app.get_active_drawing()
+                                out["drawing_after_nestlist"] = (
+                                    "OK geometries="
+                                    f"{drw4.geometries_count} tool_paths={drw4.tool_paths_count}"
+                                )
+                            except Exception as e:
+                                out["drawing_after_nestlist"] = f"FAIL: {e!r}"
+                    try:
+                        nst.DeleteAllNestLists()
+                        out["nestlist_cleanup"] = "OK"
+                    except Exception as e:
+                        out["nestlist_cleanup"] = f"FAIL: {e!r}"
         elif app3 is not None:
             n2: Any = None
             try:
