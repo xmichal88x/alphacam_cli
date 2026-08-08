@@ -6,16 +6,19 @@
 
 | Gdzie | Co znajdziesz | Kiedy użyć |
 |---|---|---|
-| `docs/alphacam-ecosystem/alphacam-provided-examples/API/Python/PyCharm Examples/NestingFromCSV/Alphacam_Nesting.py` | **PEŁNY typelib Nesting v3.0 w Pythonie** — sygnatury wszystkich metod/properties (INesting, INestList, INestData, ISheetDatabase, IDatabaseSheet, ISheetList...) | Szukasz sygnatury API nestingu (Gap, EdgeGap, TotalTime, FindSheet, InsertInActiveDrawingAtPoint...) |
-| `docs/alphacam-ecosystem/alphacam-provided-examples/API/` | Oficjalne przykłady Hexagon (NestingFromCSV.py — pełny flow, VBMacros, AcamAddInsAPI) | Wzorzec oficjalnego użycia API |
-| `docs/alphacam-ecosystem/sdk-download/standalone/help/*.chm` | Pełne CHM: ACAMAPI.chm (API), ACAM4.chm (80 MB — opisy GUI: sheet_database.htm, nest_parts.htm) | Opisy GUI nestingu, opcje dialogów; rozpakuj przez `7z x plik.chm` |
-| `docs/api_docs/` | Podzielona dokumentacja API (Drawing, Tools, Machining...) | Ogólny opis obiektów core API |
-| `docs/alphacam-ecosystem/docs/chm-files/` | Wyciągnięte CHM → .md (Nesting.md, acamapi.md) | Szybki ogólny przegląd |
+| Poniższe sekcje + logi sesji | Stan projektu, zadania P0/P1/P2, recepty E2E (w tym Session 0 nesting) | Początek każdej sesji |
+| `docs/api_docs/` | Podzielona dokumentacja API core (Events, Application, Drawing, Geometry, Tools, Machining, Styles, Utilities, PostProcessor) | Opis obiektów i metod core API (np. Drawing.CreateRectangle, MillData.RoughFinish) |
+| `docs/alphacam-ecosystem/docs/chm-files/` | Wyciągnięte CHM → .md (acamapi, Nesting, AEDITAPI, Constraints, Feature, Primitives) | Szybki ogólny przegląd API |
+| `docs/alphacam-ecosystem/alphacam-provided-examples/API/` | Oficjalne przykłady Hexagon (Python, CSharp.Net, VB.Net, VBMacros, AcamAddInsAPI, DotNetPosts, Multidrill...) | Wzorce oficjalnego użycia API (dowolny obszar) |
+| `docs/alphacam-ecosystem/alphacam-provided-examples/API/Python/PyCharm Examples/NestingFromCSV/Alphacam_Nesting.py` | PEŁNY typelib Nesting v3.0 w Pythonie (sygnatury INesting, INestList, INestData, ISheetDatabase...) | Sygnatury API nestingu |
+| `docs/alphacam-ecosystem/sdk-download/standalone/help/*.chm` | Pełne CHM: ACAMAPI (API), ACAM4 (80 MB GUI — okna dialogowe/menu), AcamReports, ModuleWorks... | Opisy GUI i szczegóły opcji (rozpakuj przez `7z x`) |
+| `docs/alphacam-ecosystem/sdk-download/standalone/lib/` | DLL-ki + Interop.AlphaCAM*.dll, .tlb | Typeliby COM |
+| `docs/alphacam-ecosystem/sdk-download/AlphacamSDK/` | Wrapper .NET (Core/Geometry/Automation, bez nestingu) | Automatyzacja .NET |
 | `docs/gateway.md` | Dokumentacja gateway RPC | Pytania o RPC/handlery |
-| `/root/projects/_infra/dostepy-serwer.md` | Dostęp do laptopa z AlphaCAM (SSH, usługa, port 8721) | Potrzebujesz połączyć się z maszyną |
-| Poniższe sekcje + logi sesji | Recepty E2E (Session 0: reg copy HKCU→HKU\.DEFAULT, EnsureModule typelibu przed App.Nesting, FindSheet→InsertInActiveDrawingAtPoint→paths.Item(1)→AddSheet, --advanced) | Chcesz uruchomić/wzmocnić nesting |
+| `C:/temp/` (w repo) | Skrypty probe (probe_gui.py itd.) | Debugowanie na Windows |
+| `/root/projects/_infra/dostepy-serwer.md` | Dostęp do laptopa z AlphaCAM (SSH, usługa AlphaCAMGateway, port 8721, reg copy) | Połączenie z maszyną |
 
-Kluczowe recepty E2E są w sekcjach "SESSION 0 DZIAŁA" i "ARKUSZ Z BIBLIOTEKI" poniżej.
+Recepty E2E (Session 0 nesting) w sekcjach poniżej; kluczowe: reg copy HKCU→HKU\.DEFAULT, EnsureModule typelibu przed App.Nesting, FindSheet→InsertInActiveDrawingAtPoint→paths.Item(1)→AddSheet, tryb --advanced.
 
 ---
 
