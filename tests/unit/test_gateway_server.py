@@ -310,6 +310,75 @@ def test_run_nest_handler_no_add_part_returns_parts(server_app: MagicMock) -> No
     nd.DoNest.assert_called_once()
 
 
+def test_run_nest_handler_sets_gaps(server_app: MagicMock) -> None:
+    drw = MagicMock()
+    server_app.create_temp_drawing.return_value = drw
+    nd = MagicMock(name="NestData")
+    drw.create_nest_data.return_value = nd
+    sheet_geo = MagicMock()
+    drw.create_rectangle.return_value = sheet_geo
+
+    gw = GatewayServer()
+    result = gw._handler_run_nest(
+        {
+            "parts": [{"name": "part.amd", "count": 1}],
+            "output_dir": "",
+            "sheet_width": 2440,
+            "sheet_height": 1220,
+            "gap": 2.5,
+            "edge_gap": 0.5,
+            "lead_gap": 1.0,
+        }
+    )
+
+    assert result == {"count": 1, "success": True}
+    assert nd.Gap == 2.5
+    assert nd.EdgeGap == 0.5
+    assert nd.LeadGap == 1.0
+    nd.DoNest.assert_called_once()
+
+
+def test_run_nest_handler_no_gaps_does_not_set(server_app: MagicMock) -> None:
+    drw = MagicMock()
+    server_app.create_temp_drawing.return_value = drw
+    nd = MagicMock(name="NestData")
+    drw.create_nest_data.return_value = nd
+    sheet_geo = MagicMock()
+    drw.create_rectangle.return_value = sheet_geo
+
+    gw = GatewayServer()
+    gw._handler_run_nest(
+        {
+            "parts": [{"name": "part.amd", "count": 1}],
+            "output_dir": "",
+            "sheet_width": 2440,
+            "sheet_height": 1220,
+        }
+    )
+
+    nd.DoNest.assert_called_once()
+    nd.Gap.assert_not_called()
+
+
+def test_run_nest_handler_set_gaps_failed(server_app: MagicMock) -> None:
+    drw = MagicMock()
+    server_app.create_temp_drawing.return_value = drw
+    nd = MagicMock(name="NestData")
+    drw.create_nest_data.return_value = nd
+    sheet_geo = MagicMock()
+    drw.create_rectangle.return_value = sheet_geo
+
+    gw = GatewayServer()
+    with pytest.raises(COMError, match=r"nest: set gaps failed: could not convert"):
+        gw._handler_run_nest(
+            {
+                "parts": [{"name": "part.amd", "count": 1}],
+                "gap": "not-a-number",
+            }
+        )
+    nd.DoNest.assert_not_called()
+
+
 def test_run_nest_handler_create_nest_data_failed(server_app: MagicMock) -> None:
     drw = MagicMock()
     server_app.create_temp_drawing.return_value = drw

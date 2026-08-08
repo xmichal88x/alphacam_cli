@@ -882,6 +882,18 @@ class GatewayServer:
             raise
         except Exception as e:
             raise COMError(f"nest: add_sheet failed: {e}") from e
+        gap = params.get("gap")
+        edge_gap = params.get("edge_gap")
+        lead_gap = params.get("lead_gap")
+        try:
+            if gap is not None:
+                nd.Gap = float(gap)  # type: ignore[attr-defined]
+            if edge_gap is not None:
+                nd.EdgeGap = float(edge_gap)  # type: ignore[attr-defined]
+            if lead_gap is not None:
+                nd.LeadGap = float(lead_gap)  # type: ignore[attr-defined]
+        except Exception as e:
+            raise COMError(f"nest: set gaps failed: {e}") from e
         try:
             nd.DoNest()  # type: ignore[attr-defined]
         except Exception as e:

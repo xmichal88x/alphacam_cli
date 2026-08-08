@@ -155,17 +155,24 @@ class RemoteSession:
         sheet_width: float = 2440,
         sheet_height: float = 1220,
         sheet_name: str = "",
+        gap: float | None = None,
+        edge_gap: float | None = None,
+        lead_gap: float | None = None,
     ) -> dict[str, Any]:
-        return self._call(  # type: ignore[no-any-return]
-            "run_nest",
-            {
-                "parts": parts,
-                "output_dir": output_dir,
-                "sheet_width": sheet_width,
-                "sheet_height": sheet_height,
-                "sheet_name": sheet_name,
-            },
-        )
+        params: dict[str, Any] = {
+            "parts": parts,
+            "output_dir": output_dir,
+            "sheet_width": sheet_width,
+            "sheet_height": sheet_height,
+            "sheet_name": sheet_name,
+        }
+        if gap is not None:
+            params["gap"] = gap
+        if edge_gap is not None:
+            params["edge_gap"] = edge_gap
+        if lead_gap is not None:
+            params["lead_gap"] = lead_gap
+        return self._call("run_nest", params)  # type: ignore[no-any-return]
 
     def find_drawing_files(self, pattern: str = "*.amd") -> list[str]:
         return self._call("find_drawing_files", {"pattern": pattern})  # type: ignore[no-any-return]

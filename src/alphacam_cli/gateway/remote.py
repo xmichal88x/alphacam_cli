@@ -374,7 +374,15 @@ class _RemoteNesting:
     def new_sheet_list(self) -> Any:
         return _RemoteSheetList(self._session)
 
-    def nest(self, nl: Any, sl: Any, sheet_name: str = "") -> Any:
+    def nest(
+        self,
+        nl: Any,
+        sl: Any,
+        sheet_name: str = "",
+        gap: float | None = None,
+        edge_gap: float | None = None,
+        lead_gap: float | None = None,
+    ) -> Any:
         parts = nl.get_parts() if hasattr(nl, "get_parts") else []
         result = self._session.run_nest(
             parts=parts,
@@ -382,6 +390,9 @@ class _RemoteNesting:
             sheet_width=sl.width if hasattr(sl, "width") else 2440,
             sheet_height=sl.height if hasattr(sl, "height") else 1220,
             sheet_name=sheet_name,
+            gap=gap,
+            edge_gap=edge_gap,
+            lead_gap=lead_gap,
         )
         return _RemoteNestResult(result)
 

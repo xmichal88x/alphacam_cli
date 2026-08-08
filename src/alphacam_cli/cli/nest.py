@@ -32,6 +32,13 @@ def run(
     sheet_name: str = typer.Option(
         "", "--sheet-name", help="Sheet name from library (e.g. MDF_18); empty = draw rectangle"
     ),
+    gap: float | None = typer.Option(
+        None, "--gap", help="Gap between parts (mm); default from registry/.anl"
+    ),
+    edge_gap: float | None = typer.Option(
+        None, "--edge-gap", help="Edge gap from sheet border (mm)"
+    ),
+    lead_gap: float | None = typer.Option(None, "--lead-gap", help="Lead-in/out gap (mm)"),
 ) -> None:
     """Run nesting from a CSV file with columns: filename, count."""
     require_platform()
@@ -95,6 +102,13 @@ def run(
             raise typer.Exit(code=1)
 
         nd = drw.create_nest_data(anl_path)
+
+        if gap is not None:
+            nd.Gap = gap  # type: ignore[attr-defined]
+        if edge_gap is not None:
+            nd.EdgeGap = edge_gap  # type: ignore[attr-defined]
+        if lead_gap is not None:
+            nd.LeadGap = lead_gap  # type: ignore[attr-defined]
 
         # Create sheet geometry (from library or rectangle) and run nesting
         console.print(f"[yellow]Nesting {len(parts)} part types...[/yellow]")
