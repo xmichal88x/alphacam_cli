@@ -843,8 +843,10 @@ class GatewayServer:
         return out
 
     def _handler_cdm_probe(self, params: dict[str, Any]) -> dict[str, str]:
-        import queue as _queue
-        import threading
+        import time
+        from datetime import datetime
+
+        from alphacam_cli.gateway.server import _app as com_app
 
         out: dict[str, str] = {}
 
@@ -858,84 +860,148 @@ class GatewayServer:
         _am_log("start", True)
         out["start"] = "OK"
 
-        def work() -> None:
-            import pythoncom  # type: ignore[import-untyped]
-            import win32com.client as w32  # type: ignore[import-untyped]
+        import pythoncom  # type: ignore[import-untyped]
+        import win32com.client as w32  # type: ignore[import-untyped]
 
-            pythoncom.CoInitialize()
-            try:
-                _am_log("work_enter", True, "")
-                ai: Any = None
-                try:
-                    clsid = pythoncom.MakeIID("{39BFE38A-D3E4-43EA-89D0-584C776B97A9}")
-                    ai = w32.Dispatch(
-                        pythoncom.CoCreateInstance(
-                            clsid, None, pythoncom.CLSCTX_ALL, pythoncom.IID_IDispatch
-                        )
-                    )
-                    _am_log("cdm_co_create", True, repr(ai))
-                    out["cdm_co_create"] = f"OK: {ai!r}"
-                except Exception as e:
-                    _am_log("cdm_co_create", False, repr(e))
-                    out["cdm_co_create"] = f"FAIL: {e!r}"
-                if ai is not None:
-                    try:
-                        app2 = w32.Dispatch("Ar5axaps.Application")
-                        _am_log("cdm_dispatch_app", True, repr(app2))
-                        out["cdm_dispatch_app"] = f"OK: {app2!r}"
-                        addins = ai.GetAddInsInterface(app2)
-                        _am_log("cdm_get_addins", True, repr(addins))
-                        out["cdm_get_addins"] = f"OK: {addins!r}"
-                        _am_log("cdm_get_am_before", True, "")
-                        am = addins.GetAutomationManagerAddInGUI()
-                        _am_log("cdm_get_am", True, repr(am))
-                        out["cdm_get_am"] = f"OK: {am!r}"
-                        if am is not None:
-                            try:
-                                out["cdm_authorised"] = f"OK: {am.IsCDMAuthorised()}"
-                            except Exception as e:
-                                out["cdm_authorised"] = f"FAIL: {e!r}"
-                            try:
-                                out["cdm_customers_count"] = f"OK: {am.Customers.Count}"
-                            except Exception as e:
-                                out["cdm_customers_count"] = f"FAIL: {e!r}"
-                            try:
-                                out["cdm_jobs_count"] = f"OK: {am.Jobs.Count}"
-                            except Exception as e:
-                                out["cdm_jobs_count"] = f"FAIL: {e!r}"
-                            try:
-                                job = am.NewCDMJob()
-                                out["cdm_new_job"] = f"OK: {job!r}"
-                            except Exception as e:
-                                out["cdm_new_job"] = f"FAIL: {e!r}"
-                            try:
-                                db = am.ImportCDMDatabase()
-                                out["cdm_import_db"] = f"OK: {db!r}"
-                            except Exception as e:
-                                out["cdm_import_db"] = f"FAIL: {e!r}"
-                            out["result"] = "CDM_OK"
-                    except Exception as e:
-                        _am_log("cdm_flow", False, repr(e))
-                        out["cdm_flow"] = f"FAIL: {e!r}"
-            finally:
-                pythoncom.CoUninitialize()
-
-        result_q: _queue.Queue[Any] = _queue.Queue()
-
-        def runner() -> None:
-            try:
-                work()
-                result_q.put("done")
-            except Exception as e:  # pragma: no cover
-                result_q.put(f"worker died: {e!r}")
-
-        t = threading.Thread(target=runner, daemon=True)
-        t.start()
+        ai: Any = None
+        addins: Any = None
+        am: Any = None
         try:
-            result_q.get(timeout=60)
-        except _queue.Empty:
-            out["timeout"] = "worker hung >60s (modal dialog in Session 0?)"
-        out.setdefault("result", "CDM_FAIL")
+            clsid = pythoncom.MakeIID("{39BFE38A-D3E4-43EA-89D0-584C776B97A9}")
+            ai = w32.Dispatch(
+                pythoncom.CoCreateInstance(
+                    clsid, None, pythoncom.CLSCTX_ALL, pythoncom.IID_IDispatch
+                )
+            )
+            _am_log("cdm_co_create", True, repr(ai))
+            out["cdm_co_create"] = f"OK: {ai!r}"
+        except Exception as e:
+            _am_log("cdm_co_create", False, repr(e))
+            out["cdm_co_create"] = f"FAIL: {e!r}"
+
+        if ai is not None:
+            try:
+                raw = getattr(com_app, "_app", None) or getattr(com_app, "raw_dispatch", None)
+                addins = ai.GetAddInsInterface(raw)
+                _am_log("cdm_get_addins", True, repr(addins))
+                out["cdm_get_addins"] = f"OK: {addins!r}"
+            except Exception as e:
+                _am_log("cdm_get_addins", False, repr(e))
+                out["cdm_get_addins"] = f"FAIL: {e!r}"
+
+        if addins is not None:
+            try:
+                am = addins.GetAutomationManagerAddInGUI()
+                _am_log("cdm_get_am", True, repr(am))
+                out["cdm_get_am"] = f"OK: {am!r}"
+            except Exception as e:
+                _am_log("cdm_get_am", False, repr(e))
+                out["cdm_get_am"] = f"FAIL: {e!r}"
+
+        if am is not None:
+            try:
+                out["cdm_authorised"] = f"OK: {am.IsCDMAuthorised()}"
+                _am_log("cdm_authorised", True, out["cdm_authorised"])
+            except Exception as e:
+                _am_log("cdm_authorised", False, repr(e))
+                out["cdm_authorised"] = f"FAIL: {e!r}"
+            try:
+                out["cdm_customers_count"] = f"OK: {am.Customers.Count}"
+                _am_log("cdm_customers_count", True, out["cdm_customers_count"])
+            except Exception as e:
+                _am_log("cdm_customers_count", False, repr(e))
+                out["cdm_customers_count"] = f"FAIL: {e!r}"
+            try:
+                out["cdm_jobs_count"] = f"OK: {am.Jobs.Count}"
+                _am_log("cdm_jobs_count", True, out["cdm_jobs_count"])
+            except Exception as e:
+                _am_log("cdm_jobs_count", False, repr(e))
+                out["cdm_jobs_count"] = f"FAIL: {e!r}"
+
+            job: Any = None
+            try:
+                job = am.NewCDMJob()
+                job.JobName = f"CDM_PROBE_{datetime.now():%Y%m%d_%H%M%S}"
+                _am_log("cdm_new_job", True, repr(job))
+                out["cdm_new_job"] = f"OK: {job!r}"
+            except Exception as e:
+                _am_log("cdm_new_job", False, repr(e))
+                out["cdm_new_job"] = f"FAIL: {e!r}"
+
+            if job is not None:
+                try:
+                    job.SaveToDatabase()
+                    _am_log("cdm_job_save", True)
+                    out["cdm_job_save"] = "OK"
+                except Exception as e:
+                    _am_log("cdm_job_save", False, repr(e))
+                    out["cdm_job_save"] = f"FAIL: {e!r}"
+
+                detail: Any = None
+                try:
+                    detail = job.AddCDMOrderDetail("")
+                    _am_log("cdm_add_detail", True, repr(detail))
+                    out["cdm_add_detail"] = f"OK: {detail!r}"
+                except Exception as e:
+                    _am_log("cdm_add_detail", False, repr(e))
+                    out["cdm_add_detail"] = f"FAIL: {e!r}"
+
+                if detail is not None:
+                    try:
+                        detail.Width = 400
+                        detail.Length = 300
+                        detail.Quantity = 1
+                        detail.ByPassNest = False
+                        _am_log("cdm_detail_params", True)
+                        out["cdm_detail_params"] = "OK"
+                    except Exception as e:
+                        _am_log("cdm_detail_params", False, repr(e))
+                        out["cdm_detail_params"] = f"FAIL: {e!r}"
+                    try:
+                        detail.SaveToDatabase()
+                        _am_log("cdm_detail_save", True)
+                        out["cdm_detail_save"] = "OK"
+                    except Exception as e:
+                        _am_log("cdm_detail_save", False, repr(e))
+                        out["cdm_detail_save"] = f"FAIL: {e!r}"
+
+                try:
+                    t0 = time.monotonic()
+                    job.Process()
+                    dur = time.monotonic() - t0
+                    _am_log("cdm_job_process", True, f"{dur:.1f}s")
+                    out["cdm_job_process"] = f"OK: {dur:.1f}s"
+                except Exception as e:
+                    _am_log("cdm_job_process", False, repr(e))
+                    out["cdm_job_process"] = f"FAIL: {e!r}"
+
+                try:
+                    drw = com_app.get_active_drawing()
+                    if drw is not None:
+                        _am_log("cdm_active_drawing", True, f"toolpaths={drw.tool_paths_count}")
+                        out["cdm_active_drawing"] = f"OK: toolpaths={drw.tool_paths_count}"
+                    else:
+                        _am_log("cdm_active_drawing", True, "drawing=None")
+                        out["cdm_active_drawing"] = "OK: drawing=None"
+                except Exception as e:
+                    _am_log("cdm_active_drawing", False, repr(e))
+                    out["cdm_active_drawing"] = f"FAIL: {e!r}"
+
+        try:
+            db = am.ImportCDMDatabase() if am is not None else None
+            _am_log("cdm_import_db", True, repr(db))
+            out["cdm_import_db"] = f"OK: {db!r}"
+        except Exception as e:
+            _am_log("cdm_import_db", False, repr(e))
+            out["cdm_import_db"] = f"FAIL: {e!r}"
+
+        if am is not None:
+            try:
+                out["result"] = "CDM_OK" if am.IsCDMAuthorised() else "CDM_FAIL"
+            except Exception:
+                out["result"] = "CDM_FAIL"
+        else:
+            out["result"] = "CDM_FAIL"
         return out
 
     def _handler_get_info(self, params: dict[str, Any]) -> dict[str, Any]:
