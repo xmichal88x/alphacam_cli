@@ -170,9 +170,19 @@ class Application:
         "F": "FPosts.Alp",
     }
 
+    def _module_dir(self, sub_dir: str) -> str:
+        candidates = [
+            os.path.join(self.licomdat_path, sub_dir),
+            os.path.join(self.licomdat_path, "LICOMDAT", sub_dir),
+        ]
+        for c in candidates:
+            if os.path.isdir(c):
+                return c
+        return candidates[0]
+
     def find_tool_files(self, pattern: str = "*.art") -> list[str]:
         sub_dir = type(self)._TOOL_DIRS.get(self.module_type, "mtools.alp")
-        base = os.path.join(self.licomdat_path, sub_dir)
+        base = self._module_dir(sub_dir)
         files = glob.glob(os.path.join(base, pattern))
         if not files:
             files = glob.glob(os.path.join(base, "**", pattern), recursive=True)
@@ -180,7 +190,7 @@ class Application:
 
     def find_post_files(self, pattern: str = "*.arp") -> list[str]:
         sub_dir = type(self)._POST_DIRS.get(self.module_type, "RPosts.Alp")
-        base = os.path.join(self.licomdat_path, sub_dir)
+        base = self._module_dir(sub_dir)
         files = glob.glob(os.path.join(base, pattern))
         if not files:
             files = glob.glob(os.path.join(base, "**", pattern), recursive=True)

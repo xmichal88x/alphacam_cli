@@ -137,14 +137,40 @@ def test_find_tool_files(mock_com: MagicMock) -> None:
             assert isinstance(files, list)
 
 
+def test_module_dir(mock_com: MagicMock, tmp_path: pathlib.Path) -> None:
+    licomdat = tmp_path / "licomdat"
+    module = licomdat / "LICOMDAT" / "rtools.alp"
+    module.mkdir(parents=True)
+    (module / "x.art").write_bytes(b"art")
+    with mock_com:
+        from alphacam_cli.com.manager import alphacam_context
+
+        with alphacam_context() as raw:
+            raw.LicomdatPath = str(licomdat)
+            ac = Application(raw)
+            assert ac._module_dir("rtools.alp") == str(module)
+
+
+def test_module_dir_fallback(mock_com: MagicMock, tmp_path: pathlib.Path) -> None:
+    licomdat = tmp_path / "licomdat"
+    licomdat.mkdir()
+    with mock_com:
+        from alphacam_cli.com.manager import alphacam_context
+
+        with alphacam_context() as raw:
+            raw.LicomdatPath = str(licomdat)
+            ac = Application(raw)
+            assert ac._module_dir("rtools.alp") == str(licomdat / "rtools.alp")
+
+
 def test_find_tool_files_scoped_to_module_dir(mock_com: MagicMock, tmp_path: pathlib.Path) -> None:
-    rtools = tmp_path / "rtools.alp"
-    rtools.mkdir()
+    rtools = tmp_path / "LICOMDAT" / "rtools.alp"
+    rtools.mkdir(parents=True)
     (rtools / "sub").mkdir()
     (rtools / "sub" / "tool_a.art").write_bytes(b"art")
     (rtools / "sub" / "tool_b.art").write_bytes(b"art")
-    (tmp_path / "mtools.alp").mkdir()
-    (tmp_path / "mtools.alp" / "mill_c.art").write_bytes(b"art")
+    (tmp_path / "LICOMDAT" / "mtools.alp").mkdir()
+    (tmp_path / "LICOMDAT" / "mtools.alp" / "mill_c.art").write_bytes(b"art")
     with mock_com:
         from alphacam_cli.com.manager import alphacam_context
 
@@ -154,8 +180,8 @@ def test_find_tool_files_scoped_to_module_dir(mock_com: MagicMock, tmp_path: pat
             ac = Application(raw)
             result = ac.find_tool_files("*.art")
     assert result == [
-        str(tmp_path / "rtools.alp" / "sub" / "tool_a.art"),
-        str(tmp_path / "rtools.alp" / "sub" / "tool_b.art"),
+        str(tmp_path / "LICOMDAT" / "rtools.alp" / "sub" / "tool_a.art"),
+        str(tmp_path / "LICOMDAT" / "rtools.alp" / "sub" / "tool_b.art"),
     ]
 
 
