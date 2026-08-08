@@ -642,7 +642,7 @@ class GatewayServer:
         try:
             import win32com.client as w32  # type: ignore[import-untyped]
 
-            ai = w32.Dispatch("AcamAddInsInterface.AddInsInterface")
+            ai = w32.Dispatch("Alphacam.AddIns.Interface.AddInsInterface")
             out["am_addins_interface"] = f"OK: {ai!r}"
         except Exception as e:
             out["am_addins_interface"] = f"FAIL: {e!r}"
