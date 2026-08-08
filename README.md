@@ -530,6 +530,16 @@ Engraving operation on selected geometries.
 alphacam mill engrave --depth -3 --engrave-type 2
 ```
 
+#### `style-list`
+
+List machining styles (`.ary`) and AutoStyles files (`.ara`) from the AlphaCAM styles directory (`licomdir/Styles/**`).
+
+**Example:**
+
+```bash
+alphacam mill style-list
+```
+
 ---
 
 ### `alphacam nc output`
@@ -553,6 +563,48 @@ Generate NC code from the active drawing.
 ```bash
 alphacam nc output mypart.nc
 alphacam nc output mypart.nc --post fanuc
+```
+
+---
+
+### `alphacam ncmanager config list`
+
+List NC output configurations from the AlphaCAM output configurations collection (`GetOutputConfigurationsCollection()`).
+
+**Example:**
+
+```bash
+alphacam ncmanager config list
+```
+
+---
+
+### `alphacam autostyle apply`
+
+Apply an AutoStyles file (`.ara`) to the active drawing — maps CAD layers to machining styles (industrial pipeline: DXF with CAD layers → query (`.agq`) → AutoStyles (`.ara`) → tool paths → NC).
+
+**Arguments:**
+
+| Argument | Type | Description |
+|----------|------|-------------|
+| `file` | `str` | Path to `.ara` AutoStyles file (required) |
+
+**Example:**
+
+```bash
+alphacam autostyle apply Fronty_AutoStyl.ara
+```
+
+---
+
+### `alphacam reports create`
+
+Generate a report from the active drawing (`CreateReportsJob` + `CreateReports`, progress box suppressed).
+
+**Example:**
+
+```bash
+alphacam reports create
 ```
 
 ---
@@ -690,7 +742,11 @@ AlphaCAM Diagnostics
 | `alphacam mill drill` | Drill/tap/peck | Yes | ✅ |
 | `alphacam mill saw` | Saw cutting (saw-angle, corners, head position) | Yes | ✅ |
 | `alphacam mill engrave` | Engraving (engrave-type, step-length) | Yes | ✅ |
+| `alphacam mill style-list` | List machining styles (.ary/.ara) | Yes | ✅ |
 | `alphacam nc output` | Generate NC code | Yes | ✅ |
+| `alphacam ncmanager config list` | List NC output configurations | Yes | ✅ |
+| `alphacam autostyle apply` | Apply AutoStyles (.ara) to drawing | Yes | ✅ |
+| `alphacam reports create` | Generate report from drawing | Yes | ✅ |
 | `alphacam batch process` | Batch `.amd` → `.nc` | Yes | ✅ |
 | `alphacam nest run` | Run nesting from CSV | Yes | ✅ |
 | `alphacam nest list` | List `.anl` files | No | ✅ |
@@ -856,11 +912,11 @@ pip install pywin32
 
 ### Unit tests (Linux & Windows)
 
-184+ unit tests covering CLI, COM manager, drawing, tool, application, machining, nesting, events, config, and remote gateway modules.
+372+ unit tests covering CLI, COM manager, drawing, tool, application, machining, nesting, events, config, and remote gateway modules.
 
 ```bash
 pip install -e ".[dev]"
-pytest tests/unit/ -v           # 184 tests, 91%+ coverage
+pytest tests/unit/ -v           # 372 tests, 3 skipped
 pytest tests/unit/ --cov        # with coverage report
 ```
 

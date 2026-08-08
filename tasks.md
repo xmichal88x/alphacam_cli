@@ -67,6 +67,10 @@ Recepty E2E (Session 0 nesting) w sekcjach poniżej; kluczowe: reg copy HKCU→H
 | `drawing parametric W H` | Panel z offset/fillet, opcjonalna obróbka rough | ✅ 2 geometrie (outer/inner), 2 toolpathy |
 | `mill saw` | Piłowanie: saw-angle, internal/external corners, head-position | ✅ 7 toolpaths (piła.art) |
 | `mill engrave` | Grawerowanie: engrave-type, step-length | ✅ 9 toolpaths |
+| `reports create` | Raport z aktywnego rysunku (CreateReportsJob+CreateReports) | ✅ |
+| `ncmanager config list` | Konfiguracje wyjścia NC (GetOutputConfigurationsCollection) | ✅ |
+| `autostyle apply FILE` | AutoStyles.Apply(ara) — style obróbcze per warstwa | ✅ |
+| `mill style-list` | Lista stylów z licomdir/Styles/** (*.ary + *.ara) | ✅ |
 
 ⚠️ **Ograniczenie STL export:** `SaveStlFile` eksportuje wyłącznie modele STL/solid (Edit|Solid Model). Geometrie facetowe po imporcie (STL/DXF) NIE są eksportowalne → czytelny błąd "stl export failed: no facetable geometry". Do eksportu STL wymagany model solid.
 
@@ -77,7 +81,7 @@ Recepty E2E (Session 0 nesting) w sekcjach poniżej; kluczowe: reg copy HKCU→H
 | Obszar | Stan |
 |---|---|
 | Kod + typy | ✅ ruff 0, mypy 0 |
-| Testy jednostkowe | ✅ 339 passed, 3 skipped (2026-08-08) |
+| Testy jednostkowe | ✅ 372 passed, 3 skipped (2026-08-08) |
 | E2E na żywym AlphaCAM 2025 | ✅ create → mill style .ary → nc output (Reichenbacher) → NC 591 B |
 | COM safety | ✅ przez gateway (usługa Session 0, STA+CoMarshal) |
 | CI/CD | ⚠️ brak coverage gate, brak .exe build |
@@ -149,6 +153,33 @@ NewNestList → AddFile(parts, Required=count) → opcje → NewSheetList → Ad
 - **`mill engrave`** — `-d/--depth` (wymagane <0), `-s`, `-f`, `--down-feed`, `--engrave-type` (0=GEOMETRIES, 1=GUIDE_LINES_APPROX, 2=GUIDE_LINES_EXACT), `--step-length` (0.1), `--tool`. E2E: → 9 toolpaths
 - Enums (zweryfikowane przez Interop.AlphaCAMMill.dll): AcamSawCornerType CUT_ON/CUT_PAST/CUT_TO; AcamSawHeadPosition LEFT/RIGHT; AcamEngraveType GEOMETRIES/GUIDE_LINES_APPROX/GUIDE_LINES_EXACT/SIMPLE_EXACT
 - Wszystko przez gateway RPC (Session 0). Testy: **339 passed, 3 skipped**
+
+### Sesja 7 (2026-08-08): ADD-INY + PIPELINE OBRÓBCZY (przemysł 4.0)
+
+**Addiny COM działają w Session 0** — przez `AddInsInterface` (CLSID {39BFE38A-D3E4-43EA-89D0-584C776B97A9}) → `GetAddInsInterface(App)` → `Get*AddIn()`:
+- ✅ `GetNcOutputManagerAddIn()`, `GetAutoStylesAddIn()`, `GetNewReportsAddIn()`
+- ❌ **Automation Manager / CDM WISI w Session 0** — `GetAutomationManagerAddIn()` nigdy nie wraca (addin WPF wymaga UI/licencji). SKIP w probe — nie da się użyć headless.
+
+**Nowe komendy CLI** (lokalnie + remote, E2E w Session 0):
+- `reports create` — CreateReportsJob(Drawing, False, True) + CreateReports (SuppressProgressBox=True)
+- `ncmanager config list` — GetOutputConfigurationsCollection()
+- `autostyle apply FILE` — AutoStyles.Apply(file) — ✅ z produkcyjnym plikiem; zły plik → czytelny błąd "invalid or unrecognized AutoStyles file"
+- `mill style-list` — lista stylów z licomdir/Styles/** (*.ary + *.ara)
+
+**Produkcyjne pliki (laptop):**
+- `C:\ALPHACAM\LICOMDIR\Styles\` — 15 stylów .ary (Edge, Edge_02, Faza_45, Faza_65, Grawer, Grawer V-bit, Kieszeń_25, Kontur, Kontur_Fi6_*, Nesting_12...) + Fronty_AutoStyl.ara
+- `C:\ALPHACAM\LICOMDIR\Styles\Fronty\` — 24 style frontów (Ball_10mm_AZ, Ball_32mm_AZ, Carving_R_10mm_AZ, Edge_01-03, Faza_45_T13, Fi_25_AZ, Kieszeń_Fi25_AZ, Kieszeń_RING_Fi25_AZ, Profil_1-5_AZ, Prosty_8mm_AZ, V-Bit_45_AZ, V-Bit_45_Pion_AZ...)
+- `C:\ALPHACAM\LICOMDIR\Queries\Menadżer_Warstw_Fronty.agq` — geometry query (12 reguł: Kontur, G1-G9, G30-G31, _AlphaAutoStyleLayer)
+
+**Format Fronty_AutoStyl.ara (plik tekstowy):** `$1` = liczba mapowań (6), `$10`-`$15` = warstwa→styl: EDGE_F45→Faza_45.ary, EDGE_F65→Faza_65.ary, GRAWER_1→Grawer V-bit.ary, RYFLE_1→V-Bit_45_AZ.ary, KONTUR→Kontur.ary, RYFLE_2→Fi_25_AZ.ary + parametry (Side, Direction, Start Point)
+
+**Pipeline przemysłowy (przemysł 4.0):** DXF z warstwami CAD → `Drawing.RunQuery(AGQ)` (warstwy) → `AutoStyles.Apply(ARA)` (style obróbcze per warstwa) → toolpathy → NC. Zweryfikowane: RunQuery zwraca liczbę reguł (0 = brak dopasowań), Apply OK.
+
+**Rozróżnienie:** AutoStyles (.ara) ≠ Machining Styles (.ary) — .ara = mapowanie warstwa→styl (dodatek AutoStyles), .ary = gotowy styl obróbczy (MillStyle). `mill style apply` (istniejąca) działa z produkcyjnymi .ary: Edge.ary → 2 toolpathy, Ball_10mm_AZ → 2, Profil_1_AZ → 2.
+
+**TODO:** `licomdir_path`/`licomdat_path` w core zwracają `C:\ALPHACAM\` (oba) — sprawdzić poprawność (GetPathToStyles przez AcamEx może być właściwsze).
+
+Testy: **372 passed, 3 skipped**.
 
 ---
 
