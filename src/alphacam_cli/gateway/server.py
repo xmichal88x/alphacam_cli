@@ -990,6 +990,26 @@ class GatewayServer:
                         _am_log("cdm_detail_save", False, repr(e))
                         out["cdm_detail_save"] = f"FAIL: {e!r}"
 
+                try:
+                    cs = am.ConfigurationSettings
+                    out["cdm_config_count"] = f"OK: {cs.Count}"
+                    _am_log("cdm_config_count", True, out["cdm_config_count"])
+                    cfg_names = []
+                    for ci in range(1, cs.Count + 1):
+                        try:
+                            c = cs.Item(ci)
+                            cfg_names.append(str(c.Name))
+                        except Exception:
+                            pass
+                    out["cdm_config_names"] = "OK: " + ", ".join(cfg_names)
+                except Exception as e:
+                    out["cdm_config_count"] = f"FAIL: {e!r}"
+                try:
+                    if hasattr(job, "ConfigurationSetting") and am.ConfigurationSettings.Count > 0:
+                        job.ConfigurationSetting = am.ConfigurationSettings.Item(1)
+                        out["cdm_job_config"] = "OK"
+                except Exception as e:
+                    out["cdm_job_config"] = f"FAIL: {e!r}"
                 if bool(params.get("process", False)):
                     try:
                         t0 = time.monotonic()
