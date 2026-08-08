@@ -261,15 +261,26 @@ class GatewayServer:
                 out["gencache_nesting"] = f"OK: {n3}"
             except Exception as e:
                 out["gencache_nesting"] = f"FAIL: {e!r}"
-            for addin_name in ("Nesting", "AcamRadNest", "AcamNest"):
+            for addin_name in (
+                r"C:\Program Files\Hexagon\ALPHACAM 2025\Add-Ins\Nesting\AcamRadNest.dll",
+            ):
                 try:
                     r2 = app2.LoadAddIn(addin_name)
-                    out[f"load_addin_{addin_name}"] = f"OK: {r2}"
+                    out["load_addin_fullpath"] = f"OK: {r2}"
                     n4 = app2.Nesting
-                    out[f"nesting_after_load_{addin_name}"] = f"OK: {n4}"
-                    break
+                    out["nesting_after_load_fullpath"] = f"OK: {n4}"
                 except Exception as e:
-                    out[f"load_addin_{addin_name}"] = f"FAIL: {e!r}"
+                    out["load_addin_fullpath"] = f"FAIL: {e!r}"
+            try:
+                r5 = app2.EnableAddIn(
+                    r"C:\Program Files\Hexagon\ALPHACAM 2025\Add-Ins\Nesting\AcamRadNest.dll",
+                    True,
+                )
+                out["enable_addin_fullpath"] = f"OK: {r5}"
+                n6 = app2.Nesting
+                out["nesting_after_enable"] = f"OK: {n6}"
+            except Exception as e:
+                out["enable_addin_fullpath"] = f"FAIL: {e!r}"
             for fn, args in (
                 ("EnableAddIn", ("Nesting",)),
                 ("EnableAddIn", ("AcamRadNest",)),
