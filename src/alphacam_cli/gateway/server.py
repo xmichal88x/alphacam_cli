@@ -270,6 +270,17 @@ class GatewayServer:
                     break
                 except Exception as e:
                     out[f"load_addin_{addin_name}"] = f"FAIL: {e!r}"
+            for fn, args in (
+                ("IsAlphaNest", ()),
+                ("EnableAddIn", ("Nesting",)),
+                ("EnableAddIn", ("AcamRadNest",)),
+                ("EnableAddIn", ("AcamNest",)),
+            ):
+                try:
+                    r5 = getattr(app2, fn)(*args)
+                    out[f"{fn}{args}"] = f"OK: {r5}"
+                except Exception as e:
+                    out[f"{fn}{args}"] = f"FAIL: {e!r}"
         except Exception as e:
             out["gencache_app"] = f"FAIL: {e!r}"
         try:
