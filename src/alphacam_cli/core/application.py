@@ -162,8 +162,24 @@ class Application:
         "F": "ftools.alp",
     }
 
+    _POST_DIRS: ClassVar[dict[str, str]] = {
+        "M": "MPosts.Alp",
+        "R": "RPosts.Alp",
+        "L": "LPosts.Alp",
+        "W": "WPosts.Alp",
+        "F": "FPosts.Alp",
+    }
+
     def find_tool_files(self, pattern: str = "*.art") -> list[str]:
         sub_dir = type(self)._TOOL_DIRS.get(self.module_type, "mtools.alp")
+        base = os.path.join(self.licomdat_path, sub_dir)
+        files = glob.glob(os.path.join(base, pattern))
+        if not files:
+            files = glob.glob(os.path.join(self.licomdat_path, "**", pattern), recursive=True)
+        return sorted(set(files))
+
+    def find_post_files(self, pattern: str = "*.arp") -> list[str]:
+        sub_dir = type(self)._POST_DIRS.get(self.module_type, "RPosts.Alp")
         base = os.path.join(self.licomdat_path, sub_dir)
         files = glob.glob(os.path.join(base, pattern))
         if not files:
@@ -177,6 +193,26 @@ class Application:
         return Nesting(raw)
 
     def select_post(self, name: str) -> None:
+        if "/" not in name and "\\" not in name and not os.path.exists(name):
+            files = self.find_post_files()
+            basename_lower = name.lower()
+            exact = [f for f in files if os.path.basename(f).lower() == basename_lower]
+            prefix = [
+                f
+                for f in files
+                if f not in exact and os.path.basename(f).lower().startswith(basename_lower)
+            ]
+            substring = [
+                f
+                for f in files
+                if f not in exact
+                and f not in prefix
+                and basename_lower in os.path.basename(f).lower()
+            ]
+            matched = exact or prefix or substring
+            if not matched:
+                raise RuntimeError(f"Failed to select post '{name}': no matching post file found")  # noqa: TRY003
+            name = matched[0]
         try:
             self._app.SelectPost(name)  # type: ignore[attr-defined]
         except Exception as e:

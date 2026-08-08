@@ -465,16 +465,18 @@ def test_nc_output() -> None:
 
 def test_nc_output_with_post() -> None:
     m = mock_open(read_data="N100 G0 X0 Y0\n")
+    post_path = "C:/ALPHACAM/LICOMDAT/RPosts.Alp/fanuc.arp"
     with (
         _mock_com() as app_mock,
-        patch("os.path.exists", return_value=True),
+        patch("os.path.exists", side_effect=lambda p: p == "test.nc"),
         patch("builtins.open", m),
+        patch("alphacam_cli.core.application.glob.glob", return_value=[post_path]),
     ):
         result = runner.invoke(app, ["nc", "output", "test.nc", "--post", "fanuc"])
     assert result.exit_code == 0
     assert "Post selected" in result.stderr
     assert "fanuc" in result.stderr
-    app_mock.SelectPost.assert_called_once_with("fanuc")
+    app_mock.SelectPost.assert_called_once_with(post_path)
 
 
 def test_nc_output_no_active_drawing() -> None:

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from unittest.mock import MagicMock
+import os
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -161,8 +162,69 @@ def test_select_post(mock_com: MagicMock) -> None:
 
         with alphacam_context() as raw:
             ac = Application(raw)
+            ac.select_post(r"C:\ALPHACAM\LICOMDAT\RPosts.Alp\fanuc.arp")
+            raw.SelectPost.assert_called_once_with(r"C:\ALPHACAM\LICOMDAT\RPosts.Alp\fanuc.arp")
+
+
+def test_find_post_files(mock_com: MagicMock) -> None:
+    posts = [
+        r"C:\Licomdat\RPosts.Alp\Alpha Reichenbacher.arp",
+        r"C:\Licomdat\RPosts.Alp\fanuc.arp",
+    ]
+    with (
+        mock_com,
+        patch(
+            "alphacam_cli.core.application.glob.glob",
+            return_value=posts,
+        ) as m_glob,
+    ):
+        from alphacam_cli.com.manager import alphacam_context
+
+        with alphacam_context() as raw:
+            ac = Application(raw)
+            result = ac.find_post_files()
+    assert result == posts
+    m_glob.assert_called_once_with(os.path.join(r"C:\Licomdat", "RPosts.Alp", "*.arp"))
+
+
+def test_find_post_files_fallback(mock_com: MagicMock) -> None:
+    posts = [r"C:\Licomdat\posts_extra\fanuc.arp"]
+    with (
+        mock_com,
+        patch(
+            "alphacam_cli.core.application.glob.glob",
+            side_effect=[[], posts],
+        ) as m_glob,
+    ):
+        from alphacam_cli.com.manager import alphacam_context
+
+        with alphacam_context() as raw:
+            ac = Application(raw)
+            result = ac.find_post_files()
+    assert result == posts
+    assert m_glob.call_args_list[1][0] == (os.path.join(r"C:\Licomdat", "**", "*.arp"),)
+    assert m_glob.call_args_list[1].kwargs == {"recursive": True}
+
+
+def test_select_post_by_name(mock_com: MagicMock) -> None:
+    post_path = "C:/Licomdat/RPosts.Alp/fanuc.arp"
+    with mock_com, patch("alphacam_cli.core.application.glob.glob", return_value=[post_path]):
+        from alphacam_cli.com.manager import alphacam_context
+
+        with alphacam_context() as raw:
+            ac = Application(raw)
             ac.select_post("fanuc")
-            raw.SelectPost.assert_called_once_with("fanuc")
+            raw.SelectPost.assert_called_once_with(post_path)
+
+
+def test_select_post_by_name_not_found(mock_com: MagicMock) -> None:
+    with mock_com, patch("alphacam_cli.core.application.glob.glob", return_value=[]):
+        from alphacam_cli.com.manager import alphacam_context
+
+        with alphacam_context() as raw:
+            ac = Application(raw)
+            with pytest.raises(RuntimeError, match="no matching post file"):
+                ac.select_post("missing")
 
 
 def test_open_drawing(mock_com: MagicMock) -> None:

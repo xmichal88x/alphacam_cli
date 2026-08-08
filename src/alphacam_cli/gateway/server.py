@@ -513,6 +513,10 @@ class GatewayServer:
 
         posts: list[dict[str, str]] = []
         seen: set[str] = set()
+        for fp in com_app.find_post_files("*.arp"):
+            if fp not in seen:
+                seen.add(fp)
+                posts.append({"name": os.path.basename(fp), "path": fp})
         for base_dir in (com_app.licomdir_path, com_app.licomdat_path):
             posts_dir = os.path.join(base_dir, "posts")
             if not os.path.isdir(posts_dir):
@@ -522,7 +526,7 @@ class GatewayServer:
                     if fp not in seen:
                         seen.add(fp)
                         posts.append({"name": os.path.basename(fp), "path": fp})
-        return posts
+        return sorted(posts, key=lambda p: (p["name"].lower(), p["path"]))
 
     def _handler_select_post(self, params: dict[str, Any]) -> dict[str, bool]:
         from alphacam_cli.gateway.server import _app as com_app
@@ -530,6 +534,31 @@ class GatewayServer:
         name = str(params.get("name", ""))
         if not name:
             raise COMError("name is required")
+        if not os.path.exists(name):
+            files = com_app.find_post_files("*.arp")
+            basename_lower = name.lower()
+            exact = [f for f in files if os.path.basename(f).lower() == basename_lower]
+            prefix = [
+                f
+                for f in files
+                if f not in exact and os.path.basename(f).lower().startswith(basename_lower)
+            ]
+            substring = [
+                f
+                for f in files
+                if f not in exact
+                and f not in prefix
+                and basename_lower in os.path.basename(f).lower()
+            ]
+            matched = exact or prefix or substring
+            if not matched:
+                raise COMError(f"No post matching '{name}'")
+            if len(matched) > 1:
+                names = [os.path.basename(m) for m in matched]
+                raise COMError(
+                    f"Multiple posts matched: {', '.join(names)}. Use a more specific name."
+                )
+            name = matched[0]
         com_app.select_post(name)
         return {"success": True}
 

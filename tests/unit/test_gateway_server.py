@@ -82,3 +82,60 @@ def test_apply_style_handler_tool_by_name(
     )
     assert result["success"] is True
     server_app.select_tool.assert_called_once_with(files[0])
+
+
+def test_list_posts_handler(server_app: MagicMock) -> None:
+    posts = [
+        "C:/ALPHACAM/LICOMDAT/RPosts.Alp/fanuc.arp",
+        "C:/ALPHACAM/LICOMDAT/RPosts.Alp/Alpha Reichenbacher.arp",
+    ]
+    server_app.find_post_files.return_value = posts
+    server_app.licomdir_path = "C:/ALPHACAM/LICOMDIR"
+    server_app.licomdat_path = "C:/ALPHACAM/LICOMDAT"
+    gw = GatewayServer()
+    result = gw._handler_list_posts({})
+    assert result == [
+        {"name": "Alpha Reichenbacher.arp", "path": posts[1]},
+        {"name": "fanuc.arp", "path": posts[0]},
+    ]
+    server_app.find_post_files.assert_called_once_with("*.arp")
+
+
+def test_select_post_handler_by_name(
+    server_app: MagicMock, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import alphacam_cli.gateway.server as server_module
+
+    post_path = "C:/ALPHACAM/LICOMDAT/RPosts.Alp/fanuc.arp"
+    server_app.find_post_files.return_value = [post_path]
+    monkeypatch.setattr(server_module.os.path, "exists", lambda p: False)
+    gw = GatewayServer()
+    result = gw._handler_select_post({"name": "fanuc"})
+    assert result == {"success": True}
+    server_app.select_post.assert_called_once_with(post_path)
+
+
+def test_select_post_handler_not_found(
+    server_app: MagicMock, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import alphacam_cli.gateway.server as server_module
+
+    server_app.find_post_files.return_value = []
+    monkeypatch.setattr(server_module.os.path, "exists", lambda p: False)
+    gw = GatewayServer()
+    with pytest.raises(COMError, match="No post matching 'missing'"):
+        gw._handler_select_post({"name": "missing"})
+    server_app.select_post.assert_not_called()
+
+
+def test_select_post_handler_full_path(
+    server_app: MagicMock, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import alphacam_cli.gateway.server as server_module
+
+    post_path = "C:/ALPHACAM/LICOMDAT/RPosts.Alp/fanuc.arp"
+    monkeypatch.setattr(server_module.os.path, "exists", lambda p: p == post_path)
+    gw = GatewayServer()
+    result = gw._handler_select_post({"name": post_path})
+    assert result == {"success": True}
+    server_app.select_post.assert_called_once_with(post_path)

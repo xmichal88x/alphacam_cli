@@ -122,6 +122,7 @@ def test_batch_process_custom_output_dir() -> None:
 
 
 def test_batch_process_post_processor() -> None:
+    post_path = "C:/ALPHACAM/LICOMDAT/RPosts.Alp/fanuc.arp"
     with (
         _mock_com_batch(),
         patch("alphacam_cli.cli.batch.glob.glob", return_value=["test.amd"]),
@@ -129,6 +130,7 @@ def test_batch_process_post_processor() -> None:
             "alphacam_cli.cli.batch._process_file",
             return_value={"file": "test.amd", "status": "OK", "error": ""},
         ),
+        patch("alphacam_cli.core.application.glob.glob", return_value=[post_path]),
     ):
         result = runner.invoke(app, ["batch", "process", ".", "--post", "fanuc"])
     assert result.exit_code == 0
