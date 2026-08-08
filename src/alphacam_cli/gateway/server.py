@@ -695,6 +695,7 @@ class GatewayServer:
             _am_log("am_co_create", False, repr(e))
             out["am_co_create"] = f"FAIL: {e!r}"
         addins: Any = None
+        astyles: Any = None
         if ai is not None:
             try:
                 addins = ai.GetAddInsInterface(app3)
@@ -705,7 +706,6 @@ class GatewayServer:
                 out["am_get_addins"] = f"FAIL: {e!r}"
         if addins is not None:
             ncman: Any = None
-            astyles: Any = None
             reports: Any = None
             try:
                 ncman = addins.GetNcOutputManagerAddIn()
@@ -777,6 +777,38 @@ class GatewayServer:
             except Exception as e:
                 _am_log("am_reports_job", False, repr(e))
                 out["am_reports_job"] = f"FAIL: {e!r}"
+        q_drw: Any = None
+        raw_drw: Any = None
+        astyles_any: Any = astyles if addins is not None else None
+        try:
+            q_drw = com_app.new_drawing(200, 100)
+            if q_drw is not None:
+                q_drw.create_circle(20, 60, 50)
+            raw_drw = q_drw._drw if q_drw is not None else None  # type: ignore[attr-defined]
+            q = raw_drw.RunQuery(r"C:\ALPHACAM\LICOMDIR\Queries\Menadżer_Warstw_Fronty.agq")
+            _am_log("agq_run", True, repr(q))
+            out["agq_run"] = f"OK: {q!r}"
+        except Exception as e:
+            _am_log("agq_run", False, repr(e))
+            out["agq_run"] = f"FAIL: {e!r}"
+        try:
+            if astyles_any is None:
+                _am_log("ara_apply", True, "SKIP: no astyles")
+                out["ara_apply"] = "SKIP: no astyles"
+            else:
+                astyles_any.Apply(r"C:\ALPHACAM\LICOMDIR\Styles\Fronty_AutoStyl.ara")
+                _am_log("ara_apply", True, "")
+                out["ara_apply"] = "OK"
+        except Exception as e:
+            _am_log("ara_apply", False, repr(e))
+            out["ara_apply"] = f"FAIL: {e!r}"
+        try:
+            tpc = raw_drw.tool_paths_count
+            _am_log("ara_toolpaths", True, repr(tpc))
+            out["ara_toolpaths"] = f"OK: {tpc!r}"
+        except Exception as e:
+            _am_log("ara_toolpaths", False, repr(e))
+            out["ara_toolpaths"] = f"FAIL: {e!r}"
         out["am_cdm"] = "SKIP: Automation Manager hangs in Session 0 (verified)"
         return out
 
