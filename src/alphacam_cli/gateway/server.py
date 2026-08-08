@@ -456,7 +456,7 @@ class GatewayServer:
         drw.zoom_all()
         return {"success": True, "tool_paths_count": drw.tool_paths_count}
 
-    def _handler_output_nc(self, params: dict[str, Any]) -> dict[str, bool]:
+    def _handler_output_nc(self, params: dict[str, Any]) -> dict[str, Any]:
         from alphacam_cli.gateway.server import _app as com_app
 
         path = str(params.get("path", ""))
@@ -469,7 +469,9 @@ class GatewayServer:
         if drw is None:
             raise COMError("No active drawing")
         drw.output_nc(path)
-        return {"success": True}
+        if os.path.exists(path):
+            return {"success": True, "size": int(os.path.getsize(path)), "path": path}
+        raise COMError(f"NC file not created: {path}")
 
     def _handler_batch_process(self, params: dict[str, Any]) -> list[dict[str, Any]]:
         from alphacam_cli.gateway.server import _app as com_app

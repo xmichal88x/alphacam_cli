@@ -56,8 +56,8 @@ class _DrawingProxy:
     def save_as(self, path: str) -> None:
         self._session.save_active_drawing(path)
 
-    def output_nc(self, path: str) -> None:
-        self._session.output_nc(path)
+    def output_nc(self, path: str) -> dict[str, Any]:
+        return self._session.output_nc(path)
 
     def zoom_all(self) -> None:
         self._session.zoom_all()

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import pathlib
 from unittest.mock import MagicMock
 
 import pytest
@@ -139,3 +140,24 @@ def test_select_post_handler_full_path(
     result = gw._handler_select_post({"name": post_path})
     assert result == {"success": True}
     server_app.select_post.assert_called_once_with(post_path)
+
+
+def test_output_nc_handler(server_app: MagicMock, tmp_path: pathlib.Path) -> None:
+    drw = MagicMock()
+    server_app.get_active_drawing.return_value = drw
+    nc_file = tmp_path / "out.nc"
+    nc_file.write_bytes(b"G0 X0 Y0\n" * 100)
+    gw = GatewayServer()
+    result = gw._handler_output_nc({"path": str(nc_file)})
+    assert result == {"success": True, "size": nc_file.stat().st_size, "path": str(nc_file)}
+    drw.output_nc.assert_called_once_with(str(nc_file))
+
+
+def test_output_nc_handler_missing_file(server_app: MagicMock, tmp_path: pathlib.Path) -> None:
+    drw = MagicMock()
+    server_app.get_active_drawing.return_value = drw
+    gw = GatewayServer()
+    missing = str(tmp_path / "missing.nc")
+    with pytest.raises(COMError, match="NC file not created"):
+        gw._handler_output_nc({"path": missing})
+    drw.output_nc.assert_called_once_with(missing)

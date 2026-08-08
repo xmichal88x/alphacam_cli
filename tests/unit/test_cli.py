@@ -1,8 +1,9 @@
 from __future__ import annotations
 
+import pathlib
 from collections.abc import Iterator
 from contextlib import ExitStack, contextmanager
-from unittest.mock import MagicMock, mock_open, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 from typer.testing import CliRunner
@@ -455,28 +456,58 @@ def test_mill_style_no_active_drawing() -> None:
     assert "No active drawing" in result.stderr
 
 
-def test_nc_output() -> None:
-    m = mock_open(read_data="N100 G0 X0 Y0\n")
-    with _mock_com(), patch("os.path.exists", return_value=True), patch("builtins.open", m):
-        result = runner.invoke(app, ["nc", "output", "test.nc"])
+def test_nc_output(tmp_path: pathlib.Path) -> None:
+    nc_file = tmp_path / "test.nc"
+    nc_file.write_text("N100 G0 X0 Y0\n", encoding="utf-8")
+    with _mock_com(), patch("alphacam_cli.core.drawing.Drawing.output_nc", return_value=None):
+        result = runner.invoke(app, ["nc", "output", str(nc_file)])
     assert result.exit_code == 0
     assert "NC output generated" in result.stderr
+    assert "Lines: 1" in result.stderr
 
 
-def test_nc_output_with_post() -> None:
-    m = mock_open(read_data="N100 G0 X0 Y0\n")
+def test_nc_output_with_post(tmp_path: pathlib.Path) -> None:
+    nc_file = tmp_path / "test.nc"
+    nc_file.write_text("N100 G0 X0 Y0\n", encoding="utf-8")
     post_path = "C:/ALPHACAM/LICOMDAT/RPosts.Alp/fanuc.arp"
     with (
         _mock_com() as app_mock,
-        patch("os.path.exists", side_effect=lambda p: p == "test.nc"),
-        patch("builtins.open", m),
+        patch("alphacam_cli.core.drawing.Drawing.output_nc", return_value=None),
         patch("alphacam_cli.core.application.glob.glob", return_value=[post_path]),
     ):
-        result = runner.invoke(app, ["nc", "output", "test.nc", "--post", "fanuc"])
+        result = runner.invoke(app, ["nc", "output", str(nc_file), "--post", "fanuc"])
     assert result.exit_code == 0
     assert "Post selected" in result.stderr
     assert "fanuc" in result.stderr
     app_mock.SelectPost.assert_called_once_with(post_path)
+
+
+def test_nc_output_remote_with_size() -> None:
+    with (
+        _mock_com(),
+        patch(
+            "alphacam_cli.core.drawing.Drawing.output_nc",
+            return_value={"size": 387, "success": True},
+        ),
+    ):
+        result = runner.invoke(app, ["nc", "output", "C:/temp/e2e_final.nc"])
+    assert result.exit_code == 0
+    assert "NC output generated" in result.stderr
+    assert "Path: C:/temp/e2e_final.nc" in result.stderr
+    assert "Size: 387 bytes" in result.stderr
+
+
+def test_nc_output_remote_missing_file() -> None:
+    with (
+        _mock_com(),
+        patch(
+            "alphacam_cli.core.drawing.Drawing.output_nc",
+            return_value={"success": True},
+        ),
+    ):
+        result = runner.invoke(app, ["nc", "output", "C:/temp/missing.nc"])
+    assert result.exit_code == 1
+    assert "NC file not created" in result.stderr
 
 
 def test_nc_output_no_active_drawing() -> None:
@@ -488,7 +519,7 @@ def test_nc_output_no_active_drawing() -> None:
 
 
 def test_nc_output_file_not_created() -> None:
-    with _mock_com():
+    with _mock_com(), patch("alphacam_cli.core.drawing.Drawing.output_nc", return_value=None):
         result = runner.invoke(app, ["nc", "output", "test.nc"])
     assert result.exit_code == 1
     assert "NC file not created" in result.stderr

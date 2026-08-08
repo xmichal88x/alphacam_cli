@@ -35,9 +35,13 @@ def output(
             console.print("[red]No active drawing[/red]")
             raise typer.Exit(code=1)
 
-        drw.output_nc(path)
+        result = drw.output_nc(path)
 
-        if os.path.exists(path):
+        if isinstance(result, dict) and int(result.get("size", 0)) > 0:
+            console.print("[green]OK:[/green] NC output generated")
+            console.print(f"     Path: {result.get('path', path)}")
+            console.print(f"     Size: {result['size']} bytes")
+        elif os.path.exists(path):
             with open(path, encoding="utf-8", errors="replace") as f:
                 lines = f.readlines()
             console.print("[green]OK:[/green] NC output generated")

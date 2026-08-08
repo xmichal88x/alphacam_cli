@@ -87,3 +87,15 @@ def test_remote_mill_data_sends_xy_corners_and_start_point() -> None:
     md.start_y = 100.0
     md.rough_finish()
     session.mill_rough.assert_called_once_with(xy_corners=1, start_x=50.0, start_y=100.0)
+
+
+def test_remote_drawing_proxy_output_nc_returns_dict() -> None:
+    session = MagicMock()
+    session.get_active_drawing.return_value = {"geometries_count": 1}
+    session.output_nc.return_value = {"success": True, "size": 387}
+    app = RemoteApplication(session)
+    drw = app.get_active_drawing()
+    assert drw is not None
+    result = drw.output_nc(r"C:\temp\out.nc")
+    assert result == {"success": True, "size": 387}
+    session.output_nc.assert_called_once_with(r"C:\temp\out.nc")
