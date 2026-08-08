@@ -236,7 +236,7 @@ def test_export_iges(mock_com: MagicMock) -> None:
 
 
 def test_export_stl(mock_com: MagicMock) -> None:
-    from alphacam_cli.com.constants import ACAM_STL_TYPE_STL
+    from alphacam_cli.com.constants import ACAM_STL_TYPE_SURFACES
 
     with mock_com:
         from alphacam_cli.com.manager import alphacam_context
@@ -245,10 +245,12 @@ def test_export_stl(mock_com: MagicMock) -> None:
         with alphacam_context() as raw:
             drw = Drawing(raw.ActiveDrawing)
             drw.export("test.stl", "stl")
-            drw._drw.SaveStlFile.assert_called_once_with("test.stl", ACAM_STL_TYPE_STL, 0.1)
+            drw._drw.SaveStlFile.assert_called_once_with("test.stl", ACAM_STL_TYPE_SURFACES, 0.1)
 
 
 def test_export_stl_com_error_raises_value_error(mock_com: MagicMock) -> None:
+    from alphacam_cli.com.constants import ACAM_STL_TYPE_SURFACES
+
     with mock_com:
         from alphacam_cli.com.manager import alphacam_context
         from alphacam_cli.core.drawing import Drawing
@@ -256,8 +258,9 @@ def test_export_stl_com_error_raises_value_error(mock_com: MagicMock) -> None:
         with alphacam_context() as raw:
             drw = Drawing(raw.ActiveDrawing)
             drw._drw.SaveStlFile.side_effect = pythoncom.com_error(-2147467259, "Unexpected error")
-            with pytest.raises(ValueError, match="stl export requires 3D surfaces"):
+            with pytest.raises(ValueError, match="stl export failed"):
                 drw.export("test.stl", "stl")
+            drw._drw.SaveStlFile.assert_called_once_with("test.stl", ACAM_STL_TYPE_SURFACES, 0.1)
 
 
 def test_export_emf(mock_com: MagicMock) -> None:

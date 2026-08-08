@@ -97,7 +97,7 @@ class Drawing:
     def export(self, path: str, fmt: str) -> None:
         """Export the drawing to a CAD/graphics file (DXF, IGES, STL, EMF, WMF)."""
         from alphacam_cli.com.constants import (
-            ACAM_STL_TYPE_STL,
+            ACAM_STL_TYPE_SURFACES,
             ACAM_UNITS_METRIC,
         )
 
@@ -109,11 +109,10 @@ class Drawing:
             import pythoncom  # type: ignore[import-untyped]
 
             try:
-                self._drw.SaveStlFile(path, ACAM_STL_TYPE_STL, 0.1)  # type: ignore[attr-defined]
+                self._drw.SaveStlFile(path, ACAM_STL_TYPE_SURFACES, 0.1)  # type: ignore[attr-defined]
             except pythoncom.com_error as e:
                 raise ValueError(  # noqa: TRY003
-                    "stl export requires 3D surfaces/solids in the drawing "
-                    "(current drawing appears 2D)"
+                    "stl export failed: no facetable geometry in the drawing"
                 ) from e
         elif fmt == "emf":
             self._drw.SaveEmfFile(path, False, False)  # type: ignore[attr-defined]

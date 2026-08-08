@@ -384,7 +384,7 @@ def test_drawing_export_stl() -> None:
         result = runner.invoke(app, ["drawing", "export", "panel.stl", "-f", "stl"])
     assert result.exit_code == 0
     assert "STL" in result.stderr
-    app_mock.ActiveDrawing.SaveStlFile.assert_called_once_with("panel.stl", 0, 0.1)
+    app_mock.ActiveDrawing.SaveStlFile.assert_called_once_with("panel.stl", 1, 0.1)
 
 
 def test_drawing_export_no_drawing() -> None:
