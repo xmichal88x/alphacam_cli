@@ -196,15 +196,15 @@ def test_auto_style_apply(monkeypatch: pytest.MonkeyPatch) -> None:
     addins.GetAutoStylesAddIn.return_value.Apply.assert_called_once_with(r"C:\styles\auto.style")
 
 
-def test_auto_style_apply_user_interactive(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_auto_style_apply_invalid_file(monkeypatch: pytest.MonkeyPatch) -> None:
     addins = MagicMock(name="IAddIns")
     _make_addins_mock(monkeypatch, addins)
-    addins.GetAutoStylesAddIn.return_value.Apply.side_effect = RuntimeError(
-        "This operation requires a UI (UserInteractive = False)"
+    addins.GetAutoStylesAddIn.return_value.Apply.side_effect = OSError(
+        "Nierozpoznany lub nieprawidłowy plik AutoStylu."
     )
 
     ac = Application(MagicMock())
-    with pytest.raises(RuntimeError, match="auto-style requires GUI"):
+    with pytest.raises(RuntimeError, match="invalid or unrecognized AutoStyles file"):
         ac.auto_style_apply("x")
 
 
@@ -214,5 +214,8 @@ def test_auto_style_apply_other_error(monkeypatch: pytest.MonkeyPatch) -> None:
     addins.GetAutoStylesAddIn.return_value.Apply.side_effect = RuntimeError("boom")
 
     ac = Application(MagicMock())
-    with pytest.raises(RuntimeError, match="Failed to apply auto-style 'x': boom"):
+    with pytest.raises(
+        RuntimeError,
+        match="failed to apply auto-style 'x': invalid or unrecognized AutoStyles file",
+    ):
         ac.auto_style_apply("x")

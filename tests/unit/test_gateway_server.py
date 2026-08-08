@@ -859,10 +859,10 @@ def test_auto_style_apply_handler_missing_file(server_app: MagicMock) -> None:
     server_app.auto_style_apply.assert_not_called()
 
 
-def test_auto_style_apply_handler_user_interactive(server_app: MagicMock) -> None:
+def test_auto_style_apply_handler_invalid_file(server_app: MagicMock) -> None:
     server_app.auto_style_apply.side_effect = RuntimeError(
-        "auto-style requires GUI (file dialog in Session 0)"
+        "failed to apply auto-style 'x': invalid or unrecognized AutoStyles file (check format .ara)"
     )
     gw = GatewayServer()
-    with pytest.raises(COMError, match="auto-style requires GUI"):
+    with pytest.raises(COMError, match="invalid or unrecognized AutoStyles file"):
         gw._handler_auto_style_apply({"file": "x"})

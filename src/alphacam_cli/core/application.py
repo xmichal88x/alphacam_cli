@@ -448,7 +448,9 @@ class Application:
         try:
             astyles.Apply(file)
         except Exception as e:
-            if "UserInteractive" in str(e) or "UserInteractive" in str(getattr(e, "strerror", "")):
-                raise RuntimeError("auto-style requires GUI (file dialog in Session 0)") from e  # noqa: TRY003
-            raise RuntimeError(f"Failed to apply auto-style '{file}': {e}") from e  # noqa: TRY003
+            msg = (
+                f"failed to apply auto-style '{file}': invalid or unrecognized "
+                "AutoStyles file (check format .ara)"
+            )
+            raise RuntimeError(msg) from e  # noqa: TRY003
         return {"success": True, "file": file}
