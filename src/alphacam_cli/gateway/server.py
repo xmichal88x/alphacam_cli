@@ -271,7 +271,6 @@ class GatewayServer:
                 except Exception as e:
                     out[f"load_addin_{addin_name}"] = f"FAIL: {e!r}"
             for fn, args in (
-                ("IsAlphaNest", ()),
                 ("EnableAddIn", ("Nesting",)),
                 ("EnableAddIn", ("AcamRadNest",)),
                 ("EnableAddIn", ("AcamNest",)),
@@ -281,6 +280,18 @@ class GatewayServer:
                     out[f"{fn}{args}"] = f"OK: {r5}"
                 except Exception as e:
                     out[f"{fn}{args}"] = f"FAIL: {e!r}"
+            try:
+                out["IsAlphaNest_value"] = f"OK: {app2.IsAlphaNest}"
+            except Exception as e:
+                out["IsAlphaNest_value"] = f"FAIL: {e!r}"
+            try:
+                out["LoadAddIn_sig"] = f"OK: {app2.LoadAddIn.__doc__}"
+            except Exception as e:
+                out["LoadAddIn_sig"] = f"FAIL: {e!r}"
+            try:
+                out["EnableAddIn_sig"] = f"OK: {app2.EnableAddIn.__doc__}"
+            except Exception as e:
+                out["EnableAddIn_sig"] = f"FAIL: {e!r}"
         except Exception as e:
             out["gencache_app"] = f"FAIL: {e!r}"
         try:
