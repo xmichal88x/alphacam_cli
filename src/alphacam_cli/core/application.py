@@ -195,10 +195,22 @@ class Application:
         return sorted(set(files))
 
     def get_nesting(self) -> Nesting:
-        raw = self._app.Nesting  # type: ignore[attr-defined]
+        raw = self._get_nesting_raw()
         if raw is None:
             raise RuntimeError("Failed to get nesting")  # noqa: TRY003
         return Nesting(raw)
+
+    def _get_nesting_raw(self) -> Any:
+        try:
+            return self._app.Nesting  # type: ignore[attr-defined]
+        except Exception:
+            import win32com.client as win32  # type: ignore[import-untyped]
+
+            try:
+                return win32.Dispatch("AcamNest.Nesting")
+            except Exception as e2:
+                msg = f"Failed to get nesting (App.Nesting and AcamNest.Nesting failed): {e2}"
+                raise RuntimeError(msg) from e2
 
     def select_post(self, name: str) -> None:
         if "/" not in name and "\\" not in name and not os.path.exists(name):

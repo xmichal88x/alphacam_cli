@@ -218,6 +218,28 @@ def test_get_nesting(mock_com: MagicMock) -> None:
             assert nesting is not None
 
 
+def test_get_nesting_fallback(mock_com: MagicMock) -> None:
+    """App.Nesting raises -> fallback to Dispatch('AcamNest.Nesting')."""
+    ac = Application(_RaiseOnNesting())
+    nesting = ac.get_nesting()
+    assert nesting is not None
+    mock_com.assert_any_call("AcamNest.Nesting")
+
+
+def test_get_nesting_both_failed(mock_com: MagicMock) -> None:
+    """App.Nesting and Dispatch('AcamNest.Nesting') both fail -> RuntimeError."""
+    mock_com.side_effect = Exception("dispatch failed")
+    ac = Application(_RaiseOnNesting())
+    with pytest.raises(
+        RuntimeError,
+        match=(
+            r"Failed to get nesting \(App\.Nesting and AcamNest\.Nesting failed\)"
+            r": dispatch failed"
+        ),
+    ):
+        ac.get_nesting()
+
+
 def test_select_post(mock_com: MagicMock) -> None:
     with mock_com:
         from alphacam_cli.com.manager import alphacam_context
@@ -352,6 +374,15 @@ def _make_style(file_name: str) -> MagicMock:
     style = MagicMock()
     style.FileName = file_name
     return style
+
+
+class _RaiseOnNesting(MagicMock):
+    """MagicMock whose attribute access to 'Nesting' raises a COM-style error."""
+
+    def __getattr__(self, name: str) -> MagicMock:
+        if name == "Nesting":
+            raise RuntimeError("COMError -2147467259")  # noqa: TRY003
+        return super().__getattr__(name)
 
 
 def test_apply_mill_style(mock_com: MagicMock) -> None:
