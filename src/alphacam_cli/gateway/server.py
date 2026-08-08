@@ -219,6 +219,41 @@ class GatewayServer:
     def _handler_ping(self, params: dict[str, Any]) -> dict[str, bool]:
         return {"pong": True}
 
+    def _handler_probe_nest(self, params: dict[str, Any]) -> dict[str, str]:
+        from alphacam_cli.gateway.server import _app as com_app
+
+        out: dict[str, str] = {}
+        d = None
+        try:
+            d = com_app.get_active_drawing()
+            out["active_drawing"] = "OK" if d else "None"
+        except Exception as e:
+            out["active_drawing"] = f"FAIL: {e!r}"
+        if d is not None:
+            try:
+                nd = d.create_nest_data(str(params.get("path", r"C:\temp\nest_out\nest.anl")))
+                out["create_nest_data"] = f"OK: {nd}"
+            except Exception as e:
+                out["create_nest_data"] = f"FAIL: {e!r}"
+        try:
+            raw = com_app._app.Nesting  # type: ignore[attr-defined]
+            out["app_nesting"] = f"OK: {raw}"
+        except Exception as e:
+            out["app_nesting"] = f"FAIL: {e!r}"
+        try:
+            import win32com.client as w32  # type: ignore[import-untyped]
+
+            raw = w32.Dispatch("AcamNest.Nesting")
+            out["dispatch_acamnest"] = f"OK: {raw}"
+        except Exception as e:
+            out["dispatch_acamnest"] = f"FAIL: {e!r}"
+        try:
+            mats = com_app.get_active_drawing()
+            out["materials"] = "n/a"
+        except Exception as e:
+            out["materials"] = f"FAIL: {e!r}"
+        return out
+
     def _handler_get_info(self, params: dict[str, Any]) -> dict[str, Any]:
         from alphacam_cli.gateway.server import _app as com_app
 
