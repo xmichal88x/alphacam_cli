@@ -3,6 +3,7 @@ from __future__ import annotations
 import csv
 import glob
 import os
+from contextlib import suppress
 from typing import Any
 
 import typer
@@ -39,6 +40,51 @@ def run(
         None, "--edge-gap", help="Edge gap from sheet border (mm)"
     ),
     lead_gap: float | None = typer.Option(None, "--lead-gap", help="Lead-in/out gap (mm)"),
+    advanced: bool = typer.Option(
+        False, "--advanced", help="Use full NestList API (NewNestList/AddFile/Nest)"
+    ),
+    total_time: float | None = typer.Option(None, "--total-time", help="Nest time limit (seconds)"),
+    optimise_level: int | None = typer.Option(
+        None, "--optimise-level", help="Nest optimisation level (0/1)"
+    ),
+    part_gap: float | None = typer.Option(
+        None, "--part-gap", help="Gap between parts in advanced mode (mm)"
+    ),
+    cut_width: float | None = typer.Option(None, "--cut-width", help="Cut width compensation (mm)"),
+    nesting_method: int | None = typer.Option(
+        None,
+        "--nesting-method",
+        help="0=TrueShape, 1=Original, 2=Rectangular, 3=Manual",
+    ),
+    optimise_for_cuts: int | None = typer.Option(
+        None, "--optimise-for-cuts", help="0=ForSpace, 1=ForCuts"
+    ),
+    cut_direction: int | None = typer.Option(None, "--cut-direction", help="0=X, 1=Y, 2=Auto"),
+    resolution: float | None = typer.Option(None, "--resolution", help="Nest resolution"),
+    select_best_sheet: int | None = typer.Option(
+        None, "--select-best-sheet", help="Select best sheet (0/1)"
+    ),
+    no_aperture_nesting: bool = typer.Option(
+        False, "--no-aperture-nesting", help="Prevent aperture nesting (advanced mode)"
+    ),
+    order_by_part: bool = typer.Option(
+        False, "--order-by-part", help="Order parts by part (advanced mode)"
+    ),
+    no_subroutines: bool = typer.Option(
+        False, "--no-subroutines", help="Do not use subroutines (advanced mode)"
+    ),
+    minimise_tool_changes: bool = typer.Option(
+        False, "--minimise-tool-changes", help="Minimise tool changes (advanced mode)"
+    ),
+    strict_priorities: bool = typer.Option(
+        False, "--strict-priorities", help="Strict part priorities (advanced mode)"
+    ),
+    inner_first: bool = typer.Option(
+        False, "--inner-first", help="Nest inner parts first (advanced mode)"
+    ),
+    preserve_sheet_edge: bool = typer.Option(
+        False, "--preserve-sheet-edge", help="Preserve sheet edge (advanced mode)"
+    ),
 ) -> None:
     """Run nesting from a CSV file with columns: filename, count."""
     require_platform()
@@ -103,6 +149,86 @@ def run(
 
         nd = drw.create_nest_data(anl_path)
 
+        # Create sheet geometry (from library or rectangle) and run nesting
+        console.print(f"[yellow]Nesting {len(parts)} part types...[/yellow]")
+        if advanced:
+            import win32com.client.gencache as gencache  # type: ignore[import-untyped]
+
+            gencache.EnsureModule("{6702E3DF-142C-4627-8EA2-4C47EBC78441}", 0, 1, 3)
+            app = gencache.EnsureDispatch("Ar5axaps.Application")
+            nesting = app.Nesting
+            nesting.SuppressDialogs = True
+            nl = nesting.NewNestList(anl_path)
+            for part in parts:
+                nest_part = nl.AddFile(str(part["name"]))
+                nest_part.Required = int(part["count"])
+            if total_time is not None:
+                nl.TotalTime = float(total_time)
+            if optimise_level is not None:
+                nl.OptimiseLevel = int(optimise_level)
+            if part_gap is not None:
+                nl.PartGap = float(part_gap)
+            if cut_width is not None:
+                nl.CutWidth = float(cut_width)
+            if nesting_method is not None:
+                nl.NestingMethod = int(nesting_method)
+            if optimise_for_cuts is not None:
+                nl.OptimiseForCuts = int(optimise_for_cuts)
+            if cut_direction is not None:
+                nl.CutDirection = int(cut_direction)
+            if resolution is not None:
+                nl.Resolution = float(resolution)
+            if select_best_sheet is not None:
+                nl.SelectBestSheet = int(select_best_sheet)
+            if no_aperture_nesting:
+                nl.PreventApertureNest = True
+            if order_by_part:
+                nl.OrderByPart = True
+            if no_subroutines:
+                nl.UseSubroutines = False
+            if minimise_tool_changes:
+                nl.MinimiseToolChanges = True
+            if strict_priorities:
+                nl.StrictPriorities = True
+            if inner_first:
+                nl.InnerFirst = True
+            if preserve_sheet_edge:
+                nl.PreserveSheetEdge = True
+            if gap is not None:
+                nl.PartGap = float(gap)
+            if edge_gap is not None:
+                nl.EdgeGap = float(edge_gap)
+            if lead_gap is not None:
+                nl.LeadInGap = float(lead_gap)
+
+            sl = nesting.NewSheetList()
+            if sheet_name:
+                try:
+                    sheet = nesting.SheetDatabase.FindSheet(sheet_name)
+                except Exception as e:
+                    console.print(f"[red]nest: sheet from library not found: {sheet_name}[/red]")
+                    raise typer.Exit(code=1) from e
+                paths = sheet.InsertInActiveDrawingAtPoint(0.0, 0.0)
+                nest_sheet = sl.Add(paths.Item(1))
+                try:
+                    nest_sheet.Thickness = float(sheet.Thickness.Thickness)
+                except Exception:
+                    nest_sheet.Thickness = 18.0
+            else:
+                sheet_geo = drw.create_rectangle(0, 0, sheet_width, sheet_height)
+                nest_sheet = sl.Add(sheet_geo.raw_dispatch)
+                nest_sheet.Thickness = 18.0
+            nest_sheet.Required = 1
+            try:
+                result = nesting.Nest(nl, sl)
+            finally:
+                with suppress(Exception):
+                    nesting.DeleteAllNestLists()
+            console.print("[green]OK:[/green] Nesting completed")
+            console.print(f"     Total parts: {sum(p['count'] for p in parts)}")
+            console.print(f"     Un-nested parts: {int(result.Count)}")
+            return
+
         if gap is not None:
             nd.Gap = gap  # type: ignore[attr-defined]
         if edge_gap is not None:
@@ -110,8 +236,6 @@ def run(
         if lead_gap is not None:
             nd.LeadGap = lead_gap  # type: ignore[attr-defined]
 
-        # Create sheet geometry (from library or rectangle) and run nesting
-        console.print(f"[yellow]Nesting {len(parts)} part types...[/yellow]")
         if sheet_name:
             import win32com.client.gencache as gencache  # type: ignore[import-untyped]
 

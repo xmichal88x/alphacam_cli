@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import pathlib
+import sys
+import types
 from unittest import mock
 from unittest.mock import MagicMock
 
@@ -16,6 +18,24 @@ def server_app(monkeypatch: pytest.MonkeyPatch) -> MagicMock:
     app = MagicMock()
     monkeypatch.setattr(server_module, "_app", app)
     return app
+
+
+def _mock_nest_com(monkeypatch: pytest.MonkeyPatch) -> tuple[MagicMock, MagicMock]:
+    """Install fake win32com.client.gencache modules and return (app, nesting)."""
+    gencache = MagicMock()
+    app = MagicMock()
+    nesting = MagicMock()
+    gencache.EnsureDispatch.return_value = app
+    app.Nesting = nesting
+
+    client_mod = types.ModuleType("win32com.client")
+    client_mod.gencache = gencache  # type: ignore[attr-defined]
+    win32com = types.ModuleType("win32com")
+    win32com.client = client_mod  # type: ignore[attr-defined]
+    monkeypatch.setitem(sys.modules, "win32com", win32com)
+    monkeypatch.setitem(sys.modules, "win32com.client", client_mod)
+    monkeypatch.setitem(sys.modules, "win32com.client.gencache", gencache)
+    return app, nesting
 
 
 def test_apply_style_handler(server_app: MagicMock) -> None:
@@ -412,3 +432,162 @@ def test_run_nest_handler_do_nest_failed(server_app: MagicMock) -> None:
     gw = GatewayServer()
     with pytest.raises(COMError, match=r"nest: do_nest failed: boom"):
         gw._handler_run_nest({"parts": [{"name": "part.amd", "count": 1}]})
+
+
+def test_run_nest_handler_advanced(server_app: MagicMock, monkeypatch: pytest.MonkeyPatch) -> None:
+    drw = MagicMock()
+    server_app.create_temp_drawing.return_value = drw
+    sheet_geo = MagicMock()
+    drw.create_rectangle.return_value = sheet_geo
+
+    _, nesting = _mock_nest_com(monkeypatch)
+    nl = MagicMock(name="NestList")
+    sl = MagicMock(name="SheetList")
+    nest_result = MagicMock(name="NestResult")
+    nest_result.Count = 1
+    nesting.NewNestList.return_value = nl
+    nesting.NewSheetList.return_value = sl
+    nesting.Nest.return_value = nest_result
+
+    gw = GatewayServer()
+    result = gw._handler_run_nest(
+        {
+            "parts": [{"name": "part1.amd", "count": 2}, {"name": "part2.amd", "count": 1}],
+            "output_dir": "",
+            "sheet_width": 2440,
+            "sheet_height": 1220,
+            "advanced": True,
+            "part_gap": 5.0,
+            "optimise_level": 1,
+            "use_subroutines": False,
+            "prevent_aperture_nest": True,
+        }
+    )
+
+    assert result == {
+        "success": True,
+        "count": 1,
+        "parts": [{"name": "part1.amd", "count": 2}, {"name": "part2.amd", "count": 1}],
+    }
+    assert nesting.SuppressDialogs is True
+    nesting.NewNestList.assert_called_once_with("nest_full.anl")
+    assert nl.AddFile.call_args_list == [mock.call("part1.amd"), mock.call("part2.amd")]
+    assert nl.AddFile.return_value.Required == 1
+    assert nl.PartGap == 5.0
+    assert nl.OptimiseLevel == 1
+    assert nl.UseSubroutines is False
+    assert nl.PreventApertureNest is True
+    nesting.NewSheetList.assert_called_once()
+    sl.Add.assert_called_once_with(sheet_geo.raw_dispatch)
+    assert sl.Add.return_value.Thickness == 18.0
+    assert sl.Add.return_value.Required == 1
+    nesting.Nest.assert_called_once_with(nl, sl)
+    nesting.DeleteAllNestLists.assert_called_once()
+
+
+def test_run_nest_handler_advanced_gap_alias(
+    server_app: MagicMock, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    drw = MagicMock()
+    server_app.create_temp_drawing.return_value = drw
+    drw.create_rectangle.return_value = MagicMock()
+
+    _, nesting = _mock_nest_com(monkeypatch)
+    nl = MagicMock(name="NestList")
+    nesting.NewNestList.return_value = nl
+    nesting.NewSheetList.return_value = MagicMock(name="SheetList")
+    nesting.Nest.return_value = MagicMock(Count=0)
+
+    gw = GatewayServer()
+    result = gw._handler_run_nest(
+        {
+            "parts": [{"name": "part.amd", "count": 1}],
+            "advanced": True,
+            "gap": 3.5,
+        }
+    )
+
+    assert result == {
+        "success": True,
+        "count": 0,
+        "parts": [{"name": "part.amd", "count": 1}],
+    }
+    assert nl.PartGap == 3.5
+
+
+def test_run_nest_handler_advanced_sheet_from_library(
+    server_app: MagicMock, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    drw = MagicMock()
+    server_app.create_temp_drawing.return_value = drw
+
+    _, nesting = _mock_nest_com(monkeypatch)
+    nl = MagicMock(name="NestList")
+    sl = MagicMock(name="SheetList")
+    sheet = MagicMock(name="Sheet")
+    sheet.Thickness.Thickness = 22.0
+    nesting.NewNestList.return_value = nl
+    nesting.NewSheetList.return_value = sl
+    nesting.SheetDatabase.FindSheet.return_value = sheet
+    nesting.Nest.return_value = MagicMock(Count=2)
+
+    gw = GatewayServer()
+    result = gw._handler_run_nest(
+        {
+            "parts": [{"name": "part.amd", "count": 1}],
+            "advanced": True,
+            "sheet_name": "MDF_18",
+        }
+    )
+
+    assert result == {"success": True, "count": 2, "parts": [{"name": "part.amd", "count": 1}]}
+    nesting.SheetDatabase.FindSheet.assert_called_once_with("MDF_18")
+    sheet.InsertInActiveDrawingAtPoint.assert_called_once_with(0.0, 0.0)
+    sl.Add.assert_called_once_with(sheet.InsertInActiveDrawingAtPoint.return_value.Item(1))
+    assert sl.Add.return_value.Thickness == 22.0
+    drw.create_rectangle.assert_not_called()
+
+
+def test_run_nest_handler_advanced_nest_failed_cleans_up(
+    server_app: MagicMock, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    drw = MagicMock()
+    server_app.create_temp_drawing.return_value = drw
+    drw.create_rectangle.return_value = MagicMock()
+
+    _, nesting = _mock_nest_com(monkeypatch)
+    nesting.NewNestList.return_value = MagicMock(name="NestList")
+    nesting.NewSheetList.return_value = MagicMock(name="SheetList")
+    nesting.Nest.side_effect = RuntimeError("boom")
+
+    gw = GatewayServer()
+    with pytest.raises(COMError, match=r"nest\[advanced\]: nest failed: boom"):
+        gw._handler_run_nest(
+            {
+                "parts": [{"name": "part.amd", "count": 1}],
+                "advanced": True,
+            }
+        )
+    nesting.DeleteAllNestLists.assert_called_once()
+
+
+def test_run_nest_handler_advanced_add_file_failed(
+    server_app: MagicMock, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    drw = MagicMock()
+    server_app.create_temp_drawing.return_value = drw
+
+    _, nesting = _mock_nest_com(monkeypatch)
+    nl = MagicMock(name="NestList")
+    nl.AddFile.side_effect = RuntimeError("boom")
+    nesting.NewNestList.return_value = nl
+
+    gw = GatewayServer()
+    with pytest.raises(COMError, match=r"nest\[advanced\]: add_file failed: boom"):
+        gw._handler_run_nest(
+            {
+                "parts": [{"name": "part.amd", "count": 1}],
+                "advanced": True,
+            }
+        )
+    nesting.DeleteAllNestLists.assert_not_called()

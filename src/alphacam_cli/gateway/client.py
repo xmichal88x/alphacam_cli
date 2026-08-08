@@ -158,6 +158,27 @@ class RemoteSession:
         gap: float | None = None,
         edge_gap: float | None = None,
         lead_gap: float | None = None,
+        advanced: bool = False,
+        total_time: float | None = None,
+        optimise_level: int | None = None,
+        part_gap: float | None = None,
+        cut_width: float | None = None,
+        nesting_method: int | None = None,
+        optimise_for_cuts: int | None = None,
+        cut_direction: int | None = None,
+        use_subroutines: bool | None = None,
+        prevent_aperture_nest: bool | None = None,
+        order_by_part: bool | None = None,
+        inner_first: bool | None = None,
+        repeat_first_row: bool | None = None,
+        preserve_sheet_edge: bool | None = None,
+        minimise_tool_changes: bool | None = None,
+        strict_priorities: bool | None = None,
+        allow_solid_parts: bool | None = None,
+        select_best_sheet: int | None = None,
+        sheet_order: int | None = None,
+        time_per_sheet: float | None = None,
+        resolution: float | None = None,
     ) -> dict[str, Any]:
         params: dict[str, Any] = {
             "parts": parts,
@@ -165,6 +186,7 @@ class RemoteSession:
             "sheet_width": sheet_width,
             "sheet_height": sheet_height,
             "sheet_name": sheet_name,
+            "advanced": advanced,
         }
         if gap is not None:
             params["gap"] = gap
@@ -172,6 +194,31 @@ class RemoteSession:
             params["edge_gap"] = edge_gap
         if lead_gap is not None:
             params["lead_gap"] = lead_gap
+        nest_opts: dict[str, Any] = {
+            "total_time": total_time,
+            "optimise_level": optimise_level,
+            "part_gap": part_gap,
+            "cut_width": cut_width,
+            "nesting_method": nesting_method,
+            "optimise_for_cuts": optimise_for_cuts,
+            "cut_direction": cut_direction,
+            "use_subroutines": use_subroutines,
+            "prevent_aperture_nest": prevent_aperture_nest,
+            "order_by_part": order_by_part,
+            "inner_first": inner_first,
+            "repeat_first_row": repeat_first_row,
+            "preserve_sheet_edge": preserve_sheet_edge,
+            "minimise_tool_changes": minimise_tool_changes,
+            "strict_priorities": strict_priorities,
+            "allow_solid_parts": allow_solid_parts,
+            "select_best_sheet": select_best_sheet,
+            "sheet_order": sheet_order,
+            "time_per_sheet": time_per_sheet,
+            "resolution": resolution,
+        }
+        for key, value in nest_opts.items():
+            if value is not None:
+                params[key] = value
         return self._call("run_nest", params)  # type: ignore[no-any-return]
 
     def find_drawing_files(self, pattern: str = "*.amd") -> list[str]:

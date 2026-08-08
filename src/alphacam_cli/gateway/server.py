@@ -26,6 +26,58 @@ from alphacam_cli.gateway.protocol import (
 CONNECT_TIMEOUT = 180
 _RPC_E_CHANGED_MODE = -2147417850
 _DRILL_MAP: dict[str, int] = {"drill": 0, "tap": 1, "peck": 3}
+_NEST_TYPELIB_GUID = "{6702E3DF-142C-4627-8EA2-4C47EBC78441}"
+
+_NEST_OPT_PROPERTIES: dict[str, str] = {
+    "total_time": "TotalTime",
+    "optimise_level": "OptimiseLevel",
+    "part_gap": "PartGap",
+    "edge_gap": "EdgeGap",
+    "lead_gap": "LeadInGap",
+    "cut_width": "CutWidth",
+    "nesting_method": "NestingMethod",
+    "optimise_for_cuts": "OptimiseForCuts",
+    "cut_direction": "CutDirection",
+    "use_subroutines": "UseSubroutines",
+    "prevent_aperture_nest": "PreventApertureNest",
+    "order_by_part": "OrderByPart",
+    "inner_first": "InnerFirst",
+    "repeat_first_row": "RepeatFirstRow",
+    "preserve_sheet_edge": "PreserveSheetEdge",
+    "minimise_tool_changes": "MinimiseToolChanges",
+    "strict_priorities": "StrictPriorities",
+    "allow_solid_parts": "AllowSolidParts",
+    "select_best_sheet": "SelectBestSheet",
+    "sheet_order": "SheetOrder",
+    "time_per_sheet": "TimePerSheet",
+    "resolution": "Resolution",
+}
+_NEST_FLOAT_OPTS = frozenset(
+    {"total_time", "time_per_sheet", "part_gap", "edge_gap", "lead_gap", "cut_width", "resolution"}
+)
+_NEST_INT_OPTS = frozenset(
+    {
+        "optimise_level",
+        "nesting_method",
+        "optimise_for_cuts",
+        "cut_direction",
+        "select_best_sheet",
+        "sheet_order",
+    }
+)
+_NEST_BOOL_OPTS = frozenset(
+    {
+        "use_subroutines",
+        "prevent_aperture_nest",
+        "order_by_part",
+        "inner_first",
+        "repeat_first_row",
+        "preserve_sheet_edge",
+        "minimise_tool_changes",
+        "strict_priorities",
+        "allow_solid_parts",
+    }
+)
 
 
 class COMError(Exception):
@@ -930,6 +982,10 @@ class GatewayServer:
         sheet_name = str(params.get("sheet_name", ""))
         if not parts:
             raise COMError("parts list is required")
+        if bool(params.get("advanced", False)):
+            return self._run_nest_advanced(
+                params, parts, output_dir, sheet_name, sheet_width, sheet_height
+            )
         if output_dir:
             os.makedirs(output_dir, exist_ok=True)
         drw = com_app.create_temp_drawing()
@@ -995,6 +1051,94 @@ class GatewayServer:
         if parts and not hasattr(nd, "AddPart"):
             result["parts"] = parts
         return result
+
+    def _set_nest_list_options(self, nl: Any, params: dict[str, Any]) -> None:
+        gap = params.get("gap")
+        for name, prop in _NEST_OPT_PROPERTIES.items():
+            value = params.get(name)
+            if name == "part_gap" and value is None:
+                value = gap
+            if value is None:
+                continue
+            try:
+                if name in _NEST_FLOAT_OPTS:
+                    setattr(nl, prop, float(value))
+                elif name in _NEST_INT_OPTS:
+                    setattr(nl, prop, int(value))
+                elif name in _NEST_BOOL_OPTS:
+                    setattr(nl, prop, bool(value))
+            except Exception as e:
+                raise COMError(f"nest[advanced]: set option failed ({name}): {e}") from e
+
+    def _run_nest_advanced(
+        self,
+        params: dict[str, Any],
+        parts: list[dict[str, Any]],
+        output_dir: str,
+        sheet_name: str,
+        sheet_width: float,
+        sheet_height: float,
+    ) -> dict[str, Any]:
+        from alphacam_cli.gateway.server import _app as com_app
+
+        if output_dir:
+            os.makedirs(output_dir, exist_ok=True)
+        nest_path = os.path.join(output_dir, "nest_full.anl") if output_dir else "nest_full.anl"
+        drw = com_app.create_temp_drawing()
+        if drw is None:
+            raise COMError("Failed to create temporary drawing")
+        import win32com.client.gencache as gencache  # type: ignore[import-untyped]
+
+        try:
+            gencache.EnsureModule(_NEST_TYPELIB_GUID, 0, 1, 3)
+            app = gencache.EnsureDispatch("Ar5axaps.Application")
+            nesting = app.Nesting
+        except Exception as e:
+            raise COMError(f"nest[advanced]: dispatch failed: {e}") from e
+        with contextlib.suppress(Exception):
+            nesting.SuppressDialogs = True
+        try:
+            nl = nesting.NewNestList(nest_path)
+        except Exception as e:
+            raise COMError(f"nest[advanced]: new_nest_list failed: {e}") from e
+        try:
+            for part in parts:
+                nest_part = nl.AddFile(str(part.get("name", "")))
+                nest_part.Required = int(part.get("count", 1))
+        except Exception as e:
+            raise COMError(f"nest[advanced]: add_file failed: {e}") from e
+        self._set_nest_list_options(nl, params)
+        try:
+            sl = nesting.NewSheetList()
+            if sheet_name:
+                sheet = nesting.SheetDatabase.FindSheet(sheet_name)
+                if sheet is None:
+                    raise COMError(  # noqa: TRY301
+                        f"nest[advanced]: sheet from library not found: {sheet_name}"
+                    )
+                paths = sheet.InsertInActiveDrawingAtPoint(0.0, 0.0)
+                nest_sheet = sl.Add(paths.Item(1))
+                try:
+                    nest_sheet.Thickness = float(sheet.Thickness.Thickness)
+                except Exception:
+                    nest_sheet.Thickness = 18.0
+            else:
+                sheet_geo = drw.create_rectangle(0, 0, sheet_width, sheet_height)
+                nest_sheet = sl.Add(sheet_geo.raw_dispatch)
+                nest_sheet.Thickness = 18.0
+            nest_sheet.Required = 1
+        except COMError:
+            raise
+        except Exception as e:
+            raise COMError(f"nest[advanced]: add_sheet failed: {e}") from e
+        try:
+            result = nesting.Nest(nl, sl)
+        except Exception as e:
+            raise COMError(f"nest[advanced]: nest failed: {e}") from e
+        finally:
+            with contextlib.suppress(Exception):
+                nesting.DeleteAllNestLists()
+        return {"success": True, "count": int(result.Count), "parts": parts}
 
     def _handler_find_drawing_files(self, params: dict[str, Any]) -> list[str]:
         from alphacam_cli.gateway.server import _app as com_app
