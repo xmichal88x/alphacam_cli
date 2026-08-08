@@ -80,7 +80,15 @@ class Drawing:
         elif fmt in ("igs", "iges"):
             self._drw.SaveIgesFile(path, False, ACAM_UNITS_METRIC)  # type: ignore[attr-defined]
         elif fmt == "stl":
-            self._drw.SaveStlFile(path, ACAM_STL_TYPE_STL, 0.1)  # type: ignore[attr-defined]
+            import pythoncom  # type: ignore[import-untyped]
+
+            try:
+                self._drw.SaveStlFile(path, ACAM_STL_TYPE_STL, 0.1)  # type: ignore[attr-defined]
+            except pythoncom.com_error as e:
+                raise ValueError(  # noqa: TRY003
+                    "stl export requires 3D surfaces/solids in the drawing "
+                    "(current drawing appears 2D)"
+                ) from e
         elif fmt == "emf":
             self._drw.SaveEmfFile(path, False, False)  # type: ignore[attr-defined]
         elif fmt == "wmf":

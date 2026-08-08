@@ -3,6 +3,7 @@ from __future__ import annotations
 from unittest.mock import MagicMock, patch
 
 import pytest
+import pythoncom  # type: ignore[import-untyped]
 
 from alphacam_cli.core.events import NcEventHandler
 
@@ -166,6 +167,88 @@ def test_save_as(mock_com: MagicMock) -> None:
             drw = Drawing(raw.ActiveDrawing)
             drw.save_as("test.amd")
             drw._drw.SaveAs.assert_called_once_with("test.amd")
+
+
+def test_export_dxf(mock_com: MagicMock) -> None:
+    with mock_com:
+        from alphacam_cli.com.manager import alphacam_context
+        from alphacam_cli.core.drawing import Drawing
+
+        with alphacam_context() as raw:
+            drw = Drawing(raw.ActiveDrawing)
+            drw.export("test.dxf", "dxf")
+            drw._drw.SaveDxfFile.assert_called_once_with("test.dxf", False, 2)
+
+
+def test_export_iges(mock_com: MagicMock) -> None:
+    from alphacam_cli.com.constants import ACAM_UNITS_METRIC
+
+    with mock_com:
+        from alphacam_cli.com.manager import alphacam_context
+        from alphacam_cli.core.drawing import Drawing
+
+        with alphacam_context() as raw:
+            drw = Drawing(raw.ActiveDrawing)
+            drw.export("test.igs", "iges")
+            drw._drw.SaveIgesFile.assert_called_once_with("test.igs", False, ACAM_UNITS_METRIC)
+
+
+def test_export_stl(mock_com: MagicMock) -> None:
+    from alphacam_cli.com.constants import ACAM_STL_TYPE_STL
+
+    with mock_com:
+        from alphacam_cli.com.manager import alphacam_context
+        from alphacam_cli.core.drawing import Drawing
+
+        with alphacam_context() as raw:
+            drw = Drawing(raw.ActiveDrawing)
+            drw.export("test.stl", "stl")
+            drw._drw.SaveStlFile.assert_called_once_with("test.stl", ACAM_STL_TYPE_STL, 0.1)
+
+
+def test_export_stl_com_error_raises_value_error(mock_com: MagicMock) -> None:
+    with mock_com:
+        from alphacam_cli.com.manager import alphacam_context
+        from alphacam_cli.core.drawing import Drawing
+
+        with alphacam_context() as raw:
+            drw = Drawing(raw.ActiveDrawing)
+            drw._drw.SaveStlFile.side_effect = pythoncom.com_error(-2147467259, "Unexpected error")
+            with pytest.raises(ValueError, match="stl export requires 3D surfaces"):
+                drw.export("test.stl", "stl")
+
+
+def test_export_emf(mock_com: MagicMock) -> None:
+    with mock_com:
+        from alphacam_cli.com.manager import alphacam_context
+        from alphacam_cli.core.drawing import Drawing
+
+        with alphacam_context() as raw:
+            drw = Drawing(raw.ActiveDrawing)
+            drw.export("test.emf", "emf")
+            drw._drw.SaveEmfFile.assert_called_once_with("test.emf", False, False)
+
+
+def test_export_wmf(mock_com: MagicMock) -> None:
+    with mock_com:
+        from alphacam_cli.com.manager import alphacam_context
+        from alphacam_cli.core.drawing import Drawing
+
+        with alphacam_context() as raw:
+            drw = Drawing(raw.ActiveDrawing)
+            drw.export("test.wmf", "wmf")
+            drw._drw.SaveWmfFile.assert_called_once_with("test.wmf", False, False)
+
+
+def test_export_unknown_format(mock_com: MagicMock) -> None:
+    with mock_com:
+        from alphacam_cli.com.manager import alphacam_context
+        from alphacam_cli.core.drawing import Drawing
+
+        with alphacam_context() as raw:
+            drw = Drawing(raw.ActiveDrawing)
+            with pytest.raises(ValueError, match="Unsupported export format: xyz"):
+                drw.export("test.xyz", "xyz")
 
 
 def test_output_nc(mock_com: MagicMock) -> None:
