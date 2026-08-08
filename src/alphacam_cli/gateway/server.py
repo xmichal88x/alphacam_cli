@@ -385,6 +385,8 @@ class GatewayServer:
                 )
             except Exception as e:
                 out["findsheet"] = f"FAIL: {e!r}"
+            sheet2: Any = None
+            paths2: Any = None
             try:
                 sheet2 = db.FindSheet("MDF_18")
                 paths2 = sheet2.InsertInActiveDrawingAtPoint(0.0, 0.0)
@@ -398,6 +400,42 @@ class GatewayServer:
                 )
             except Exception as e:
                 out["drawing_after_sheet_insert"] = f"FAIL: {e!r}"
+            nd2: Any = None
+            try:
+                drw2b = com_app.get_active_drawing()
+                nd2 = drw2b.create_nest_data(r"C:\temp\nest_out\nest.anl")
+                out["nd2"] = f"OK: {nd2!r}"
+            except Exception as e:
+                out["nd2"] = f"FAIL: {e!r}"
+            if nd2 is not None:
+                try:
+                    r = nd2.AddSheet(paths2.Item(1), sheet2.Material.Name, 18, sheet2.Quantity)
+                    out["addsheet_item1"] = f"OK: {r!r}"
+                except Exception as e:
+                    out["addsheet_item1"] = f"FAIL: {e!r}"
+                try:
+                    r = nd2.DoNest()
+                    out["donest_item1"] = f"OK: {r!r}"
+                except Exception as e:
+                    out["donest_item1"] = f"FAIL: {e!r}"
+                try:
+                    drw3 = com_app.get_active_drawing()
+                    out["drawing_after_nest_item1"] = (
+                        f"OK geometries={drw3.geometries_count} tool_paths={drw3.tool_paths_count}"
+                    )
+                except Exception as e:
+                    out["drawing_after_nest_item1"] = f"FAIL: {e!r}"
+                if out.get("addsheet_item1", "").startswith("FAIL"):
+                    try:
+                        r = nd2.AddSheet(paths2, sheet2.Material.Name, 18, sheet2.Quantity)
+                        out["addsheet_collection"] = f"OK: {r!r}"
+                    except Exception as e:
+                        out["addsheet_collection"] = f"FAIL: {e!r}"
+                    try:
+                        r = nd2.DoNest()
+                        out["donest_collection"] = f"OK: {r!r}"
+                    except Exception as e:
+                        out["donest_collection"] = f"FAIL: {e!r}"
         elif app3 is not None:
             n2: Any = None
             try:
