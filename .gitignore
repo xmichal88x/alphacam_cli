@@ -26,3 +26,6 @@ Thumbs.db
 
 # Diagnostic output
 alphacam_diagnostic_*.log
+
+# Huge vendored SDK (CHM/DLL, ~500MB) - keep on disk only
+docs/alphacam-ecosystem/sdk-download/

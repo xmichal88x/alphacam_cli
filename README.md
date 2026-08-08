@@ -70,11 +70,13 @@ Run CLI commands from **any machine (Linux, macOS)** while AlphaCAM runs on a se
 ### Architecture
 
 ```
-┌─────────────────┐     Tailscale / LAN      ┌──────────────────┐
-│  Your Machine   │  ──── TCP :8721 ──────►  │  Windows Server  │
-│  alphacam CLI   │                           │  alphacam-gateway │
-│  (Linux/macOS)  │                           │  → AlphaCAM COM  │
-└─────────────────┘                           └──────────────────┘
+┌─────────────────────────┐   Tailscale :8721    ┌───────────────────────────┐
+│  Linux / macOS Client   │  ◄──────────────►   │  Windows (AlphaCAM host)  │
+│                         │                      │                           │
+│  alphacam --remote      │                      │  alphacam-gateway         │
+│  --host 100.x.x.x       │                      │    ↓ (COM)                │
+│                         │                      │  AlphaCAM Application     │
+└─────────────────────────┘                      └───────────────────────────┘
 ```
 
 ### Server Setup (Windows)
@@ -88,7 +90,42 @@ python -m alphacam_cli.gateway.service  # starts on :8721
 
 Make sure port `8721` is accessible over Tailscale (Tailscale does this automatically — no firewall config needed).
 
-### Client Usage (Linux / macOS)
+### Client Setup (Linux)
+
+#### 1. Install Tailscale (if not already installed)
+
+For a standard Linux installation, follow [Tailscale's docs](https://tailscale.com/download).
+
+For an **LXC container** on Proxmox, ensure the TUN device is mounted in the container config:
+
+```bash
+# On the Proxmox host, add:
+lxc.cgroup2.devices.allow: c 10:200 rwm
+lxc.mount.entry: /dev/net/tun dev/net/tun none bind,create=file
+```
+
+Then inside the container:
+
+```bash
+curl -fsSL https://pkgs.tailscale.com/stable/ubuntu/$(lsb_release -cs).noarmor.gpg \
+  | tee /usr/share/keyrings/tailscale-archive-keyring.gpg >/dev/null
+curl -fsSL https://pkgs.tailscale.com/stable/ubuntu/$(lsb_release -cs).tailscale-keyring.list \
+  | tee /etc/apt/sources.list.d/tailscale.list
+
+apt update && apt install -y tailscale
+tailscale up
+```
+
+Open the displayed URL, log in with your Tailscale account, and the client joins your existing tailnet.
+
+#### 2. Verify connectivity
+
+```bash
+tailscale status            # shows all machines in the tailnet
+ping 100.x.x.x              # Windows machine with AlphaCAM
+```
+
+#### 3. Use the CLI
 
 ```bash
 # Connect to gateway through Tailscale IP
@@ -112,6 +149,12 @@ Save remote settings to `~/.alphacam/config.json`:
   "remote_host": "100.x.x.x",
   "remote_port": 8721
 }
+```
+
+You can also use `--save-config` to write the current remote settings to the config file:
+
+```bash
+alphacam --remote --host 100.x.x.x --save-config connect info
 ```
 
 After setting this, you can omit `--remote` and `--host`:
@@ -628,7 +671,8 @@ Without `--remote`, this tool requires the AlphaCAM COM API (Windows only).
 - Verify the gateway server is running on Windows: `python -m alphacam_cli.gateway.service`
 - Check connectivity: `ping 100.x.x.x` (Tailscale IP)
 - Verify port: `nc -zv 100.x.x.x 8721`
-- Ensure Tailscale is connected on both machines
+- Ensure Tailscale is connected on both machines: `tailscale status`
+- If the client is an LXC container, verify `/dev/net/tun` is mounted
 
 ### `FAIL: Could not connect to AlphaCAM`
 

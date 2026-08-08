@@ -95,12 +95,47 @@ Register-ScheduledTask -TaskName "AlphaCAMGateway" -Action $action -Trigger $tri
 ### Tailscale (recommended)
 
 1. Install Tailscale on both machines
-2. Both machines must be in the same Tailscale network
+2. Both machines must be in the same Tailscale network (same account)
 3. Tailscale automatically allows all TCP traffic — no firewall config needed
 4. Find the Windows server's Tailscale IP:
    ```bash
    tailscale status
    ```
+
+#### Installing Tailscale on a Linux client (LXC container)
+
+If your client is an LXC container (e.g., on Proxmox), the TUN device must be enabled in the container config:
+
+```bash
+# On the Proxmox host, add to container config:
+lxc.cgroup2.devices.allow: c 10:200 rwm
+lxc.mount.entry: /dev/net/tun dev/net/tun none bind,create=file
+```
+
+Then inside the container:
+
+```bash
+# Add Tailscale official repo
+curl -fsSL https://pkgs.tailscale.com/stable/ubuntu/$(lsb_release -cs).noarmor.gpg \
+  | tee /usr/share/keyrings/tailscale-archive-keyring.gpg >/dev/null
+curl -fsSL https://pkgs.tailscale.com/stable/ubuntu/$(lsb_release -cs).tailscale-keyring.list \
+  | tee /etc/apt/sources.list.d/tailscale.list
+
+apt update
+apt install -y tailscale
+
+# Start the daemon and authenticate
+tailscaled --state=/var/lib/tailscale/tailscaled.state &
+tailscale up
+# Open the displayed URL in a browser and log in with your Tailscale account
+```
+
+Verify connectivity:
+
+```bash
+tailscale status
+ping <windows-server-tailscale-ip>
+```
 
 ### LAN (no Tailscale)
 
