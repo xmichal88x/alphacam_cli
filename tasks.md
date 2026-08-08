@@ -2,6 +2,21 @@
 
 > Ocena ogólna: ~8/10. Testowany E2E na żywym AlphaCAM 2025 Router przez gateway (Tailscale). Gotowy do beta.
 
+## Nawigacja po dokumentacji (czytaj na start)
+
+| Gdzie | Co znajdziesz | Kiedy użyć |
+|---|---|---|
+| `docs/alphacam-ecosystem/alphacam-provided-examples/API/Python/PyCharm Examples/NestingFromCSV/Alphacam_Nesting.py` | **PEŁNY typelib Nesting v3.0 w Pythonie** — sygnatury wszystkich metod/properties (INesting, INestList, INestData, ISheetDatabase, IDatabaseSheet, ISheetList...) | Szukasz sygnatury API nestingu (Gap, EdgeGap, TotalTime, FindSheet, InsertInActiveDrawingAtPoint...) |
+| `docs/alphacam-ecosystem/alphacam-provided-examples/API/` | Oficjalne przykłady Hexagon (NestingFromCSV.py — pełny flow, VBMacros, AcamAddInsAPI) | Wzorzec oficjalnego użycia API |
+| `docs/alphacam-ecosystem/sdk-download/standalone/help/*.chm` | Pełne CHM: ACAMAPI.chm (API), ACAM4.chm (80 MB — opisy GUI: sheet_database.htm, nest_parts.htm) | Opisy GUI nestingu, opcje dialogów; rozpakuj przez `7z x plik.chm` |
+| `docs/api_docs/` | Podzielona dokumentacja API (Drawing, Tools, Machining...) | Ogólny opis obiektów core API |
+| `docs/alphacam-ecosystem/docs/chm-files/` | Wyciągnięte CHM → .md (Nesting.md, acamapi.md) | Szybki ogólny przegląd |
+| `docs/gateway.md` | Dokumentacja gateway RPC | Pytania o RPC/handlery |
+| `/root/projects/_infra/dostepy-serwer.md` | Dostęp do laptopa z AlphaCAM (SSH, usługa, port 8721) | Potrzebujesz połączyć się z maszyną |
+| Poniższe sekcje + logi sesji | Recepty E2E (Session 0: reg copy HKCU→HKU\.DEFAULT, EnsureModule typelibu przed App.Nesting, FindSheet→InsertInActiveDrawingAtPoint→paths.Item(1)→AddSheet, --advanced) | Chcesz uruchomić/wzmocnić nesting |
+
+Kluczowe recepty E2E są w sekcjach "SESSION 0 DZIAŁA" i "ARKUSZ Z BIBLIOTEKI" poniżej.
+
 ---
 
 ## P0 — MUST-FIX przed v1.0.0 (blokery)

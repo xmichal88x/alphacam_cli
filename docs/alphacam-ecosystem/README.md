@@ -1,236 +1,37 @@
-# Alphacam Experimental Plugins
+# AlphaCAM — Dokumentacja i zasoby SDK
 
-A repository for developing and testing Alphacam macros and addins using VBA and C#. This repository provides a complete development environment with tools for accessing CHM documentation and testing your automation solutions.
+Mapa katalogu `docs/alphacam-ecosystem/`: dokumentacja API AlphaCAM, oficjalne przykłady od Hexagon oraz pliki SDK (.NET wrapper + CHM + DLL-ki). Katalog jest lokalnym zapasem materiałów, z których czerpią narzędzia `alphacam_cli`.
 
-## 📁 Repository Structure
+## Struktura
 
-```
-Alphacam-Experimental-Plugins/
-├── vba-macros/              # VBA macro development
-│   ├── examples/            # Example VBA macros
-│   ├── templates/           # Template files for new macros
-│   ├── tests/               # Test documentation and files
-│   └── README.md
-├── csharp-addins/           # C# addin development
-│   ├── examples/            # Example C# addins
-│   ├── templates/           # Template projects
-│   ├── tests/               # Unit and integration tests
-│   ├── lib/                 # Shared libraries and dependencies
-│   └── README.md
-├── docs/                    # Documentation
-│   ├── chm-files/           # Place .chm API documentation here
-│   ├── api-reference/       # Extracted API documentation
-│   ├── guides/              # Development guides and tutorials
-│   └── README.md
-├── tools/                   # Development tools
-│   └── chm-reader/          # Tools for reading CHM files
-│       ├── extract_chm.py
-│       ├── chm_to_html.py
-│       ├── search_chm.py
-│       ├── requirements.txt
-│       └── README.md
-└── scripts/                 # Helper scripts
-    ├── setup-chm-tools.sh   # Setup for Linux/Mac
-    ├── setup-chm-tools.bat  # Setup for Windows
-    └── README.md
-```
+| Ścieżka | Zawartość | Uwagi |
+|---|---|---|
+| `docs/chm-files/` | Wyciągnięte CHM → `.md`: `Nesting.md`, `acamapi.md`, `AEDITAPI.md`, `ConstraintsAPI.md`, `Feature.md`, `Primitives.md` | Najszybsze źródło sygnatur API bez rozpakowywania CHM |
+| `docs/api-reference/` | README.md (placeholder) | Rezerwowane pod referencję API |
+| `docs/guides/` | README.md (placeholder) | Rezerwowane pod poradniki |
+| `alphacam-provided-examples/API/AcamAddInsAPI/` | Oficjalne addiny VBA: `SplitNest.bas`, `ReverseSideNesting.bas` | Przykłady integracji z API nestingu |
+| `alphacam-provided-examples/API/VBMacros/` | `Nest.arb` — makro nesticowe | VBA/ARB, nie Python |
+| `alphacam-provided-examples/API/Python/PyCharm Examples/NestingFromCSV/` | `Alphacam_Nesting.py` (pełny typelib Nesting v3.0 w Pythonie), `NestingFromCSV.py` (oficjalny przykład pełnego flow nestingu) | **Główne źródło sygnatur API nestingu** |
+| `sdk-download/` | README.md + `docs/` (`HELP_FILES_STRUCTURE.md`, `HELP_SYSTEM.md` — po rosyjsku) | Opis SDK pobranego z portalu Hexagon |
+| `sdk-download/AlphacamSDK/` | Wrapper .NET: `src/AlphacamSDK.cs`, `LibraryManager.cs`, `Interfaces/` (IAlphacamCore, IAlphacamGeometry, IAlphacamAutomation), `sdk_config.json`, `docs/` (AUDIT_REPORT, INSTALLATION_GUIDE, PORTABLE_*, ROADMAP, TASKS) | **Uwaga: NIE zawiera nestingu** — tylko Core/Geometry/Automation (potwierdzone) |
+| `sdk-download/standalone/help/` | Pełne CHM: `ACAM4.chm` (80 MB), `ACAMAPI.chm`, `AEDITAPI.chm`, `ConstraintsAPI.chm`, `AcamReports.chm`, `Feature.chm`, `primitives.chm`, `R2V.chm`, `ACAM4LK.chm`, `AEdit3.chm`, `ModuleWorks_-_Documentation.chm` (149 MB) | Pełna dokumentacja w formie źródłowej |
+| `sdk-download/standalone/lib/` | DLL-ki AlphaCAM + `Interop.AlphaCAM*.dll`, `NestUtilities.dll` | Biblioteki dla integracji .NET |
 
-## 🚀 Getting Started
+## Jak korzystać
 
-### Prerequisites
+- **Sygnatury API nestingu** → `alphacam-provided-examples/API/Python/PyCharm Examples/NestingFromCSV/Alphacam_Nesting.py` (pełny typelib v3.0). Szukaj np. `class INestList`, `class ISheetDatabase`, `"TotalTime"`.
+- **Oficjalne przykłady** → `alphacam-provided-examples/API/...` (addiny VBA, makro `Nest.arb`, przykładowy flow w `NestingFromCSV.py`).
+- **Opisy GUI (opcje dialogów nestingu: sheet database, nest parts)** → rozpakuj `sdk-download/standalone/help/ACAM4.chm` (`7z x`) i czytaj `menus/nesting/sheet_database.htm`, `menus/utils/nest_parts.htm`.
+- **Ogólne API** → `docs/chm-files/*.md` (już wyciągnięte z CHM) albo `sdk-download/standalone/help/` (pełne CHM).
+- **SDK .NET** → `sdk-download/AlphacamSDK/`. Tylko Core/Geometry/Automation — do pracy z nestingiem użyj typeliba Pythona albo Interop z `standalone/lib/`.
 
-- **For VBA Development**: 
-  - Alphacam installed
-  - Basic VBA knowledge
-  
-- **For C# Development**:
-  - .NET SDK 6.0 or later
-  - Visual Studio or VS Code
-  - Alphacam installed
+## Narzędzia
 
-- **For CHM Reader Tools** (optional):
-  - Python 3.6 or later
-  - pip package manager
+- **Rozpakowanie CHM na Linuxie**: `7z x plik.chm` (wymaga `p7zip-full`). Wystarczające, choć można też użyć `extract_chm.py`/`chm.py` — patrz skrypty w repo.
+- **Czytanie plików .htm po rozpakowaniu**: grep/cat — `grep -ri "sheet database" menus/` albo `cat menus/nesting/sheet_database.htm` (surowy HTML, pomijaj znaczniki).
 
-### Initial Setup
+## Co NIE jest w tym katalogu
 
-1. **Clone the repository**:
-   ```bash
-   git clone https://github.com/h0witzer/Alphacam-Experimental-Plugins.git
-   cd Alphacam-Experimental-Plugins
-   ```
-
-2. **Review API documentation**:
-   - See **[docs/chm-files/README.md](docs/chm-files/README.md)** for complete API reference
-   - 6 CHM files with 585+ pages of documentation covering all Alphacam APIs
-
-3. **Add your CHM documentation files** (if needed):
-   - CHM files are already included in `docs/chm-files/`
-   - Additional documentation can be placed there
-
-4. **Set up CHM reader tools** (optional, for Linux/Mac or advanced Windows users):
-   ```bash
-   # Linux/Mac
-   ./scripts/setup-chm-tools.sh
-   
-   # Windows
-   scripts\setup-chm-tools.bat
-   ```
-
-## 📖 API Documentation
-
-This repository includes comprehensive API documentation for all Alphacam APIs:
-
-- **[acamapi](docs/chm-files/acamapi.md)** - Core CAD/CAM API (194 pages)
-- **[Nesting](docs/chm-files/Nesting.md)** - Sheet nesting & optimization (152 pages)
-- **[AEDITAPI](docs/chm-files/AEDITAPI.md)** - Editor automation (154 pages)
-- **[Feature](docs/chm-files/Feature.md)** - Feature extraction (58 pages)
-- **[Primitives](docs/chm-files/Primitives.md)** - Utility library (15 pages)
-- **[ConstraintsAPI](docs/chm-files/ConstraintsAPI.md)** - Parametric constraints (12 pages)
-
-**See [docs/chm-files/README.md](docs/chm-files/README.md)** for the complete overview with:
-- Detailed API descriptions
-- Use case matrix
-- Quick start guides
-- Code examples
-- API relationships
-
-### Viewing CHM Documentation
-
-### On Windows
-Simply double-click the .chm files in `docs/chm-files/` to view them in Windows Help Viewer.
-
-### On Linux/Mac or for Advanced Usage
-Use the provided Python tools to extract and search CHM files:
-
-```bash
-# Extract CHM contents to HTML
-python tools/chm-reader/extract_chm.py docs/chm-files/your-api.chm --output docs/api-reference/extracted
-
-# Convert to browsable HTML with index
-python tools/chm-reader/chm_to_html.py docs/chm-files/your-api.chm --output docs/api-reference/html
-
-# Search for API methods
-python tools/chm-reader/search_chm.py docs/chm-files/your-api.chm --query "DrawLine"
-```
-
-## 🔧 VBA Macro Development
-
-### Creating a New Macro
-
-1. Copy the template:
-   ```bash
-   cp vba-macros/templates/MacroTemplate.bas vba-macros/examples/MyNewMacro.bas
-   ```
-
-2. Edit your macro in a text editor or VBA IDE
-
-3. Test in Alphacam
-
-4. Document your tests in `vba-macros/tests/`
-
-See [vba-macros/README.md](vba-macros/README.md) for detailed instructions.
-
-## 🔨 C# Addin Development
-
-### Creating a New Addin
-
-1. Copy the template:
-   ```bash
-   cp csharp-addins/templates/AddinTemplate.cs csharp-addins/examples/MyNewAddin.cs
-   ```
-
-2. Implement your addin logic
-
-3. Build the project:
-   ```bash
-   dotnet build
-   ```
-
-4. Run tests:
-   ```bash
-   dotnet test
-   ```
-
-5. Deploy to Alphacam's addin directory
-
-See [csharp-addins/README.md](csharp-addins/README.md) for detailed instructions.
-
-## 🧪 Testing
-
-### VBA Testing
-VBA uses manual testing with documented test cases. See [vba-macros/tests/README.md](vba-macros/tests/README.md) for the testing approach.
-
-### C# Testing
-C# addins use xUnit or NUnit for automated testing:
-
-```bash
-# Run all tests
-dotnet test
-
-# Run specific test
-dotnet test --filter "FullyQualifiedName~HelloWorldTests"
-
-# Generate coverage report
-dotnet test /p:CollectCoverage=true
-```
-
-## 📚 Documentation
-
-- **VBA Macros**: [vba-macros/README.md](vba-macros/README.md)
-- **C# Addins**: [csharp-addins/README.md](csharp-addins/README.md)
-- **CHM Tools**: [tools/chm-reader/README.md](tools/chm-reader/README.md)
-- **API Documentation**: Place CHM files in [docs/chm-files/](docs/chm-files/)
-- **Development Guides**: [docs/guides/](docs/guides/)
-
-## 🤝 Contributing
-
-1. Create a new branch for your feature or fix
-2. Follow the existing code structure and conventions
-3. Test your changes thoroughly
-4. Document your code and provide examples
-5. Submit a pull request
-
-## 📝 Best Practices
-
-### VBA Macros
-- Use `Option Explicit` for type safety
-- Implement error handling with `On Error GoTo`
-- Document your code with comments
-- Keep macros modular and reusable
-
-### C# Addins
-- Follow C# naming conventions
-- Use dependency injection where possible
-- Write comprehensive unit tests
-- Document public APIs with XML comments
-- Handle exceptions gracefully
-
-## 🛠️ Troubleshooting
-
-### CHM Files Won't Open on Windows
-- Right-click the file → Properties → Click "Unblock" → OK
-
-### Python Tools Installation Issues
-- Ensure Python 3.6+ is installed: `python --version`
-- Upgrade pip: `pip install --upgrade pip`
-- Install dependencies manually: `pip install pychm beautifulsoup4 lxml`
-
-### C# Build Errors
-- Verify .NET SDK is installed: `dotnet --version`
-- Restore packages: `dotnet restore`
-- Clean and rebuild: `dotnet clean && dotnet build`
-
-## 📄 License
-
-[Add your license information here]
-
-## 👥 Authors
-
-[Add author/maintainer information here]
-
-## 🔗 Resources
-
-- [Alphacam Official Website](https://www.alphacam.com/)
-- [VBA Reference](https://docs.microsoft.com/en-us/office/vba/api/overview/)
-- [.NET Documentation](https://docs.microsoft.com/en-us/dotnet/)
+- Pełna dokumentacja VBA (tylko wyciągi API i przykłady).
+- Aktywne pliki instalacyjne AlphaCAM — `standalone/` to pobrane SDK + CHM, nie instalator.
+- Dokumentacja programistyczna w języku polskim — `sdk-download/docs/HELP_SYSTEM.md` i `HELP_FILES_STRUCTURE.md` są po rosyjsku.

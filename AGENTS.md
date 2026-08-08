@@ -95,3 +95,33 @@ Przed uznaniem zadania za zakończone:
 3. Uruchom testy (jednostkowe i integracyjne)
 4. Sprawdź czy nie ma regresji
 5. **DOPIERO WTEDY** zmień status `todowrite` na `completed`
+
+## 8. Dokumentacja — gdzie szukać
+
+**Najpierw przeczytaj `tasks.md`** — stan projektu, logi sesji i RECEPTY (np. nesting w Session 0: reg copy HKCU→HKU\.DEFAULT, wymóg `gencache.EnsureModule` typelibu przed `App.Nesting`, sekwencja FindSheet→InsertInActiveDrawingAtPoint→paths.Item(1)→AddSheet, tryb `--advanced` z pełnym NestList API).
+
+| Lokalizacja | Co zawiera | Kiedy użyć |
+|---|---|---|
+| `docs/api_docs/` | Podzielona dokumentacja API AlphaCAM (01_Events, 02_Application, 04_Drawing, 05_Geometry, 06_Tools, 07_Machining, 08_Styles, 10_Utilities; README.md) | Ogólny opis obiektów API (POLSKA) |
+| `docs/alphacam-ecosystem/docs/chm-files/` | CHM wyciągnięte do .md: Nesting.md, acamapi.md, AEDITAPI.md, ConstraintsAPI.md, Feature.md, Primitives.md | Ogólne opisy API (szybki podgląd bez rozpakowywania) |
+| `docs/alphacam-ecosystem/alphacam-provided-examples/API/Python/PyCharm Examples/NestingFromCSV/Alphacam_Nesting.py` | PEŁNY TYPELIB Nesting v3.0 w Pythonie — sygnatury INesting, INestList, INestData, ISheetDatabase, IDatabaseSheet itd. | **Szukanie sygnatur metod/properties** (najszybsze źródło) |
+| `docs/alphacam-ecosystem/alphacam-provided-examples/API/Python/PyCharm Examples/NestingFromCSV/NestingFromCSV.py` | Oficjalny przykład pełnego flow nestingu | Wzorzec E2E flow nestingu |
+| `docs/alphacam-ecosystem/sdk-download/standalone/help/` | PEŁNE CHM: ACAMAPI.chm (API), ACAM4.chm (~80MB GUI docs), AcamReports.chm, ModuleWorks_... | Opisy GUI (po rozpakowaniu): `menus/nesting/sheet_database.htm`, `menus/utils/nest_parts.htm` |
+| `docs/alphacam-ecosystem/sdk-download/standalone/lib/` | DLL-ki + Interop.AlphaCAM*.dll, .tlb | Typeliby COM, interop .NET |
+| `docs/alphacam-ecosystem/sdk-download/AlphacamSDK/` | Wrapper .NET (IAlphacamCore/Geometry/Automation) — NIE zawiera nestingu | Automatyzacja .NET, nie do nestingu |
+| `docs/gateway.md` | Dokumentacja gateway RPC | Komunikacja z usługą AlphaCAM Gateway (Session 0) |
+| `tasks.md` | Stan projektu, logi sesji, recepty E2E | **Początek każdej sesji** + recepty Session 0 |
+| `C:/temp/...` (katalog w repo) | Skrypty probe (probe_gui.py itd.) | Debugowanie na Windows |
+| `../_infra/dostepy-serwer.md` (/root/projects/_infra/) | Dostęp do laptopa z AlphaCAM: SSH 48797@100.71.109.69, usługa AlphaCAMGateway Session 0, port 8721, reg copy | **Dostęp do maszyny** (SSH/zdalne wykonanie) |
+
+**Rozpakowanie CHM na Linuxie** (wymaga `p7zip-full`):
+
+```bash
+sudo apt install p7zip-full
+7z x plik.chm -oWynikowyKatalog
+```
+
+**Wskazówki:**
+- Sygnatury API najszybciej znajdziesz w `Alphacam_Nesting.py` (pełny typelib Nesting v3.0).
+- Opisów GUI (opcje, okna dialogowe) szukaj w rozpakowanym `ACAM4.chm`: `menus/nesting/sheet_database.htm` oraz `menus/utils/nest_parts.htm`.
+- Recepty E2E (Session 0, nesting) są w `tasks.md` — **czytaj `tasks.md` na początku sesji**.
