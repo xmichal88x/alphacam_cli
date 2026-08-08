@@ -858,6 +858,9 @@ class GatewayServer:
         out["start"] = "OK"
 
         def work() -> None:
+            import pythoncom  # type: ignore[import-untyped]
+
+            pythoncom.CoInitialize()
             try:
                 import win32com.client.gencache as gencache  # type: ignore[import-untyped]
 
@@ -933,12 +936,13 @@ class GatewayServer:
                     out["cdm_new_job"] = f"OK: {job!r}"
                 except Exception as e:
                     out["cdm_new_job"] = f"FAIL: {e!r}"
-                try:
-                    db = am.ImportCDMDatabase()
-                    out["cdm_import_db"] = f"OK: {db!r}"
-                except Exception as e:
-                    out["cdm_import_db"] = f"FAIL: {e!r}"
-                out["result"] = "CDM_OK" if authorised else "CDM_FAIL"
+            try:
+                db = am.ImportCDMDatabase()
+                out["cdm_import_db"] = f"OK: {db!r}"
+            except Exception as e:
+                out["cdm_import_db"] = f"FAIL: {e!r}"
+            out["result"] = "CDM_OK" if authorised else "CDM_FAIL"
+            pythoncom.CoUninitialize()
 
         t = threading.Thread(target=work, daemon=True)
         t.start()
