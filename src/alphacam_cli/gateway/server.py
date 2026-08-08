@@ -314,7 +314,7 @@ class GatewayServer:
             import win32com.client.gencache as gencache  # type: ignore[import-untyped]
 
             mod = gencache.EnsureModule("{6702E3DF-142C-4627-8EA2-4C47EBC78441}", 0, 1, 3)
-            out["ensuremodule"] = f"OK: {mod}"
+            out["ensuremodule"] = f"OK: {mod!r}"
         except Exception as e:
             out["ensuremodule"] = f"FAIL: {e!r}"
         app3: Any = None
@@ -324,14 +324,14 @@ class GatewayServer:
 
             app3 = gencache.EnsureDispatch("Ar5axaps.Application")
             n = app3.Nesting
-            out["nesting_after_ensure"] = f"OK: {n}"
+            out["nesting_after_ensure"] = f"OK: {n!r}"
         except Exception as e:
             out["nesting_after_ensure"] = f"FAIL: {e!r}"
         if n is not None:
             db: Any = None
             try:
                 db = n.SheetDatabase
-                out["sheetdatabase"] = f"OK: {db}"
+                out["sheetdatabase"] = f"OK: {db!r}"
             except Exception as e:
                 out["sheetdatabase"] = f"FAIL: {e!r}"
             mat_coll: Any = None
@@ -351,14 +351,14 @@ class GatewayServer:
             if mat0 is not None:
                 try:
                     mat = mat0.FindMaterial(mat0.Name)
-                    out["findmaterial"] = f"OK: {mat}"
+                    out["findmaterial"] = f"OK: {mat!r}"
                 except Exception as e:
                     out["findmaterial"] = f"FAIL: {e!r}"
             thick: Any = None
             if mat is not None:
                 try:
                     thick = mat.FindThickness(18.0, "mm")
-                    out["thickness18"] = f"OK: {thick}"
+                    out["thickness18"] = f"OK: {thick!r}"
                 except Exception as e:
                     out["thickness18"] = f"FAIL: {e!r}"
             if thick is not None:
@@ -385,18 +385,31 @@ class GatewayServer:
                 )
             except Exception as e:
                 out["findsheet"] = f"FAIL: {e!r}"
+            try:
+                sheet2 = db.FindSheet("MDF_18")
+                paths2 = sheet2.InsertInActiveDrawingAtPoint(0.0, 0.0)
+                out["sheet_insert_paths"] = f"OK: {paths2!r} type={type(paths2).__name__}"
+            except Exception as e:
+                out["sheet_insert_paths"] = f"FAIL: {e!r}"
+            try:
+                drw2 = com_app.get_active_drawing()
+                out["drawing_after_sheet_insert"] = (
+                    f"OK geometries={drw2.geometries_count} tool_paths={drw2.tool_paths_count}"
+                )
+            except Exception as e:
+                out["drawing_after_sheet_insert"] = f"FAIL: {e!r}"
         elif app3 is not None:
             n2: Any = None
             try:
                 n2 = app3.GetNestInformation()
-                out["nest_information"] = f"OK: {n2}"
+                out["nest_information"] = f"OK: {n2!r}"
             except Exception as e:
                 out["nest_information"] = f"FAIL: {e!r}"
             try:
                 sdb = n2.SheetDB
-                out["sheetdb_legacy"] = f"OK: {sdb}"
+                out["sheetdb_legacy"] = f"OK: {sdb!r}"
                 paths = sdb.InsertSheet(0)
-                out["sheetdb_insert0"] = f"OK: {paths}"
+                out["sheetdb_insert0"] = f"OK: {paths!r} type={type(paths).__name__}"
             except Exception as e:
                 out["sheetdb_insert0"] = f"FAIL: {e!r}"
         else:
