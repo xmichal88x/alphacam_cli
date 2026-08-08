@@ -27,19 +27,10 @@ def create(
     require_platform()
     with alphacam_context(visible=get_visible()) as raw:
         ac = resolve_app(raw)
-        drw = ac.create_temp_drawing()
+        drw = ac.new_drawing(width, height, fillet, text)
         if drw is None:
             console.print("[red]Failed to create drawing[/red]")
             raise typer.Exit(code=1)
-
-        rect = drw.create_rectangle(0, 0, width, height)
-        if fillet > 0:
-            rect.fillet(fillet)
-
-        if text:
-            drw.create_text(text, 5, height / 2, 4)
-
-        drw.zoom_all()
 
         t = Table(title="Drawing Created")
         t.add_column("Property", style="cyan")

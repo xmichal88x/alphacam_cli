@@ -47,7 +47,7 @@ class TestProductionWorkflows:
             open(probe, "w").close()
             os.remove(probe)
         except OSError as e:
-            raise RuntimeError(
+            raise RuntimeError(  # noqa: TRY003
                 f"Cannot write to {d}. Set ALPHACAM_TEST_DIR to a writable path (e.g. D:\\temp)."
             ) from e
         return d

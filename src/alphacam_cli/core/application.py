@@ -126,11 +126,27 @@ class Application:
             raise RuntimeError("Failed to create mill data")  # noqa: TRY003
         return MillData(raw)
 
-    def new_drawing(self) -> None:
+    def new_drawing(
+        self,
+        width: float = 100,
+        height: float = 50,
+        fillet: float = 0,
+        text: str = "",
+    ) -> Drawing | None:
         try:
             self._app.New()  # type: ignore[attr-defined]
         except Exception as e:
             raise RuntimeError(f"Failed to create new drawing: {e}") from e  # noqa: TRY003
+        drw = self.get_active_drawing()
+        if drw is None:
+            return None
+        rect = drw.create_rectangle(0, 0, width, height)
+        if fillet > 0:
+            rect.fillet(fillet)
+        if text:
+            drw.create_text(text, 5, height / 2, 4)
+        drw.zoom_all()
+        return drw
 
     def quit(self) -> None:
         try:

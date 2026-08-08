@@ -55,8 +55,39 @@ def test_new_drawing(mock_com: MagicMock) -> None:
 
         with alphacam_context() as raw:
             ac = Application(raw)
-            ac.new_drawing()
+            drw = ac.new_drawing(200, 100, 5, "Hello")
+            assert drw is not None
             raw.New.assert_called_once()
+            raw.ActiveDrawing.CreateRectangle.assert_called_once_with(0, 0, 200, 100)
+            raw.ActiveDrawing.CreateRectangle.return_value.Fillet.assert_called_once_with(5)
+            raw.ActiveDrawing.CreateText2.assert_called_once_with("Hello", 5, 50, 4)
+            raw.ActiveDrawing.ZoomAll.assert_called_once()
+
+
+def test_new_drawing_no_geometry(mock_com: MagicMock) -> None:
+    with mock_com:
+        from alphacam_cli.com.manager import alphacam_context
+
+        with alphacam_context() as raw:
+            ac = Application(raw)
+            drw = ac.new_drawing()
+            assert drw is not None
+            raw.New.assert_called_once()
+            raw.ActiveDrawing.CreateRectangle.assert_called_once_with(0, 0, 100, 50)
+            raw.ActiveDrawing.CreateRectangle.return_value.Fillet.assert_not_called()
+            raw.ActiveDrawing.CreateText2.assert_not_called()
+            raw.ActiveDrawing.ZoomAll.assert_called_once()
+
+
+def test_new_drawing_none(mock_com: MagicMock) -> None:
+    with mock_com:
+        from alphacam_cli.com.manager import alphacam_context
+
+        with alphacam_context() as raw:
+            ac = Application(raw)
+            raw.ActiveDrawing = None
+            result = ac.new_drawing()
+            assert result is None
 
 
 def test_quit(mock_com: MagicMock) -> None:

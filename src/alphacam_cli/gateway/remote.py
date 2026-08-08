@@ -174,8 +174,17 @@ class RemoteApplication:
     def get_nesting(self) -> Any:
         return _RemoteNesting(self._session)
 
-    def new_drawing(self) -> None:
-        pass
+    def new_drawing(
+        self,
+        width: float = 100,
+        height: float = 50,
+        fillet: float = 0,
+        text: str = "",
+    ) -> _DrawingProxy | None:
+        info = self._session.new_drawing(width, height, fillet, text)
+        if info is None:
+            return None
+        return _DrawingProxy(self._session, info)
 
 
 class _RemoteMillData:
