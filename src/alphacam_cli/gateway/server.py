@@ -370,7 +370,7 @@ class GatewayServer:
         side = -1 if tool_side == "outside" else 1
         for geo in drw.geometries():
             geo.tool_in_out = side
-            geo.selected = True
+        drw.select_all_geometries()
         md = com_app.create_mill_data()
         md.safe_rapid_level = float(params.get("rapid", 10))
         md.rapid_down_to = 2.0
