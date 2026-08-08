@@ -917,6 +917,30 @@ class GatewayServer:
             except Exception as e:
                 _am_log("cdm_jobs_count", False, repr(e))
                 out["cdm_jobs_count"] = f"FAIL: {e!r}"
+            try:
+                names = []
+                for ji in range(1, am.Jobs.Count + 1):
+                    try:
+                        jj = am.Jobs.Item(ji)
+                        try:
+                            dets = jj.CDMOrderDetails
+                            dnames = []
+                            for di in range(1, dets.Count + 1):
+                                try:
+                                    dd = dets.Item(di)
+                                    dnames.append(f"{dd.TypeName}|{dd.Width}x{dd.Length}x{dd.Quantity}")
+                                except Exception:
+                                    pass
+                            names.append(f"{jj.JobName}=[{','.join(dnames)}]")
+                        except Exception:
+                            names.append(f"{jj.JobName}=(no details)")
+                    except Exception:
+                        pass
+                out["cdm_jobs_details"] = "OK: " + "; ".join(names)
+                _am_log("cdm_jobs_details", True, out["cdm_jobs_details"])
+            except Exception as e:
+                _am_log("cdm_jobs_details", False, repr(e))
+                out["cdm_jobs_details"] = f"FAIL: {e!r}"
 
             job: Any = None
             try:
