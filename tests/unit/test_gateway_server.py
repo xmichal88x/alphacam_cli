@@ -178,6 +178,64 @@ def test_list_posts_handler(server_app: MagicMock) -> None:
     server_app.find_post_files.assert_called_once_with("*.arp")
 
 
+def test_list_styles_handler(server_app: MagicMock, monkeypatch: pytest.MonkeyPatch) -> None:
+    import alphacam_cli.gateway.server as server_module
+
+    files = [
+        "C:/ALPHACAM/LICOMDIR/Styles/Fronty/Ball_06.ary",
+        "C:/ALPHACAM/LICOMDIR/Styles/Edge.ary",
+        "C:/ALPHACAM/LICOMDIR/Styles/Fronty_AutoStyl.ara",
+    ]
+    sizes = {
+        files[0]: 30,
+        files[1]: 10,
+        files[2]: 20,
+    }
+    server_app.find_style_files.return_value = files
+    server_app.licomdir_path = "C:/ALPHACAM/LICOMDIR"
+    monkeypatch.setattr(server_module.os.path, "getsize", lambda p: sizes[p])
+    gw = GatewayServer()
+    result = gw._handler_list_styles({})
+    assert result == {
+        "styles": [
+            {
+                "name": "Ball_06.ary",
+                "directory": "Styles/Fronty",
+                "size": 30,
+                "path": files[0],
+            },
+            {
+                "name": "Edge.ary",
+                "directory": "Styles",
+                "size": 10,
+                "path": files[1],
+            },
+            {
+                "name": "Fronty_AutoStyl.ara",
+                "directory": "Styles",
+                "size": 20,
+                "path": files[2],
+            },
+        ]
+    }
+    server_app.find_style_files.assert_called_once_with()
+
+
+def test_list_styles_handler_missing_size(server_app: MagicMock) -> None:
+    server_app.find_style_files.return_value = ["C:/ALPHACAM/LICOMDIR/Styles/Ghost.ary"]
+    server_app.licomdir_path = "C:/ALPHACAM/LICOMDIR"
+    gw = GatewayServer()
+    result = gw._handler_list_styles({})
+    assert result["styles"] == [
+        {
+            "name": "Ghost.ary",
+            "directory": "Styles",
+            "size": 0,
+            "path": "C:/ALPHACAM/LICOMDIR/Styles/Ghost.ary",
+        }
+    ]
+
+
 def test_select_post_handler_by_name(
     server_app: MagicMock, monkeypatch: pytest.MonkeyPatch
 ) -> None:

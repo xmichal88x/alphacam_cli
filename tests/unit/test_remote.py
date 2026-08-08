@@ -129,6 +129,39 @@ def test_remote_glob_files() -> None:
     session.glob_files.assert_called_once_with("C:/parts", "*.amd")
 
 
+def test_remote_find_style_files() -> None:
+    session = MagicMock()
+    session.list_styles.return_value = {
+        "styles": [
+            {
+                "name": "Edge.ary",
+                "directory": "Styles",
+                "size": 10,
+                "path": "C:/ALPHACAM/LICOMDIR/Styles/Edge.ary",
+            },
+            {
+                "name": "Ball_06.ary",
+                "directory": "Styles/Fronty",
+                "size": 30,
+                "path": "C:/ALPHACAM/LICOMDIR/Styles/Fronty/Ball_06.ary",
+            },
+        ]
+    }
+    app = RemoteApplication(session)
+    assert app.find_style_files() == [
+        "C:/ALPHACAM/LICOMDIR/Styles/Edge.ary",
+        "C:/ALPHACAM/LICOMDIR/Styles/Fronty/Ball_06.ary",
+    ]
+    session.list_styles.assert_called_once_with()
+
+
+def test_remote_find_style_files_empty() -> None:
+    session = MagicMock()
+    session.list_styles.return_value = {"styles": []}
+    app = RemoteApplication(session)
+    assert app.find_style_files() == []
+
+
 def test_remote_open_cad_file() -> None:
     session = MagicMock()
     session.open_cad_file.return_value = {"geometries_count": 5, "tool_paths_count": 2}

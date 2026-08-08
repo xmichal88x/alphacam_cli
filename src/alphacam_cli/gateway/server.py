@@ -1267,6 +1267,32 @@ class GatewayServer:
                         posts.append({"name": os.path.basename(fp), "path": fp})
         return sorted(posts, key=lambda p: (p["name"].lower(), p["path"]))
 
+    def _handler_list_styles(self, params: dict[str, Any]) -> dict[str, Any]:
+        from alphacam_cli.gateway.server import _app as com_app
+
+        styles: list[dict[str, Any]] = []
+        styles_dir = os.path.join(com_app.licomdir_path, "Styles")
+        for fp in com_app.find_style_files():
+            directory = os.path.dirname(fp)
+            try:
+                rel_dir = os.path.relpath(directory, styles_dir)
+            except ValueError:
+                rel_dir = "."
+            directory_label = "Styles" if rel_dir == "." else os.path.join("Styles", rel_dir)
+            size = 0
+            with contextlib.suppress(OSError):
+                size = int(os.path.getsize(fp))
+            styles.append(
+                {
+                    "name": os.path.basename(fp),
+                    "directory": directory_label.replace("\\", "/"),
+                    "size": size,
+                    "path": fp,
+                }
+            )
+        styles.sort(key=lambda s: (str(s["name"]).lower(), str(s["path"])))
+        return {"styles": styles}
+
     def _handler_select_post(self, params: dict[str, Any]) -> dict[str, bool]:
         from alphacam_cli.gateway.server import _app as com_app
 

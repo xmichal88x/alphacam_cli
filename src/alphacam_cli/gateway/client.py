@@ -180,6 +180,9 @@ class RemoteSession:
     def apply_style(self, style: str, tool: str = "") -> dict[str, Any]:
         return self._call("apply_style", {"style": style, "tool": tool})  # type: ignore[no-any-return]
 
+    def list_styles(self) -> dict[str, Any]:
+        return self._call("list_styles")  # type: ignore[no-any-return]
+
     def reports_create(self) -> dict[str, Any]:
         return self._call("reports_create")  # type: ignore[no-any-return]
 

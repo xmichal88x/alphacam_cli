@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import os
 from typing import Any
 
 import typer
+from rich.table import Table
 
 from alphacam_cli.cli.common import (
     console,
@@ -349,6 +351,49 @@ def engrave(
         md.engrave()
         drw.zoom_all()
         console.print(f"[green]OK:[/green] Engrave done ({drw.tool_paths_count} tool paths)")
+
+
+@app.command("style-list")
+@handle_com_errors
+def style_list() -> None:
+    """List available machining styles (.ary/.ara) from the Styles directory."""
+    require_platform()
+    with alphacam_context(visible=get_visible()) as raw:
+        ac = resolve_app(raw)
+        files = ac.find_style_files()
+
+        if not files:
+            console.print("[yellow]No styles found.[/yellow]")
+            raise typer.Exit(code=0)
+
+        styles_dir = os.path.join(ac.licomdir_path, "Styles")
+        t = Table(title=f"Mill Styles ({len(files)} found)")
+        t.add_column("#", style="dim")
+        t.add_column("Name", style="cyan")
+        t.add_column("Directory", style="green")
+        t.add_column("Size")
+
+        for i, f in enumerate(files, 1):
+            t.add_row(str(i), path_basename(f), _style_dir(f, styles_dir), _style_size(f))
+        console.print(t)
+
+
+def _style_dir(path: str, styles_dir: str) -> str:
+    directory = os.path.dirname(path.replace("\\", "/"))
+    base = styles_dir.replace("\\", "/")
+    if directory == base:
+        return "Styles"
+    prefix = base + "/"
+    if directory.startswith(prefix):
+        return "Styles/" + directory[len(prefix) :]
+    return directory
+
+
+def _style_size(path: str) -> str:
+    try:
+        return f"{os.path.getsize(path)} bytes"
+    except OSError:
+        return "-"
 
 
 @app.command()

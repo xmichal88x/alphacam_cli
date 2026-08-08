@@ -181,6 +181,10 @@ class RemoteApplication:
     def find_tool_files(self, pattern: str = "*.art") -> list[str]:
         return self._session.list_tools(pattern)  # type: ignore[no-any-return]
 
+    def find_style_files(self) -> list[str]:
+        result = self._session.list_styles()
+        return [str(s["path"]) for s in result.get("styles", [])]
+
     def find_drawing_files(self, pattern: str = "*.amd") -> list[str]:
         return self._session.find_drawing_files(pattern)  # type: ignore[no-any-return]
 

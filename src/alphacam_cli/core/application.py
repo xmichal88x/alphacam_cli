@@ -294,6 +294,14 @@ class Application:
         files += glob.glob(os.path.join(base, "**", pattern), recursive=True)
         return sorted(set(files))
 
+    def find_style_files(self) -> list[str]:
+        base = os.path.join(self.licomdir_path, "Styles")
+        files: list[str] = []
+        for pattern in ("*.ary", "*.ara"):
+            files += glob.glob(os.path.join(base, pattern))
+            files += glob.glob(os.path.join(base, "**", pattern), recursive=True)
+        return sorted(set(files))
+
     def get_nesting(self) -> Nesting:
         raw = self._get_nesting_raw()
         if raw is None:

@@ -710,6 +710,45 @@ def test_mill_style_no_active_drawing() -> None:
     assert "No active drawing" in result.stderr
 
 
+def test_mill_style_list() -> None:
+    paths = [
+        r"C:\Licomdir\Styles\Edge.ary",
+        r"C:\Licomdir\Styles\Fronty\Ball_06.ary",
+        r"C:\Licomdir\Styles\Fronty_AutoStyl.ara",
+    ]
+    sizes = {paths[0]: 10, paths[1]: 30, paths[2]: 20}
+    with (
+        _mock_com(),
+        patch("alphacam_cli.core.application.Application.find_style_files", return_value=paths),
+        patch("os.path.getsize", side_effect=lambda p: sizes[p]),
+    ):
+        result = runner.invoke(app, ["mill", "style-list"])
+    assert result.exit_code == 0
+    assert "3 found" in result.stderr
+    assert "Edge.ary" in result.stderr
+    assert "Ball_06.ary" in result.stderr
+    assert "Fronty_AutoStyl.ara" in result.stderr
+    assert "Styles/Fronty" in result.stderr
+    assert "30 bytes" in result.stderr
+
+
+def test_mill_style_list_empty() -> None:
+    with (
+        _mock_com(),
+        patch("alphacam_cli.core.application.Application.find_style_files", return_value=[]),
+    ):
+        result = runner.invoke(app, ["mill", "style-list"])
+    assert result.exit_code == 0
+    assert "No styles found" in result.stderr
+
+
+def test_mill_style_list_requires_windows() -> None:
+    with patch("sys.platform", "linux"):
+        result = runner.invoke(app, ["mill", "style-list"])
+    assert result.exit_code == 1
+    assert "AlphaCAM CLI requires Windows" in result.stderr
+
+
 def test_nc_output(tmp_path: pathlib.Path) -> None:
     nc_file = tmp_path / "test.nc"
     nc_file.write_text("N100 G0 X0 Y0\n", encoding="utf-8")

@@ -359,6 +359,28 @@ def test_find_post_files_fallback(mock_com: MagicMock) -> None:
     assert m_glob.call_args_list[1].kwargs == {"recursive": True}
 
 
+def test_find_style_files(mock_com: MagicMock, tmp_path: pathlib.Path) -> None:
+    styles = tmp_path / "Styles"
+    styles.mkdir(parents=True)
+    (styles / "Edge.ary").write_bytes(b"a" * 10)
+    (styles / "Fronty_AutoStyl.ara").write_bytes(b"b" * 20)
+    (styles / "Fronty").mkdir()
+    (styles / "Fronty" / "Ball_06.ary").write_bytes(b"c" * 30)
+    (styles / "notes.txt").write_text("ignore", encoding="utf-8")
+    with mock_com:
+        from alphacam_cli.com.manager import alphacam_context
+
+        with alphacam_context() as raw:
+            raw.LicomdirPath = str(tmp_path)
+            ac = Application(raw)
+            result = ac.find_style_files()
+    assert result == [
+        str(styles / "Edge.ary"),
+        str(styles / "Fronty" / "Ball_06.ary"),
+        str(styles / "Fronty_AutoStyl.ara"),
+    ]
+
+
 def test_select_post_by_name(mock_com: MagicMock) -> None:
     post_path = "C:/Licomdat/RPosts.Alp/fanuc.arp"
     with mock_com, patch("alphacam_cli.core.application.glob.glob", return_value=[post_path]):
