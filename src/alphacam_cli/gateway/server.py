@@ -609,10 +609,16 @@ class GatewayServer:
         sheet_geo = drw.create_rectangle(0, 0, sheet_width, sheet_height)
         try:
             nesting = com_app.get_nesting()
-            nesting.suppress_dialogs = True
-            nesting.delete_all_nest_lists()
         except Exception as e:
             raise COMError(f"nest: get_nesting failed: {e}") from e
+        try:
+            nesting.suppress_dialogs = True
+        except Exception as e:
+            raise COMError(f"nest: suppress_dialogs failed: {e}") from e
+        try:
+            nesting.delete_all_nest_lists()
+        except Exception as e:
+            raise COMError(f"nest: delete_all_nest_lists failed: {e}") from e
         nest_path = os.path.join(output_dir, "nest.anl") if output_dir else "nest.anl"
         try:
             nl = nesting.new_nest_list(nest_path)
