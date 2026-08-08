@@ -306,10 +306,101 @@ class GatewayServer:
         except Exception as e:
             out["gencache_app"] = f"FAIL: {e!r}"
         try:
-            mats = com_app.get_active_drawing()
+            com_app.get_active_drawing()
             out["materials"] = "n/a"
         except Exception as e:
             out["materials"] = f"FAIL: {e!r}"
+        try:
+            import win32com.client.gencache as gencache  # type: ignore[import-untyped]
+
+            mod = gencache.EnsureModule("{6702E3DF-142C-4627-8EA2-4C47EBC78441}", 0, 1, 3)
+            out["ensuremodule"] = f"OK: {mod}"
+        except Exception as e:
+            out["ensuremodule"] = f"FAIL: {e!r}"
+        app3: Any = None
+        n: Any = None
+        try:
+            import win32com.client.gencache as gencache  # type: ignore[import-untyped]
+
+            app3 = gencache.EnsureDispatch("Ar5axaps.Application")
+            n = app3.Nesting
+            out["nesting_after_ensure"] = f"OK: {n}"
+        except Exception as e:
+            out["nesting_after_ensure"] = f"FAIL: {e!r}"
+        if n is not None:
+            db: Any = None
+            try:
+                db = n.SheetDatabase
+                out["sheetdatabase"] = f"OK: {db}"
+            except Exception as e:
+                out["sheetdatabase"] = f"FAIL: {e!r}"
+            mat_coll: Any = None
+            try:
+                mat_coll = db.Materials
+                out["materials"] = f"OK count={mat_coll.Count}"
+            except Exception as e:
+                out["materials"] = f"FAIL: {e!r}"
+            mat0: Any = None
+            if mat_coll is not None:
+                try:
+                    mat0 = mat_coll.Item(1)
+                    out["material0"] = f"OK: {mat0.Name}"
+                except Exception as e:
+                    out["material0"] = f"FAIL: {e!r}"
+            mat: Any = None
+            if mat0 is not None:
+                try:
+                    mat = mat0.FindMaterial(mat0.Name)
+                    out["findmaterial"] = f"OK: {mat}"
+                except Exception as e:
+                    out["findmaterial"] = f"FAIL: {e!r}"
+            thick: Any = None
+            if mat is not None:
+                try:
+                    thick = mat.FindThickness(18.0, "mm")
+                    out["thickness18"] = f"OK: {thick}"
+                except Exception as e:
+                    out["thickness18"] = f"FAIL: {e!r}"
+            if thick is not None:
+                try:
+                    ws = thick.WholeSheets
+                    wcount = ws.Count
+                    sheet_names: list[str] = []
+                    for i in range(1, wcount + 1):
+                        if len(sheet_names) >= 5:
+                            break
+                        try:
+                            s = ws.Item(i)
+                            sheet_names.append(f"{s.Name} {s.Width}x{s.Height}x{s.Quantity}")
+                        except Exception as e:
+                            sheet_names.append(f"item{i} FAIL: {e!r}")
+                    out["wholesheets"] = f"OK count={wcount} first={sheet_names}"
+                except Exception as e:
+                    out["wholesheets"] = f"FAIL: {e!r}"
+            try:
+                sheet = db.FindSheet("MDF_18")
+                out["findsheet"] = (
+                    f"OK: {sheet.Name} {sheet.Width}x{sheet.Height}x{sheet.Quantity} "
+                    f"mat={sheet.Material.Name}"
+                )
+            except Exception as e:
+                out["findsheet"] = f"FAIL: {e!r}"
+        elif app3 is not None:
+            n2: Any = None
+            try:
+                n2 = app3.GetNestInformation()
+                out["nest_information"] = f"OK: {n2}"
+            except Exception as e:
+                out["nest_information"] = f"FAIL: {e!r}"
+            try:
+                sdb = n2.SheetDB
+                out["sheetdb_legacy"] = f"OK: {sdb}"
+                paths = sdb.InsertSheet(0)
+                out["sheetdb_insert0"] = f"OK: {paths}"
+            except Exception as e:
+                out["sheetdb_insert0"] = f"FAIL: {e!r}"
+        else:
+            out["sheetdb_insert0"] = "SKIP: nesting and app3 unavailable"
         return out
 
     def _handler_get_info(self, params: dict[str, Any]) -> dict[str, Any]:
