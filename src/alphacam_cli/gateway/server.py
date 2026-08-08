@@ -856,29 +856,12 @@ class GatewayServer:
             from alphacam_cli.gateway.server import _app as com_app
 
             out: dict[str, str] = {}
-            try:
-                import win32com.client.gencache as gencache  # type: ignore[import-untyped]
-
-                mod = gencache.EnsureModule("{D216BAAC-A717-4793-92D3-1AE37AE3AC2E}", 0, 1, 0)
-                _am_log("cdm_typelib_interface", True, repr(mod))
-                out["cdm_typelib_interface"] = f"OK: {mod!r}"
-            except Exception as e:
-                _am_log("cdm_typelib_interface", False, repr(e))
-                out["cdm_typelib_interface"] = f"FAIL: {e!r}"
-            try:
-                import win32com.client.gencache as gencache  # type: ignore[import-untyped]
-
-                mod = gencache.EnsureModule("{A87DD4DB-67C9-4F1B-BC79-A71EE8C7D1E5}", 0, 1, 0)
-                _am_log("cdm_typelib_addins", True, repr(mod))
-                out["cdm_typelib_addins"] = f"OK: {mod!r}"
-            except Exception as e:
-                _am_log("cdm_typelib_addins", False, repr(e))
-                out["cdm_typelib_addins"] = f"FAIL: {e!r}"
             ai: Any = None
             try:
                 import pythoncom  # type: ignore[import-untyped]
                 import win32com.client as w32  # type: ignore[import-untyped]
 
+                _am_log("cdm_co_create_before", True, "")
                 clsid = pythoncom.MakeIID("{39BFE38A-D3E4-43EA-89D0-584C776B97A9}")
                 ai = w32.Dispatch(
                     pythoncom.CoCreateInstance(
