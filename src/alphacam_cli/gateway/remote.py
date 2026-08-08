@@ -56,6 +56,9 @@ class _DrawingProxy:
     def save_as(self, path: str) -> None:
         self._session.save_active_drawing(path)
 
+    def export(self, path: str, fmt: str) -> dict[str, Any]:
+        return self._session.export_drawing(path, fmt)
+
     def output_nc(self, path: str) -> dict[str, Any]:
         return self._session.output_nc(path)
 
@@ -147,6 +150,18 @@ class RemoteApplication:
 
     def open_drawing(self, path: str) -> _DrawingProxy | None:
         info = self._session.open_drawing(path)
+        if info is None:
+            return None
+        return _DrawingProxy(self._session, info)
+
+    def open_cad_file(
+        self,
+        path: str,
+        fmt: str,
+        clear: bool = False,
+        cabinets: bool = False,
+    ) -> _DrawingProxy | None:
+        info = self._session.open_cad_file(path, fmt, clear=clear, cabinets=cabinets)
         if info is None:
             return None
         return _DrawingProxy(self._session, info)

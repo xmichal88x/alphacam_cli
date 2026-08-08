@@ -95,6 +95,23 @@ class RemoteSession:
     def open_drawing(self, path: str) -> dict[str, Any]:
         return self._call("open_drawing", {"path": path})  # type: ignore[no-any-return]
 
+    def open_cad_file(
+        self,
+        path: str,
+        fmt: str,
+        clear: bool = False,
+        cabinets: bool = False,
+    ) -> dict[str, Any]:
+        return self._call(  # type: ignore[no-any-return]
+            "open_cad_file",
+            {"path": path, "fmt": fmt, "clear": clear, "cabinets": cabinets},
+        )
+
+    def export_drawing(self, path: str, fmt: str) -> dict[str, Any]:
+        return self._call(  # type: ignore[no-any-return]
+            "export_drawing", {"path": path, "fmt": fmt}
+        )
+
     def save_active_drawing(self, path: str) -> dict[str, Any]:
         return self._call("save_active_drawing", {"path": path})  # type: ignore[no-any-return]
 

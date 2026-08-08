@@ -108,6 +108,57 @@ class Application:
             return None
         return Drawing(raw)
 
+    def open_cad_file(self, path: str, fmt: str, clear: bool = False) -> Drawing | None:
+        """Open a CAD file (DXF/DWG, IGES, STEP, STL, VDA, CADL) and return the drawing."""
+        try:
+            self._open_cad(path, fmt, clear)
+        except ValueError:
+            raise
+        except Exception as e:
+            raise RuntimeError(f"Failed to open CAD file '{path}' ({fmt}): {e}") from e  # noqa: TRY003
+        return self.get_active_drawing()
+
+    def _open_cad(self, path: str, fmt: str, clear: bool) -> None:
+        from alphacam_cli.com.constants import (
+            ACAM_IGES_STD,
+            ACAM_STEP_SURFACES,
+        )
+
+        if fmt in ("dxf", "dwg"):
+            self._app.OpenDxfFile(path, clear)  # type: ignore[attr-defined]
+        elif fmt in ("igs", "iges"):
+            self._app.OpenIgesFile(path, clear, ACAM_IGES_STD)  # type: ignore[attr-defined]
+        elif fmt in ("stp", "step"):
+            try:
+                self._app.OpenStepFileEx(  # type: ignore[attr-defined]
+                    path, clear, ACAM_STEP_SURFACES
+                )
+            except Exception:
+                self._app.OpenStepFile(path, clear)  # type: ignore[attr-defined]
+        elif fmt == "stl":
+            self._app.OpenStlFile(path, clear)  # type: ignore[attr-defined]
+        elif fmt == "vda":
+            self._app.OpenVdaFile(path, clear)  # type: ignore[attr-defined]
+        elif fmt == "cadl":
+            self._app.OpenCadlFile(path, clear)  # type: ignore[attr-defined]
+        else:
+            raise ValueError(f"Unsupported CAD format: {fmt}")  # noqa: TRY003
+
+    def set_dxf_cabinets(self, enabled: bool) -> None:
+        """Enable/disable DXF cabinets input (CadInputSettings.DxfSpecial)."""
+        from alphacam_cli.com.constants import (
+            ACAM_DXF_SPECIAL_CABINETS,
+            ACAM_DXF_SPECIAL_STANDARD,
+        )
+
+        try:
+            settings = self._app.CadInputSettings  # type: ignore[attr-defined]
+            settings.DxfSpecial = (  # type: ignore[attr-defined]
+                ACAM_DXF_SPECIAL_CABINETS if enabled else ACAM_DXF_SPECIAL_STANDARD
+            )
+        except Exception as e:
+            raise RuntimeError(f"Failed to set DXF cabinets input: {e}") from e  # noqa: TRY003
+
     def select_tool(self, path: str) -> Tool | None:
         raw = self._app.SelectTool(path)  # type: ignore[attr-defined]
         if raw is None:

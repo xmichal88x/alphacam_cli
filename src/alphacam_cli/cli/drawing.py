@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import os
+
 import typer
 from rich.table import Table
 
@@ -13,6 +15,19 @@ from alphacam_cli.cli.common import (
 from alphacam_cli.com.manager import alphacam_context
 
 app = typer.Typer(help="Drawing operations")
+
+
+def _resolve_fmt(path: str, fmt: str) -> str:
+    """Resolve 'auto' format from the file extension."""
+    if fmt != "auto":
+        return fmt
+    ext = os.path.splitext(path)[1].lstrip(".").lower()
+    if not ext:
+        console.print(
+            "[red]Error:[/red] Cannot infer format from path without extension. Use --fmt."
+        )
+        raise typer.Exit(code=1)
+    return ext
 
 
 @app.command()
@@ -83,6 +98,62 @@ def open(
         t.add_row("Geometries", str(drw.geometries_count))
         t.add_row("ToolPaths", str(drw.tool_paths_count))
         console.print(t)
+
+
+@app.command("import")
+@handle_com_errors
+def import_file(
+    path: str = typer.Argument(..., help="Path to CAD file (DXF/DWG, IGES, STEP, STL, VDA, CADL)"),
+    fmt: str = typer.Option(
+        "auto", "--fmt", "-f", help="dxf|dwg|iges|step|stl|vda|cadl (auto=from extension)"
+    ),
+    cabinets: bool = typer.Option(
+        False, "--cabinets", help="Enable DXF cabinets input (DxfSpecial)"
+    ),
+) -> None:
+    """Import a CAD file into the active drawing."""
+    require_platform()
+    fmt = _resolve_fmt(path, fmt)
+    with alphacam_context(visible=get_visible()) as raw:
+        ac = resolve_app(raw)
+        if cabinets:
+            ac.set_dxf_cabinets(True)
+        drw = ac.open_cad_file(path, fmt)
+        if drw is None:
+            console.print(f"[red]Failed to import: {path}[/red]")
+            raise typer.Exit(code=1)
+
+        drw.zoom_all()
+        t = Table(title="CAD File Imported")
+        t.add_column("Property", style="cyan")
+        t.add_column("Value", style="green")
+        t.add_row("Path", path)
+        t.add_row("Format", fmt.upper())
+        t.add_row("Geometries", str(drw.geometries_count))
+        t.add_row("ToolPaths", str(drw.tool_paths_count))
+        console.print(t)
+
+
+@app.command()
+@handle_com_errors
+def export(
+    path: str = typer.Argument(..., help="Output CAD file path (DXF, IGES, STL, EMF, WMF)"),
+    fmt: str = typer.Option(
+        "auto", "--fmt", "-f", help="dxf|iges|stl|emf|wmf (auto=from extension)"
+    ),
+) -> None:
+    """Export the active drawing to a CAD/graphics file."""
+    require_platform()
+    fmt = _resolve_fmt(path, fmt)
+    with alphacam_context(visible=get_visible()) as raw:
+        ac = resolve_app(raw)
+        drw = ac.get_active_drawing()
+        if drw is None:
+            console.print("[red]No active drawing[/red]")
+            raise typer.Exit(code=1)
+
+        drw.export(path, fmt)
+        console.print(f"[green]OK:[/green] Exported to {path} ({fmt.upper()})")
 
 
 @app.command()

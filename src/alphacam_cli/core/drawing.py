@@ -68,6 +68,26 @@ class Drawing:
     def save_as(self, path: str) -> None:
         self._drw.SaveAs(path)  # type: ignore[attr-defined]
 
+    def export(self, path: str, fmt: str) -> None:
+        """Export the drawing to a CAD/graphics file (DXF, IGES, STL, EMF, WMF)."""
+        from alphacam_cli.com.constants import (
+            ACAM_STL_TYPE_STL,
+            ACAM_UNITS_METRIC,
+        )
+
+        if fmt == "dxf":
+            self._drw.SaveDxfFile(path, False, 2)  # type: ignore[attr-defined]
+        elif fmt in ("igs", "iges"):
+            self._drw.SaveIgesFile(path, False, ACAM_UNITS_METRIC)  # type: ignore[attr-defined]
+        elif fmt == "stl":
+            self._drw.SaveStlFile(path, ACAM_STL_TYPE_STL, 0.1)  # type: ignore[attr-defined]
+        elif fmt == "emf":
+            self._drw.SaveEmfFile(path, False, False)  # type: ignore[attr-defined]
+        elif fmt == "wmf":
+            self._drw.SaveWmfFile(path, False, False)  # type: ignore[attr-defined]
+        else:
+            raise ValueError(f"Unsupported export format: {fmt}")  # noqa: TRY003
+
     def output_nc(self, path: str) -> None:
         self._drw.OutputNC(path, ACAM_OUT_NC_FILE, False)  # type: ignore[attr-defined]
 

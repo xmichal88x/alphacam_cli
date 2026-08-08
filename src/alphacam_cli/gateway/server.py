@@ -660,6 +660,40 @@ class GatewayServer:
             raise COMError(f"Failed to open drawing: {path}")
         return {"geometries_count": drw.geometries_count, "tool_paths_count": drw.tool_paths_count}
 
+    def _handler_open_cad_file(self, params: dict[str, Any]) -> dict[str, int]:
+        from alphacam_cli.gateway.server import _app as com_app
+
+        path = str(params.get("path", ""))
+        fmt = str(params.get("fmt", "")).lower()
+        if not path:
+            raise COMError("path is required")
+        if not fmt:
+            raise COMError("fmt is required")
+        if bool(params.get("cabinets", False)):
+            com_app.set_dxf_cabinets(True)
+        drw = com_app.open_cad_file(path, fmt, clear=bool(params.get("clear", False)))
+        if drw is None:
+            raise COMError(f"Failed to open CAD file: {path}")
+        return {"geometries_count": drw.geometries_count, "tool_paths_count": drw.tool_paths_count}
+
+    def _handler_export_drawing(self, params: dict[str, Any]) -> dict[str, Any]:
+        from alphacam_cli.gateway.server import _app as com_app
+
+        path = str(params.get("path", ""))
+        fmt = str(params.get("fmt", "")).lower()
+        if not path:
+            raise COMError("path is required")
+        if not fmt:
+            raise COMError("fmt is required")
+        drw = com_app.get_active_drawing()
+        if drw is None:
+            raise COMError("No active drawing")
+        parent = os.path.dirname(path)
+        if parent:
+            os.makedirs(parent, exist_ok=True)
+        drw.export(path, fmt)
+        return {"success": True, "path": path}
+
     def _handler_save_active_drawing(self, params: dict[str, Any]) -> dict[str, bool]:
         from alphacam_cli.gateway.server import _app as com_app
 
