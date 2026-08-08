@@ -843,10 +843,6 @@ class GatewayServer:
         return out
 
     def _handler_cdm_probe(self, params: dict[str, Any]) -> dict[str, str]:
-        from alphacam_cli.gateway.server import _app as com_app
-
-        out: dict[str, str] = {}
-
         def _am_log(step: str, ok: bool, detail: str = "") -> None:
             try:
                 with open(r"C:\temp\cdm_probe2.log", "a", encoding="utf-8") as f:
@@ -855,12 +851,11 @@ class GatewayServer:
                 pass
 
         _am_log("start", True)
-        out["start"] = "OK"
 
-        def work() -> None:
-            import pythoncom  # type: ignore[import-untyped]
+        def work() -> dict[str, str]:
+            from alphacam_cli.gateway.server import _app as com_app
 
-            pythoncom.CoInitialize()
+            out: dict[str, str] = {}
             try:
                 import win32com.client.gencache as gencache  # type: ignore[import-untyped]
 
@@ -901,6 +896,7 @@ class GatewayServer:
                     raw = com_app._app  # type: ignore[attr-defined]
                     if hasattr(com_app, "raw_dispatch"):
                         raw = com_app.raw_dispatch  # type: ignore[attr-defined]
+                    _am_log("cdm_get_addins_before", True, "")
                     addins = ai.GetAddInsInterface(raw)
                     _am_log("cdm_get_addins", True, repr(addins))
                     out["cdm_get_addins"] = f"OK: {addins!r}"
@@ -910,6 +906,7 @@ class GatewayServer:
             am: Any = None
             if addins is not None:
                 try:
+                    _am_log("cdm_get_am_before", True, "")
                     am = addins.GetAutomationManagerAddIn()
                     _am_log("cdm_get_am", True, repr(am))
                     out["cdm_get_am"] = f"OK: {am!r}"
@@ -936,23 +933,18 @@ class GatewayServer:
                     out["cdm_new_job"] = f"OK: {job!r}"
                 except Exception as e:
                     out["cdm_new_job"] = f"FAIL: {e!r}"
-            try:
-                db = am.ImportCDMDatabase()
-                out["cdm_import_db"] = f"OK: {db!r}"
-            except Exception as e:
-                out["cdm_import_db"] = f"FAIL: {e!r}"
-            out["result"] = "CDM_OK" if authorised else "CDM_FAIL"
-            pythoncom.CoUninitialize()
+                try:
+                    db = am.ImportCDMDatabase()
+                    out["cdm_import_db"] = f"OK: {db!r}"
+                except Exception as e:
+                    out["cdm_import_db"] = f"FAIL: {e!r}"
+                out["result"] = "CDM_OK" if authorised else "CDM_FAIL"
+            else:
+                out["result"] = "CDM_FAIL"
+            return out
 
-        t = threading.Thread(target=work, daemon=True)
-        t.start()
-        t.join(timeout=45)
-        if t.is_alive():
-            out["timeout"] = "GetAutomationManagerAddIn hung >45s"
-            out["result"] = "CDM_FAIL"
-            _am_log("timeout", False, "GetAutomationManagerAddIn hung >45s")
-        out.setdefault("result", "CDM_FAIL")
-        return out
+        result = self._com_call(work, "cdm_probe")
+        return cast(dict[str, str], result)
 
     def _handler_get_info(self, params: dict[str, Any]) -> dict[str, Any]:
         from alphacam_cli.gateway.server import _app as com_app
