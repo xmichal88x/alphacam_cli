@@ -69,7 +69,8 @@ Recepty E2E (Session 0 nesting) w sekcjach poniżej; kluczowe: reg copy HKCU→H
 | `mill engrave` | Grawerowanie: engrave-type, step-length | ✅ 9 toolpaths |
 | `reports create` | Raport z aktywnego rysunku (CreateReportsJob+CreateReports) | ✅ |
 | `ncmanager config list` | Konfiguracje wyjścia NC (GetOutputConfigurationsCollection) | ✅ |
-| `autostyle apply FILE` | AutoStyles.Apply(ara) — style obróbcze per warstwa | ✅ |
+| `autostyle apply FILE` | AutoStyles.Apply(ara) lub pełny pipeline warstw (`--agq`/`--layer-map`) | ✅ E2E: pipeline → 1 toolpath |
+| `drawing layer NAME` | Tworzy warstwę użytkownika (CreateLayer, max 31 znaków) | ✅ |
 | `mill style-list` | Lista stylów z licomdir/Styles/** (*.ary + *.ara) | ✅ |
 
 ⚠️ **Ograniczenie STL export:** `SaveStlFile` eksportuje wyłącznie modele STL/solid (Edit|Solid Model). Geometrie facetowe po imporcie (STL/DXF) NIE są eksportowalne → czytelny błąd "stl export failed: no facetable geometry". Do eksportu STL wymagany model solid.
@@ -81,7 +82,7 @@ Recepty E2E (Session 0 nesting) w sekcjach poniżej; kluczowe: reg copy HKCU→H
 | Obszar | Stan |
 |---|---|
 | Kod + typy | ✅ ruff 0, mypy 0 |
-| Testy jednostkowe | ✅ 372 passed, 3 skipped (2026-08-08) |
+| Testy jednostkowe | ✅ 405 passed, 3 skipped (2026-08-08) |
 | E2E na żywym AlphaCAM 2025 | ✅ create → mill style .ary → nc output (Reichenbacher) → NC 591 B |
 | COM safety | ✅ przez gateway (usługa Session 0, STA+CoMarshal) |
 | CI/CD | ⚠️ brak coverage gate, brak .exe build |
@@ -179,7 +180,26 @@ NewNestList → AddFile(parts, Required=count) → opcje → NewSheetList → Ad
 
 **TODO:** `licomdir_path`/`licomdat_path` w core zwracają `C:\ALPHACAM\` (oba) — sprawdzić poprawność (GetPathToStyles przez AcamEx może być właściwsze).
 
-Testy: **372 passed, 3 skipped**.
+**Pipeline warstw + AutoStyles (2026-08-08, E2E w Session 0):**
+
+**Nowe API w core:**
+- `Drawing.create_layer(name)` — CreateLayer (tworzy/zwraca istniejącą; max 31 znaków; 6 warstw specjalnych zarezerwowanych)
+- `Drawing.set_active_layer(layer)` — SetLayer
+- `Drawing.run_query(file)` — RunQuery → liczba dopasowanych reguł (0 = brak dopasowań — to OK, query dopasowuje po nazwach/cechach)
+- `CamPath.set_layer(layer)` — Path.SetLayer (przypisanie geometrii do warstwy)
+- `Application.machining_pipeline(ara, agq=None, layer_map=None)` — pełny pipeline: create_layer + set_layer wg `"KONTUR:1;RYFLE_1:2"` (1-based indeksy geometrii) → opcjonalnie RunQuery(agq) → AutoStyles.Apply(ara) → zwraca counts (geometries_count, tool_paths_count)
+
+**Nowe CLI:**
+- `drawing layer NAME` — tworzy warstwę użytkownika (lub zwraca istniejącą)
+- `autostyle apply FILE --agq QUERY --layer-map "KONTUR:1;RYFLE_1:2"` — pipeline mode (create_layer → RunQuery → Apply zamiast samego Apply)
+
+**E2E (Session 0, żywy AlphaCAM 2025 Router):** panel 800×400 (2 geometrie) → layer_map "KONTUR:1;RYFLE_1:2" + Fronty_AutoStyl.ara → success, **tool_paths=1**; też EDGE_F45+GRAWER_1 → 1; z AGQ (Menadżer_Warstw_Fronty.agq) → 1. **Pipeline DZIAŁA.**
+
+**Mapowania Fronty_AutoStyl.ara** (`C:\ALPHACAM\LICOMDIR\Styles\Fronty_AutoStyl.ara`): EDGE_F45→Faza_45.ary, EDGE_F65→Faza_65.ary, GRAWER_1→Grawer V-bit.ary, RYFLE_1→V-Bit_45_AZ.ary, KONTUR→Kontur.ary, RYFLE_2→Fi_25_AZ.ary
+
+**Pełny przepływ 4.0:** rysunek (lub DXF) → warstwy (nazwy jak w CAD) → AutoStyles.Apply → toolpathy → NC. Nazwy warstw muszą pasować do mapowań w .ara; RunQuery dopasowuje geometrie po nazwach/cechach.
+
+Testy: **405 passed, 3 skipped**.
 
 ---
 

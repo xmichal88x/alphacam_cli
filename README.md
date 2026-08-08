@@ -275,6 +275,22 @@ Create a parametric panel: outer and inner rectangles with offset and fillet, pl
 alphacam drawing parametric 800 400 --depth -10 --tool "Flat - 10mm"
 ```
 
+#### `layer`
+
+Create a user layer on the active drawing (or return the existing one).
+
+**Arguments:**
+
+| Argument | Type | Description |
+|----------|------|-------------|
+| `name` | `str` | Layer name, max 31 characters (required) |
+
+**Example:**
+
+```bash
+alphacam drawing layer KONTUR
+```
+
 #### `save`
 
 Save the active drawing to an `.amd` file.
@@ -589,10 +605,21 @@ Apply an AutoStyles file (`.ara`) to the active drawing — maps CAD layers to m
 |----------|------|-------------|
 | `file` | `str` | Path to `.ara` AutoStyles file (required) |
 
-**Example:**
+**Options:**
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `--agq` | `str` | `None` | Geometry query (`.agq`) to run before applying (pipeline mode) |
+| `--layer-map` | `str` | `None` | Layer assignments `NAME:1,2;NAME2:3` (1-based geometry indices; pipeline mode) |
+
+With `--agq` and/or `--layer-map` the full machining pipeline runs instead of a plain apply: create/assign layers → optional `RunQuery` → `AutoStyles.Apply` → tool paths (prints geometry and tool path counts).
+
+**Examples:**
 
 ```bash
 alphacam autostyle apply Fronty_AutoStyl.ara
+alphacam autostyle apply Fronty_AutoStyl.ara --layer-map "KONTUR:1;RYFLE_1:2"
+alphacam autostyle apply Fronty_AutoStyl.ara --agq front_query.agq --layer-map "KONTUR:1;RYFLE_1:2"
 ```
 
 ---
@@ -729,6 +756,7 @@ AlphaCAM Diagnostics
 | `alphacam connect info` | Test COM connection, show AlphaCAM version | Yes | ✅ |
 | `alphacam drawing create` | Create drawing with rectangle | Yes | ✅ |
 | `alphacam drawing parametric` | Parametric panel (outer/inner + optional rough) | Yes | ✅ |
+| `alphacam drawing layer` | Create a user layer | Yes | ✅ |
 | `alphacam drawing save` | Save active drawing to `.amd` | Yes | ✅ |
 | `alphacam drawing open` | Open `.amd` file | Yes | ✅ |
 | `alphacam drawing import` | Import CAD file (dxf/dwg/iges/step/stl/vda/cadl) | Yes | ✅ |
