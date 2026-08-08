@@ -756,6 +756,13 @@ class GatewayServer:
                 _am_log("am_astyles_file", False, repr(e))
                 out["am_astyles_file"] = f"FAIL: {e!r}"
             try:
+                astyles.Apply(r"C:\ALPHACAM\LICOMDIR\Styles\Fronty_AutoStyl.ara")
+                _am_log("astyles_apply_real", True, "")
+                out["astyles_apply_real"] = "OK"
+            except Exception as e:
+                _am_log("astyles_apply_real", False, repr(e))
+                out["astyles_apply_real"] = f"FAIL: {e!r}"
+            try:
                 drw = app3.ActiveDrawing if app3 is not None else None
                 rjob = reports.CreateReportsJob(drw, False, True)
                 _am_log("am_reports_job", True, repr(rjob))
@@ -770,52 +777,7 @@ class GatewayServer:
             except Exception as e:
                 _am_log("am_reports_job", False, repr(e))
                 out["am_reports_job"] = f"FAIL: {e!r}"
-        am: Any = None
-        if addins is not None:
-            try:
-                am = addins.GetAutomationManagerAddIn()
-                _am_log("am_get_automation_manager", True, repr(am))
-                out["am_get_automation_manager"] = f"OK: {am!r}"
-            except Exception as e:
-                _am_log("am_get_automation_manager", False, repr(e))
-                out["am_get_automation_manager"] = f"FAIL: {e!r}"
-        if am is not None:
-            try:
-                detail = f"{am.IsAutomationManagerAlreadyRunning!r}"
-                _am_log("am_running", True, detail)
-                out["am_running"] = f"OK: {detail}"
-            except Exception as e:
-                _am_log("am_running", False, repr(e))
-                out["am_running"] = f"FAIL: {e!r}"
-            try:
-                detail = f"{am.IsCDMAuthorised!r}"
-                _am_log("am_cdm_authorised", True, detail)
-                out["am_cdm_authorised"] = f"OK: {detail}"
-            except Exception as e:
-                _am_log("am_cdm_authorised", False, repr(e))
-                out["am_cdm_authorised"] = f"FAIL: {e!r}"
-            try:
-                _am_log("am_jobs", True, f"customers={am.Customers.Count}")
-                out["am_jobs"] = f"OK: {am.Customers.Count}"
-            except AttributeError as e:
-                _am_log("am_jobs", False, repr(e))
-                out["am_jobs"] = f"FAIL: {e!r}"
-                try:
-                    _am_log("am_jobs", True, f"jobs={am.Jobs.Count}")
-                    out["am_jobs"] = f"OK: {am.Jobs.Count}"
-                except Exception as e2:
-                    _am_log("am_jobs", False, repr(e2))
-                    out["am_jobs"] = f"FAIL: {e2!r}"
-            except Exception as e:
-                _am_log("am_jobs", False, repr(e))
-                out["am_jobs"] = f"FAIL: {e!r}"
-            try:
-                detail = f"{am.IsCDMImport!r}"
-                _am_log("am_cdm_import", True, detail)
-                out["am_cdm_import"] = f"OK: {detail}"
-            except Exception as e:
-                _am_log("am_cdm_import", False, repr(e))
-                out["am_cdm_import"] = f"FAIL: {e!r}"
+        out["am_cdm"] = "SKIP: Automation Manager hangs in Session 0 (verified)"
         return out
 
     def _handler_get_info(self, params: dict[str, Any]) -> dict[str, Any]:
