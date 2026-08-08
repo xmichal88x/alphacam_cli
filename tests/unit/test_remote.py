@@ -220,3 +220,45 @@ def test_remote_auto_style_apply() -> None:
     result = app.auto_style_apply(r"C:\styles\auto.style")
     assert result == {"success": True, "file": r"C:\styles\auto.style"}
     session.auto_style_apply.assert_called_once_with(r"C:\styles\auto.style")
+
+
+def test_remote_create_layer() -> None:
+    session = MagicMock()
+    session.create_layer.return_value = {"success": True, "layer": "KONTUR"}
+    app = RemoteApplication(session)
+    result = app.create_layer("KONTUR")
+    assert result == {"success": True, "layer": "KONTUR"}
+    session.create_layer.assert_called_once_with("KONTUR")
+
+
+def test_remote_drawing_proxy_create_layer() -> None:
+    session = MagicMock()
+    session.create_layer.return_value = {"success": True, "layer": "KONTUR"}
+    drw = _DrawingProxy(session, {"geometries_count": 2})
+    result = drw.create_layer("KONTUR")
+    assert result == {"success": True, "layer": "KONTUR"}
+    session.create_layer.assert_called_once_with("KONTUR")
+
+
+def test_remote_machining_pipeline() -> None:
+    session = MagicMock()
+    session.machining_pipeline.return_value = {
+        "success": True,
+        "geometries_count": 2,
+        "tool_paths_count": 4,
+    }
+    app = RemoteApplication(session)
+    result = app.machining_pipeline(agq=r"C:\q.agq", ara=r"C:\a.ara", layer_map="KONTUR:1")
+    assert result["tool_paths_count"] == 4
+    session.machining_pipeline.assert_called_once_with(
+        agq=r"C:\q.agq", ara=r"C:\a.ara", layer_map="KONTUR:1"
+    )
+
+
+def test_remote_machining_pipeline_defaults() -> None:
+    session = MagicMock()
+    session.machining_pipeline.return_value = {"success": True}
+    app = RemoteApplication(session)
+    result = app.machining_pipeline()
+    assert result == {"success": True}
+    session.machining_pipeline.assert_called_once_with(agq=None, ara=None, layer_map=None)

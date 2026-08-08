@@ -105,6 +105,22 @@ def parametric(
 
 @app.command()
 @handle_com_errors
+def layer(name: str = typer.Argument(..., help="Layer name (max 31 characters)")) -> None:
+    """Create a user layer on the active drawing (or return the existing one)."""
+    require_platform()
+    with alphacam_context(visible=get_visible()) as raw:
+        ac = resolve_app(raw)
+        drw = ac.get_active_drawing()
+        if drw is None:
+            console.print("[red]No active drawing[/red]")
+            raise typer.Exit(code=1)
+
+        drw.create_layer(name)
+        console.print(f"[green]OK:[/green] Layer created: {name}")
+
+
+@app.command()
+@handle_com_errors
 def save(
     path: str = typer.Argument(..., help="Output .amd file path"),
 ) -> None:

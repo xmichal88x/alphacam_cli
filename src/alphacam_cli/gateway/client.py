@@ -192,6 +192,24 @@ class RemoteSession:
     def auto_style_apply(self, file: str) -> dict[str, Any]:
         return self._call("auto_style_apply", {"file": file})  # type: ignore[no-any-return]
 
+    def create_layer(self, name: str) -> dict[str, Any]:
+        return self._call("create_layer", {"name": name})  # type: ignore[no-any-return]
+
+    def machining_pipeline(
+        self,
+        agq: str | None = None,
+        ara: str | None = None,
+        layer_map: str | None = None,
+    ) -> dict[str, Any]:
+        params: dict[str, Any] = {}
+        if agq is not None:
+            params["agq"] = agq
+        if ara is not None:
+            params["ara"] = ara
+        if layer_map is not None:
+            params["layer_map"] = layer_map
+        return self._call("machining_pipeline", params)  # type: ignore[no-any-return]
+
     def batch_process(
         self,
         files: list[str],

@@ -55,3 +55,57 @@ def test_autostyle_apply_command() -> None:
         result = runner.invoke(app, ["autostyle", "apply", r"C:\styles\auto.style"])
     assert result.exit_code == 0
     assert "Auto-style applied: C:\\styles\\auto.style" in result.stderr
+
+
+def test_autostyle_apply_pipeline_command() -> None:
+    from tests.unit.test_cli import _mock_com
+
+    with (
+        _mock_com(),
+        patch(
+            "alphacam_cli.core.application.Application.machining_pipeline",
+            return_value={
+                "success": True,
+                "geometries_count": 2,
+                "tool_paths_count": 4,
+            },
+        ),
+    ):
+        result = runner.invoke(
+            app,
+            [
+                "autostyle",
+                "apply",
+                r"C:\styles\auto.ara",
+                "--agq",
+                r"C:\ALPHACAM\LICOMDIR\Queries\Menadżer_Warstw_Fronty.agq",
+                "--layer-map",
+                "KONTUR:1,2;EDGE_F45:3",
+            ],
+        )
+    assert result.exit_code == 0
+    assert "Auto-style applied: C:\\styles\\auto.ara" in result.stderr
+    assert "Geometries: 2" in result.stderr
+    assert "ToolPaths: 4" in result.stderr
+
+
+def test_autostyle_apply_pipeline_layer_map_only() -> None:
+    from tests.unit.test_cli import _mock_com
+
+    with (
+        _mock_com(),
+        patch(
+            "alphacam_cli.core.application.Application.machining_pipeline",
+            return_value={
+                "success": True,
+                "geometries_count": 1,
+                "tool_paths_count": 0,
+            },
+        ),
+    ):
+        result = runner.invoke(
+            app,
+            ["autostyle", "apply", r"C:\styles\auto.ara", "--layer-map", "KONTUR:1"],
+        )
+    assert result.exit_code == 0
+    assert "ToolPaths: 0" in result.stderr

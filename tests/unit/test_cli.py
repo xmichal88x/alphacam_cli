@@ -262,6 +262,22 @@ def test_drawing_create_with_fillet_text() -> None:
     assert "5.0" in result.stderr
 
 
+def test_drawing_layer() -> None:
+    with _mock_com() as app_mock:
+        result = runner.invoke(app, ["drawing", "layer", "KONTUR"])
+    assert result.exit_code == 0
+    assert "Layer created: KONTUR" in result.stderr
+    app_mock.ActiveDrawing.CreateLayer.assert_called_once_with("KONTUR")
+
+
+def test_drawing_layer_no_drawing() -> None:
+    with _mock_com() as app_mock:
+        app_mock.ActiveDrawing = None
+        result = runner.invoke(app, ["drawing", "layer", "KONTUR"])
+    assert result.exit_code == 1
+    assert "No active drawing" in result.stderr
+
+
 def test_drawing_parametric() -> None:
     with _mock_com() as app_mock:
         drw = app_mock.ActiveDrawing

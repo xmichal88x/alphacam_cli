@@ -94,6 +94,25 @@ class Drawing:
 
         return outer, inner
 
+    def create_layer(self, name: str) -> Any:
+        """Create (or return the existing) user layer with the given name.
+
+        Returns the raw COM dispatch of the layer (must be passed to
+        set_layer/SetLayer within the same process).
+        """
+        raw = self._drw.CreateLayer(name)  # type: ignore[attr-defined]
+        if raw is None:
+            raise RuntimeError("Failed to create layer")  # noqa: TRY003
+        return raw
+
+    def set_active_layer(self, layer: Any) -> None:
+        """Set the active user layer."""
+        self._drw.SetLayer(layer)  # type: ignore[attr-defined]
+
+    def run_query(self, file_path: str) -> int:
+        """Run a geometry query (.agq) on the drawing; returns applied rule count."""
+        return int(self._drw.RunQuery(file_path))  # type: ignore[attr-defined]
+
     def zoom_all(self) -> None:
         self._drw.ZoomAll()  # type: ignore[attr-defined]
 
@@ -211,6 +230,10 @@ class CamPath:
 
     def set_start_point(self, x: float, y: float) -> None:
         self._path.SetStartPoint(x, y)  # type: ignore[attr-defined]
+
+    def set_layer(self, layer: Any) -> None:
+        """Assign this geometry to a user layer (raw dispatch from Drawing.create_layer)."""
+        self._path.SetLayer(layer)  # type: ignore[attr-defined]
 
 
 class Geo2D:

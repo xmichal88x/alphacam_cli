@@ -924,3 +924,79 @@ def test_auto_style_apply_handler_invalid_file(server_app: MagicMock) -> None:
     gw = GatewayServer()
     with pytest.raises(COMError, match="invalid or unrecognized AutoStyles file"):
         gw._handler_auto_style_apply({"file": "x"})
+
+
+def test_create_layer_handler(server_app: MagicMock) -> None:
+    drw = MagicMock()
+    server_app.get_active_drawing.return_value = drw
+    gw = GatewayServer()
+    result = gw._handler_create_layer({"name": "KONTUR"})
+    assert result == {"success": True, "layer": "KONTUR"}
+    drw.create_layer.assert_called_once_with("KONTUR")
+
+
+def test_create_layer_handler_missing_name(server_app: MagicMock) -> None:
+    gw = GatewayServer()
+    with pytest.raises(COMError, match="name is required"):
+        gw._handler_create_layer({})
+
+
+def test_create_layer_handler_no_drawing(server_app: MagicMock) -> None:
+    server_app.get_active_drawing.return_value = None
+    gw = GatewayServer()
+    with pytest.raises(COMError, match="No active drawing"):
+        gw._handler_create_layer({"name": "KONTUR"})
+
+
+def test_create_layer_handler_failure(server_app: MagicMock) -> None:
+    drw = MagicMock()
+    drw.create_layer.side_effect = RuntimeError("boom")
+    server_app.get_active_drawing.return_value = drw
+    gw = GatewayServer()
+    with pytest.raises(COMError, match=r"create_layer failed: boom"):
+        gw._handler_create_layer({"name": "KONTUR"})
+
+
+def test_machining_pipeline_handler(server_app: MagicMock) -> None:
+    server_app.machining_pipeline.return_value = {
+        "success": True,
+        "geometries_count": 2,
+        "tool_paths_count": 4,
+    }
+    gw = GatewayServer()
+    result = gw._handler_machining_pipeline(
+        {
+            "agq": r"C:\ALPHACAM\LICOMDIR\Queries\test.agq",
+            "ara": r"C:\ALPHACAM\LICOMDIR\Styles\Fronty_AutoStyl.ara",
+            "layer_map": "KONTUR:1,2;EDGE_F45:3",
+        }
+    )
+    assert result == {"success": True, "geometries_count": 2, "tool_paths_count": 4}
+    server_app.machining_pipeline.assert_called_once_with(
+        agq=r"C:\ALPHACAM\LICOMDIR\Queries\test.agq",
+        ara=r"C:\ALPHACAM\LICOMDIR\Styles\Fronty_AutoStyl.ara",
+        layer_map="KONTUR:1,2;EDGE_F45:3",
+    )
+
+
+def test_machining_pipeline_handler_optional_params(server_app: MagicMock) -> None:
+    server_app.machining_pipeline.return_value = {"success": True}
+    gw = GatewayServer()
+    gw._handler_machining_pipeline({"ara": r"C:\styles\auto.ara"})
+    server_app.machining_pipeline.assert_called_once_with(
+        agq=None, ara=r"C:\styles\auto.ara", layer_map=None
+    )
+
+
+def test_machining_pipeline_handler_missing_ara(server_app: MagicMock) -> None:
+    gw = GatewayServer()
+    with pytest.raises(COMError, match="ara is required"):
+        gw._handler_machining_pipeline({})
+    server_app.machining_pipeline.assert_not_called()
+
+
+def test_machining_pipeline_handler_failure(server_app: MagicMock) -> None:
+    server_app.machining_pipeline.side_effect = RuntimeError("boom")
+    gw = GatewayServer()
+    with pytest.raises(COMError, match=r"machining pipeline failed: boom"):
+        gw._handler_machining_pipeline({"ara": r"C:\styles\auto.ara"})

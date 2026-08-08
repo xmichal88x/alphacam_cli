@@ -462,3 +462,78 @@ class Application:
             )
             raise RuntimeError(msg) from e  # noqa: TRY003
         return {"success": True, "file": file}
+
+    def machining_pipeline(
+        self,
+        agq: str | None = None,
+        ara: str | None = None,
+        layer_map: str | None = None,
+    ) -> dict[str, Any]:
+        """Run the full machining pipeline on the active drawing.
+
+        1. Create/assign layers ("NAME:1,2;NAME2:3", 1-based geometry indices),
+        2. optionally run a geometry query (.agq),
+        3. apply an auto-style file (.ara) via the AutoStyles add-in.
+        """
+        drw = self.get_active_drawing()
+        if drw is None:
+            raise RuntimeError("No active drawing")  # noqa: TRY003
+        if ara is None:
+            raise RuntimeError("ara is required")  # noqa: TRY003
+        if layer_map:
+            geometries = drw.geometries()
+            for layer_name, indices in _parse_layer_map(layer_map).items():
+                layer = drw.create_layer(layer_name)
+                for idx in indices:
+                    if idx < 1 or idx > len(geometries):
+                        raise RuntimeError(  # noqa: TRY003
+                            f"Layer '{layer_name}': geometry index {idx} "
+                            f"out of range (1-{len(geometries)})"
+                        )
+                    geometries[idx - 1].set_layer(layer)
+        if agq:
+            drw.run_query(agq)
+        astyles = self.get_auto_styles_addin()
+        try:
+            astyles.Apply(ara)
+        except Exception as e:
+            raise RuntimeError(  # noqa: TRY003
+                f"failed to apply auto-style '{ara}': invalid or unrecognized "
+                "AutoStyles file (check format .ara)"
+            ) from e
+        return {
+            "success": True,
+            "geometries_count": drw.geometries_count,
+            "tool_paths_count": drw.tool_paths_count,
+        }
+
+
+def _parse_layer_map(layer_map: str) -> dict[str, list[int]]:
+    """Parse "NAME:1,2;NAME2:3" into {layer_name: [1-based indices]}."""
+    parsed: dict[str, list[int]] = {}
+    for entry in layer_map.split(";"):
+        entry = entry.strip()
+        if not entry:
+            continue
+        if ":" not in entry:
+            raise ValueError(  # noqa: TRY003
+                f"Invalid layer map entry: '{entry}' (expected NAME:1,2)"
+            )
+        name, _, indices_part = entry.partition(":")
+        name = name.strip()
+        if not name:
+            raise ValueError(  # noqa: TRY003
+                f"Invalid layer map entry: '{entry}' (empty layer name)"
+            )
+        indices: list[int] = []
+        for part in indices_part.split(","):
+            part = part.strip()
+            if not part:
+                continue
+            if not part.isdigit():
+                raise ValueError(  # noqa: TRY003
+                    f"Invalid layer map index: '{part}' in '{entry}'"
+                )
+            indices.append(int(part))
+        parsed[name] = indices
+    return parsed

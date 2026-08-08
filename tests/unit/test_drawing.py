@@ -446,3 +446,65 @@ def test_drawing_init_none(mock_com: MagicMock) -> None:
 
         with pytest.raises(ValueError, match="dispatch cannot be None"):
             Drawing(None)
+
+
+def test_create_layer(mock_com: MagicMock) -> None:
+    with mock_com:
+        from alphacam_cli.com.manager import alphacam_context
+        from alphacam_cli.core.drawing import Drawing
+
+        with alphacam_context() as raw:
+            drw = Drawing(raw.ActiveDrawing)
+            layer_mock = MagicMock()
+            drw._drw.CreateLayer.return_value = layer_mock
+            result = drw.create_layer("KONTUR")
+            assert result is layer_mock
+            drw._drw.CreateLayer.assert_called_once_with("KONTUR")
+
+
+def test_create_layer_none(mock_com: MagicMock) -> None:
+    with mock_com:
+        from alphacam_cli.com.manager import alphacam_context
+        from alphacam_cli.core.drawing import Drawing
+
+        with alphacam_context() as raw:
+            drw = Drawing(raw.ActiveDrawing)
+            drw._drw.CreateLayer.return_value = None
+            with pytest.raises(RuntimeError, match="Failed to create layer"):
+                drw.create_layer("KONTUR")
+
+
+def test_set_active_layer(mock_com: MagicMock) -> None:
+    with mock_com:
+        from alphacam_cli.com.manager import alphacam_context
+        from alphacam_cli.core.drawing import Drawing
+
+        with alphacam_context() as raw:
+            drw = Drawing(raw.ActiveDrawing)
+            layer_mock = MagicMock()
+            drw.set_active_layer(layer_mock)
+            drw._drw.SetLayer.assert_called_once_with(layer_mock)
+
+
+def test_run_query(mock_com: MagicMock) -> None:
+    with mock_com:
+        from alphacam_cli.com.manager import alphacam_context
+        from alphacam_cli.core.drawing import Drawing
+
+        with alphacam_context() as raw:
+            drw = Drawing(raw.ActiveDrawing)
+            drw._drw.RunQuery.return_value = 7
+            result = drw.run_query(r"C:\ALPHACAM\LICOMDIR\Queries\test.agq")
+            assert result == 7
+            drw._drw.RunQuery.assert_called_once_with(r"C:\ALPHACAM\LICOMDIR\Queries\test.agq")
+
+
+def test_cam_path_set_layer(mock_com: MagicMock) -> None:
+    with mock_com:
+        from alphacam_cli.core.drawing import CamPath
+
+        path_mock = MagicMock()
+        cp = CamPath(path_mock)
+        layer_mock = MagicMock()
+        cp.set_layer(layer_mock)
+        path_mock.SetLayer.assert_called_once_with(layer_mock)

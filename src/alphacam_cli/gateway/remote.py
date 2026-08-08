@@ -77,6 +77,9 @@ class _DrawingProxy:
     def create_text(self, text: str, x: float, y: float, height: float) -> Any:
         return None
 
+    def create_layer(self, name: str) -> dict[str, Any]:
+        return self._session.create_layer(name)  # type: ignore[no-any-return]
+
 
 class RemoteApplication:
     def __init__(self, session: RemoteSession) -> None:
@@ -208,6 +211,19 @@ class RemoteApplication:
 
     def auto_style_apply(self, file: str) -> dict[str, Any]:
         return self._session.auto_style_apply(file)  # type: ignore[no-any-return]
+
+    def create_layer(self, name: str) -> dict[str, Any]:
+        return self._session.create_layer(name)  # type: ignore[no-any-return]
+
+    def machining_pipeline(
+        self,
+        agq: str | None = None,
+        ara: str | None = None,
+        layer_map: str | None = None,
+    ) -> dict[str, Any]:
+        return self._session.machining_pipeline(  # type: ignore[no-any-return]
+            agq=agq, ara=ara, layer_map=layer_map
+        )
 
     def get_nesting(self) -> Any:
         return _RemoteNesting(self._session)

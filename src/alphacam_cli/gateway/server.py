@@ -298,6 +298,36 @@ class GatewayServer:
         except Exception as e:
             raise COMError(str(e)) from e
 
+    def _handler_create_layer(self, params: dict[str, Any]) -> dict[str, Any]:
+        from alphacam_cli.gateway.server import _app as com_app
+
+        name = str(params.get("name", ""))
+        if not name:
+            raise COMError("name is required")
+        drw = com_app.get_active_drawing()
+        if drw is None:
+            raise COMError("No active drawing")
+        try:
+            drw.create_layer(name)
+        except Exception as e:
+            raise COMError(f"create_layer failed: {e}") from e
+        return {"success": True, "layer": name}
+
+    def _handler_machining_pipeline(self, params: dict[str, Any]) -> dict[str, Any]:
+        from alphacam_cli.gateway.server import _app as com_app
+
+        ara = str(params.get("ara", ""))
+        if not ara:
+            raise COMError("ara is required")
+        agq = str(params.get("agq", "")) or None
+        layer_map = str(params.get("layer_map", "")) or None
+        try:
+            return com_app.machining_pipeline(  # type: ignore[no-any-return]
+                agq=agq, ara=ara, layer_map=layer_map
+            )
+        except Exception as e:
+            raise COMError(f"machining pipeline failed: {e}") from e
+
     def _handler_probe_nest(self, params: dict[str, Any]) -> dict[str, str]:
         from alphacam_cli.gateway.server import _app as com_app
 
