@@ -714,7 +714,7 @@ class GatewayServer:
                 raise COMError(f"nest: add_part failed: {e}") from e
         try:
             sheet_geo = drw.create_rectangle(0, 0, sheet_width, sheet_height)
-            nd.AddSheet(sheet_geo, "MDF", 0.25, 2)  # type: ignore[attr-defined]
+            nd.AddSheet(sheet_geo.raw_dispatch, "MDF", 18, 1)  # type: ignore[attr-defined]
         except Exception as e:
             raise COMError(f"nest: add_sheet failed: {e}") from e
         try:
