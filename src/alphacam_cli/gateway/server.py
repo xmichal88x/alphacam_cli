@@ -834,6 +834,7 @@ class GatewayServer:
         output_dir = str(params.get("output_dir", ""))
         sheet_width = float(params.get("sheet_width", 2440))
         sheet_height = float(params.get("sheet_height", 1220))
+        sheet_name = str(params.get("sheet_name", ""))
         if not parts:
             raise COMError("parts list is required")
         if output_dir:
@@ -855,8 +856,28 @@ class GatewayServer:
             except Exception as e:
                 raise COMError(f"nest: add_part failed: {e}") from e
         try:
-            sheet_geo = drw.create_rectangle(0, 0, sheet_width, sheet_height)
-            nd.AddSheet(sheet_geo.raw_dispatch, "MDF", 18, 1)  # type: ignore[attr-defined]
+            if sheet_name:
+                import win32com.client.gencache as gencache  # type: ignore[import-untyped]
+
+                gencache.EnsureModule("{6702E3DF-142C-4627-8EA2-4C47EBC78441}", 0, 1, 3)
+                app = gencache.EnsureDispatch("Ar5axaps.Application")
+                try:
+                    sheet = app.Nesting.SheetDatabase.FindSheet(sheet_name)
+                except Exception as e:
+                    raise COMError(f"nest: sheet from library not found: {sheet_name}") from e
+                paths = sheet.InsertInActiveDrawingAtPoint(0.0, 0.0)
+                try:
+                    thickness = sheet.Thickness.Thickness
+                except Exception:
+                    thickness = 18.0
+                nd.AddSheet(  # type: ignore[attr-defined]
+                    paths.Item(1), sheet.Material.Name, thickness, sheet.Quantity
+                )
+            else:
+                sheet_geo = drw.create_rectangle(0, 0, sheet_width, sheet_height)
+                nd.AddSheet(sheet_geo.raw_dispatch, "MDF", 18, 1)  # type: ignore[attr-defined]
+        except COMError:
+            raise
         except Exception as e:
             raise COMError(f"nest: add_sheet failed: {e}") from e
         try:

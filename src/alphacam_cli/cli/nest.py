@@ -29,6 +29,9 @@ def run(
     ),
     sheet_width: float = typer.Option(2440, "--sheet-width", "-w", help="Sheet width"),
     sheet_height: float = typer.Option(1220, "--sheet-height", "-h", help="Sheet height"),
+    sheet_name: str = typer.Option(
+        "", "--sheet-name", help="Sheet name from library (e.g. MDF_18); empty = draw rectangle"
+    ),
 ) -> None:
     """Run nesting from a CSV file with columns: filename, count."""
     require_platform()
@@ -93,10 +96,27 @@ def run(
 
         nd = drw.create_nest_data(anl_path)
 
-        # Create sheet geometry and run nesting
-        sheet_geo = drw.create_rectangle(0, 0, sheet_width, sheet_height)
+        # Create sheet geometry (from library or rectangle) and run nesting
         console.print(f"[yellow]Nesting {len(parts)} part types...[/yellow]")
-        nd.AddSheet(sheet_geo.raw_dispatch, "MDF", 18, 1)
+        if sheet_name:
+            import win32com.client.gencache as gencache  # type: ignore[import-untyped]
+
+            gencache.EnsureModule("{6702E3DF-142C-4627-8EA2-4C47EBC78441}", 0, 1, 3)
+            app = gencache.EnsureDispatch("Ar5axaps.Application")
+            try:
+                sheet = app.Nesting.SheetDatabase.FindSheet(sheet_name)
+            except Exception as e:
+                console.print(f"[red]nest: sheet from library not found: {sheet_name}[/red]")
+                raise typer.Exit(code=1) from e
+            paths = sheet.InsertInActiveDrawingAtPoint(0.0, 0.0)
+            try:
+                thickness = sheet.Thickness.Thickness
+            except Exception:
+                thickness = 18.0
+            nd.AddSheet(paths.Item(1), sheet.Material.Name, thickness, sheet.Quantity)
+        else:
+            sheet_geo = drw.create_rectangle(0, 0, sheet_width, sheet_height)
+            nd.AddSheet(sheet_geo.raw_dispatch, "MDF", 18, 1)
         nd.DoNest()
         console.print("[green]OK:[/green] Nesting completed")
         console.print(f"     Total parts: {sum(p['count'] for p in parts)}")

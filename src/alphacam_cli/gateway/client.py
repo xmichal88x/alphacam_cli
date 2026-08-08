@@ -154,6 +154,7 @@ class RemoteSession:
         output_dir: str = "",
         sheet_width: float = 2440,
         sheet_height: float = 1220,
+        sheet_name: str = "",
     ) -> dict[str, Any]:
         return self._call(  # type: ignore[no-any-return]
             "run_nest",
@@ -162,6 +163,7 @@ class RemoteSession:
                 "output_dir": output_dir,
                 "sheet_width": sheet_width,
                 "sheet_height": sheet_height,
+                "sheet_name": sheet_name,
             },
         )
 
