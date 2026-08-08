@@ -245,6 +245,7 @@ def test_export_stl(mock_com: MagicMock) -> None:
         with alphacam_context() as raw:
             drw = Drawing(raw.ActiveDrawing)
             drw.export("test.stl", "stl")
+            drw._drw.SetGeosSelected.assert_any_call(True)
             drw._drw.SaveStlFile.assert_called_once_with("test.stl", ACAM_STL_TYPE_SURFACES, 0.1)
 
 
@@ -260,6 +261,7 @@ def test_export_stl_com_error_raises_value_error(mock_com: MagicMock) -> None:
             drw._drw.SaveStlFile.side_effect = pythoncom.com_error(-2147467259, "Unexpected error")
             with pytest.raises(ValueError, match="stl export failed"):
                 drw.export("test.stl", "stl")
+            drw._drw.SetGeosSelected.assert_any_call(True)
             drw._drw.SaveStlFile.assert_called_once_with("test.stl", ACAM_STL_TYPE_SURFACES, 0.1)
 
 

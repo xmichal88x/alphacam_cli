@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import contextlib
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
@@ -108,12 +109,15 @@ class Drawing:
         elif fmt == "stl":
             import pythoncom  # type: ignore[import-untyped]
 
+            self.select_all_geometries()
             try:
                 self._drw.SaveStlFile(path, ACAM_STL_TYPE_SURFACES, 0.1)  # type: ignore[attr-defined]
             except pythoncom.com_error as e:
                 raise ValueError(  # noqa: TRY003
                     "stl export failed: no facetable geometry in the drawing"
                 ) from e
+            with contextlib.suppress(pythoncom.com_error):
+                self._drw.SetGeosSelected(False)  # type: ignore[attr-defined]
         elif fmt == "emf":
             self._drw.SaveEmfFile(path, False, False)  # type: ignore[attr-defined]
         elif fmt == "wmf":
