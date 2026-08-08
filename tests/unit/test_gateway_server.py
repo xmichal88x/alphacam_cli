@@ -145,10 +145,15 @@ def test_select_post_handler_full_path(
 def test_output_nc_handler(server_app: MagicMock, tmp_path: pathlib.Path) -> None:
     drw = MagicMock()
     server_app.get_active_drawing.return_value = drw
-    nc_file = tmp_path / "out.nc"
-    nc_file.write_bytes(b"G0 X0 Y0\n" * 100)
+
+    def _write_nc(path: str) -> None:
+        pathlib.Path(path).write_bytes(b"G0 X0 Y0\n" * 100)
+
+    drw.output_nc.side_effect = _write_nc
+    nc_file = tmp_path / "nested" / "out.nc"
     gw = GatewayServer()
     result = gw._handler_output_nc({"path": str(nc_file)})
+    assert nc_file.parent.exists()
     assert result == {"success": True, "size": nc_file.stat().st_size, "path": str(nc_file)}
     drw.output_nc.assert_called_once_with(str(nc_file))
 
@@ -161,6 +166,19 @@ def test_output_nc_handler_missing_file(server_app: MagicMock, tmp_path: pathlib
     with pytest.raises(COMError, match="NC file not created"):
         gw._handler_output_nc({"path": missing})
     drw.output_nc.assert_called_once_with(missing)
+
+
+def test_save_active_drawing_handler_creates_parent_dir(
+    server_app: MagicMock, tmp_path: pathlib.Path
+) -> None:
+    drw = MagicMock()
+    server_app.get_active_drawing.return_value = drw
+    amd_file = tmp_path / "nested" / "file.amd"
+    gw = GatewayServer()
+    result = gw._handler_save_active_drawing({"path": str(amd_file)})
+    assert result == {"success": True}
+    assert amd_file.parent.exists()
+    drw.save_as.assert_called_once_with(str(amd_file))
 
 
 def test_glob_files_handler(server_app: MagicMock, tmp_path: pathlib.Path) -> None:

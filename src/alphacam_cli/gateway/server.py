@@ -289,6 +289,9 @@ class GatewayServer:
         drw = com_app.get_active_drawing()
         if drw is None:
             raise COMError("No active drawing")
+        parent = os.path.dirname(path)
+        if parent:
+            os.makedirs(parent, exist_ok=True)
         drw.save_as(path)
         return {"success": True}
 
@@ -468,6 +471,9 @@ class GatewayServer:
         drw = com_app.get_active_drawing()
         if drw is None:
             raise COMError("No active drawing")
+        parent = os.path.dirname(path)
+        if parent:
+            os.makedirs(parent, exist_ok=True)
         drw.output_nc(path)
         if os.path.exists(path):
             return {"success": True, "size": int(os.path.getsize(path)), "path": path}
