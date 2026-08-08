@@ -865,6 +865,8 @@ class GatewayServer:
                     sheet = app.Nesting.SheetDatabase.FindSheet(sheet_name)
                 except Exception as e:
                     raise COMError(f"nest: sheet from library not found: {sheet_name}") from e
+                if sheet is None:
+                    raise COMError(f"nest: sheet from library not found: {sheet_name}")  # noqa: TRY301
                 paths = sheet.InsertInActiveDrawingAtPoint(0.0, 0.0)
                 try:
                     thickness = sheet.Thickness.Thickness
