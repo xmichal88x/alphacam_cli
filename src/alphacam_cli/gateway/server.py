@@ -842,6 +842,114 @@ class GatewayServer:
         out["am_cdm"] = "SKIP: Automation Manager hangs in Session 0 (verified)"
         return out
 
+    def _handler_cdm_probe(self, params: dict[str, Any]) -> dict[str, str]:
+        from alphacam_cli.gateway.server import _app as com_app
+
+        out: dict[str, str] = {}
+
+        def _am_log(step: str, ok: bool, detail: str = "") -> None:
+            try:
+                with open(r"C:\temp\cdm_probe2.log", "a", encoding="utf-8") as f:
+                    f.write(f"{step}: {'OK' if ok else 'FAIL'} {detail}\n")
+            except Exception:
+                pass
+
+        _am_log("start", True)
+        out["start"] = "OK"
+
+        def work() -> None:
+            try:
+                import win32com.client.gencache as gencache  # type: ignore[import-untyped]
+
+                mod = gencache.EnsureModule("{D216BAAC-A717-4793-92D3-1AE37AE3AC2E}", 0, 1, 0)
+                _am_log("cdm_typelib_interface", True, repr(mod))
+                out["cdm_typelib_interface"] = f"OK: {mod!r}"
+            except Exception as e:
+                _am_log("cdm_typelib_interface", False, repr(e))
+                out["cdm_typelib_interface"] = f"FAIL: {e!r}"
+            try:
+                import win32com.client.gencache as gencache  # type: ignore[import-untyped]
+
+                mod = gencache.EnsureModule("{A87DD4DB-67C9-4F1B-BC79-A71EE8C7D1E5}", 0, 1, 0)
+                _am_log("cdm_typelib_addins", True, repr(mod))
+                out["cdm_typelib_addins"] = f"OK: {mod!r}"
+            except Exception as e:
+                _am_log("cdm_typelib_addins", False, repr(e))
+                out["cdm_typelib_addins"] = f"FAIL: {e!r}"
+            ai: Any = None
+            try:
+                import pythoncom  # type: ignore[import-untyped]
+                import win32com.client as w32  # type: ignore[import-untyped]
+
+                clsid = pythoncom.MakeIID("{39BFE38A-D3E4-43EA-89D0-584C776B97A9}")
+                ai = w32.Dispatch(
+                    pythoncom.CoCreateInstance(
+                        clsid, None, pythoncom.CLSCTX_ALL, pythoncom.IID_IDispatch
+                    )
+                )
+                _am_log("cdm_co_create", True, repr(ai))
+                out["cdm_co_create"] = f"OK: {ai!r}"
+            except Exception as e:
+                _am_log("cdm_co_create", False, repr(e))
+                out["cdm_co_create"] = f"FAIL: {e!r}"
+            addins: Any = None
+            if ai is not None:
+                try:
+                    raw = com_app._app  # type: ignore[attr-defined]
+                    if hasattr(com_app, "raw_dispatch"):
+                        raw = com_app.raw_dispatch  # type: ignore[attr-defined]
+                    addins = ai.GetAddInsInterface(raw)
+                    _am_log("cdm_get_addins", True, repr(addins))
+                    out["cdm_get_addins"] = f"OK: {addins!r}"
+                except Exception as e:
+                    _am_log("cdm_get_addins", False, repr(e))
+                    out["cdm_get_addins"] = f"FAIL: {e!r}"
+            am: Any = None
+            if addins is not None:
+                try:
+                    am = addins.GetAutomationManagerAddIn()
+                    _am_log("cdm_get_am", True, repr(am))
+                    out["cdm_get_am"] = f"OK: {am!r}"
+                except Exception as e:
+                    _am_log("cdm_get_am", False, repr(e))
+                    out["cdm_get_am"] = f"FAIL: {e!r}"
+            if am is not None:
+                authorised = False
+                try:
+                    authorised = bool(am.IsCDMAuthorised())
+                    out["cdm_authorised"] = f"OK: {authorised}"
+                except Exception as e:
+                    out["cdm_authorised"] = f"FAIL: {e!r}"
+                try:
+                    out["cdm_customers_count"] = f"OK: {am.Customers.Count}"
+                except Exception as e:
+                    out["cdm_customers_count"] = f"FAIL: {e!r}"
+                try:
+                    out["cdm_jobs_count"] = f"OK: {am.Jobs.Count}"
+                except Exception as e:
+                    out["cdm_jobs_count"] = f"FAIL: {e!r}"
+                try:
+                    job = am.NewCDMJob()
+                    out["cdm_new_job"] = f"OK: {job!r}"
+                except Exception as e:
+                    out["cdm_new_job"] = f"FAIL: {e!r}"
+                try:
+                    db = am.ImportCDMDatabase()
+                    out["cdm_import_db"] = f"OK: {db!r}"
+                except Exception as e:
+                    out["cdm_import_db"] = f"FAIL: {e!r}"
+                out["result"] = "CDM_OK" if authorised else "CDM_FAIL"
+
+        t = threading.Thread(target=work, daemon=True)
+        t.start()
+        t.join(timeout=45)
+        if t.is_alive():
+            out["timeout"] = "GetAutomationManagerAddIn hung >45s"
+            out["result"] = "CDM_FAIL"
+            _am_log("timeout", False, "GetAutomationManagerAddIn hung >45s")
+        out.setdefault("result", "CDM_FAIL")
+        return out
+
     def _handler_get_info(self, params: dict[str, Any]) -> dict[str, Any]:
         from alphacam_cli.gateway.server import _app as com_app
 
