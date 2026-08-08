@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock
 
+import pytest
+
 from alphacam_cli.core.application import Application
 
 
@@ -215,3 +217,26 @@ def test_create_mill_data(mock_com: MagicMock) -> None:
             ac = Application(raw)
             md = ac.create_mill_data()
             assert md is not None
+
+
+def test_apply_mill_style(mock_com: MagicMock) -> None:
+    with mock_com:
+        from alphacam_cli.com.manager import alphacam_context
+
+        with alphacam_context() as raw:
+            ac = Application(raw)
+            ac.apply_mill_style(r"C:\ALPHACAM\LICOMDIR\Styles\Fronty\Edge_01.ary")
+            style = raw.CreateMillStyle.return_value
+            assert style.FileName == r"C:\ALPHACAM\LICOMDIR\Styles\Fronty\Edge_01.ary"
+            style.Apply.assert_called_once()
+
+
+def test_apply_mill_style_error(mock_com: MagicMock) -> None:
+    with mock_com:
+        from alphacam_cli.com.manager import alphacam_context
+
+        with alphacam_context() as raw:
+            ac = Application(raw)
+            raw.CreateMillStyle.side_effect = Exception("style not found")
+            with pytest.raises(RuntimeError, match="Failed to apply mill style"):
+                ac.apply_mill_style(r"C:\ALPHACAM\LICOMDIR\Styles\Missing.ary")

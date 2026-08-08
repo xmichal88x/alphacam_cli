@@ -182,6 +182,14 @@ class Application:
         except Exception as e:
             raise RuntimeError(f"Failed to select post '{name}': {e}") from e  # noqa: TRY003
 
+    def apply_mill_style(self, style_path: str) -> None:
+        try:
+            style = self._app.CreateMillStyle()  # type: ignore[attr-defined]
+            style.FileName = style_path  # type: ignore[attr-defined]
+            style.Apply()  # type: ignore[attr-defined]
+        except Exception as e:
+            raise RuntimeError(f"Failed to apply mill style '{style_path}': {e}") from e  # noqa: TRY003
+
     def find_drawing_files(self, pattern: str = "*.amd") -> list[str]:
         base = os.path.join(self.licomdir_path, "parts")
         return sorted(glob.glob(os.path.join(base, pattern)))

@@ -176,6 +176,9 @@ class RemoteApplication:
     def select_post(self, name: str) -> None:
         self._session.select_post(name)
 
+    def apply_mill_style(self, style_path: str) -> None:
+        self._session.apply_style(style_path)
+
     def get_nesting(self) -> Any:
         return _RemoteNesting(self._session)
 

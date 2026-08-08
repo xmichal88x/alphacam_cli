@@ -418,6 +418,42 @@ def test_mill_drill_no_active_drawing() -> None:
     assert "No active drawing" in result.stderr
 
 
+def test_mill_style() -> None:
+    with _mock_com() as app_mock:
+        app_mock.ActiveDrawing.Geometries.Count = 3
+        result = runner.invoke(
+            app, ["mill", "style", r"C:\ALPHACAM\LICOMDIR\Styles\Fronty\Edge_01.ary"]
+        )
+    assert result.exit_code == 0
+    assert "ToolPaths" in result.stderr
+    style = app_mock.CreateMillStyle.return_value
+    assert style.FileName == r"C:\ALPHACAM\LICOMDIR\Styles\Fronty\Edge_01.ary"
+    style.Apply.assert_called_once()
+
+
+def test_mill_style_no_geometries() -> None:
+    with _mock_com():
+        result = runner.invoke(app, ["mill", "style", r"C:\ALPHACAM\LICOMDIR\Styles\Edge.ary"])
+    assert result.exit_code == 0
+    assert "No geometries" in result.stderr
+
+
+def test_mill_style_invalid_extension() -> None:
+    with _mock_com() as app_mock:
+        app_mock.ActiveDrawing.Geometries.Count = 1
+        result = runner.invoke(app, ["mill", "style", r"C:\Styles\Edge.ary2"])
+    assert result.exit_code == 2
+    assert "Style must be a .ary file" in result.stderr
+
+
+def test_mill_style_no_active_drawing() -> None:
+    with _mock_com() as app_mock:
+        app_mock.ActiveDrawing = None
+        result = runner.invoke(app, ["mill", "style", r"C:\Styles\Edge.ary"])
+    assert result.exit_code == 1
+    assert "No active drawing" in result.stderr
+
+
 def test_nc_output() -> None:
     m = mock_open(read_data="N100 G0 X0 Y0\n")
     with _mock_com(), patch("os.path.exists", return_value=True), patch("builtins.open", m):

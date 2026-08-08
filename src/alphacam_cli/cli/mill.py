@@ -189,3 +189,30 @@ def drill(
         md.drill_tap()
         drw.zoom_all()
         console.print("[green]OK:[/green] Drill done")
+
+
+@app.command()
+@handle_com_errors
+def style(
+    style_path: str = typer.Argument(..., help="Path to .ary machining style"),
+) -> None:
+    """Apply a .ary machining style to the active drawing (production pattern)."""
+    require_platform()
+    with alphacam_context(visible=get_visible()) as raw:
+        ac = resolve_app(raw)
+        drw = ac.get_active_drawing()
+        if drw is None:
+            console.print("[red]No active drawing[/red]")
+            raise typer.Exit(code=1)
+        if drw.geometries_count == 0:
+            console.print("[yellow]No geometries to machine[/yellow]")
+            raise typer.Exit(code=0)
+        if not style_path.lower().endswith(".ary"):
+            console.print("[red]Style must be a .ary file[/red]")
+            raise typer.Exit(code=2)
+        ac.apply_mill_style(style_path)
+        drw.zoom_all()
+        fresh = ac.get_active_drawing()
+        if fresh is not None:
+            drw = fresh
+        console.print(f"[green]OK:[/green] ToolPaths: {drw.tool_paths_count}")

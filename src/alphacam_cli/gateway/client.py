@@ -122,6 +122,9 @@ class RemoteSession:
     def output_nc(self, path: str, post: str = "") -> dict[str, Any]:
         return self._call("output_nc", {"path": path, "post": post})  # type: ignore[no-any-return]
 
+    def apply_style(self, style: str, tool: str = "") -> dict[str, Any]:
+        return self._call("apply_style", {"style": style, "tool": tool})  # type: ignore[no-any-return]
+
     def batch_process(
         self,
         files: list[str],

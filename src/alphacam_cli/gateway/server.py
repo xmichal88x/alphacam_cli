@@ -432,6 +432,30 @@ class GatewayServer:
         drw.zoom_all()
         return {"success": True}
 
+    def _handler_apply_style(self, params: dict[str, Any]) -> dict[str, Any]:
+        from alphacam_cli.gateway.server import _app as com_app
+
+        style = str(params.get("style", ""))
+        if not style:
+            raise COMError("style is required")
+        tool = str(params.get("tool", ""))
+        if tool:
+            if os.path.exists(tool):
+                if com_app.select_tool(tool) is None:
+                    raise COMError(f"Failed to select tool: {os.path.basename(tool)}")
+            else:
+                self._handler_select_tool({"name": os.path.basename(tool)})
+        drw = com_app.get_active_drawing()
+        if drw is None:
+            raise COMError("No active drawing")
+        if drw.geometries_count == 0:
+            raise COMError("No geometries to machine")
+        for geo in drw.geometries():
+            geo.selected = True
+        com_app.apply_mill_style(style)
+        drw.zoom_all()
+        return {"success": True, "tool_paths_count": drw.tool_paths_count}
+
     def _handler_output_nc(self, params: dict[str, Any]) -> dict[str, bool]:
         from alphacam_cli.gateway.server import _app as com_app
 
