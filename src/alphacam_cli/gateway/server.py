@@ -624,6 +624,65 @@ class GatewayServer:
                 out["stl_deselect"] = "OK"
             except Exception as e:
                 out["stl_deselect"] = f"FAIL: {e!r}"
+        try:
+            import win32com.client.gencache as gencache  # type: ignore[import-untyped]
+
+            mod = gencache.EnsureModule("{D216BAAC-A717-4793-92D3-1AE37AE3AC2E}", 0, 1, 0)
+            out["am_typelib_interface"] = f"OK: {mod!r}"
+        except Exception as e:
+            out["am_typelib_interface"] = f"FAIL: {e!r}"
+        try:
+            import win32com.client.gencache as gencache  # type: ignore[import-untyped]
+
+            mod = gencache.EnsureModule("{A87DD4DB-67C9-4F1B-BC79-A71EE8C7D1E5}", 0, 1, 0)
+            out["am_typelib_addins"] = f"OK: {mod!r}"
+        except Exception as e:
+            out["am_typelib_addins"] = f"FAIL: {e!r}"
+        ai: Any = None
+        try:
+            import win32com.client as w32  # type: ignore[import-untyped]
+
+            ai = w32.Dispatch("AcamAddInsInterface.AddInsInterface")
+            out["am_addins_interface"] = f"OK: {ai!r}"
+        except Exception as e:
+            out["am_addins_interface"] = f"FAIL: {e!r}"
+        addins: Any = None
+        if ai is not None:
+            try:
+                addins = ai.GetAddInsInterface(app3)
+                out["am_get_addins"] = f"OK: {addins!r}"
+            except Exception as e:
+                out["am_get_addins"] = f"FAIL: {e!r}"
+        am: Any = None
+        if addins is not None:
+            try:
+                am = addins.GetAutomationManagerAddIn()
+                out["am_get_automation_manager"] = f"OK: {am!r}"
+            except Exception as e:
+                out["am_get_automation_manager"] = f"FAIL: {e!r}"
+        if am is not None:
+            try:
+                out["am_running"] = f"OK: {am.IsAutomationManagerAlreadyRunning!r}"
+            except Exception as e:
+                out["am_running"] = f"FAIL: {e!r}"
+            try:
+                out["am_cdm_authorised"] = f"OK: {am.IsCDMAuthorised!r}"
+            except Exception as e:
+                out["am_cdm_authorised"] = f"FAIL: {e!r}"
+            try:
+                out["am_jobs"] = f"OK: {am.Customers.Count}"
+            except AttributeError as e:
+                out["am_jobs"] = f"FAIL: {e!r}"
+                try:
+                    out["am_jobs"] = f"OK: {am.Jobs.Count}"
+                except Exception as e2:
+                    out["am_jobs"] = f"FAIL: {e2!r}"
+            except Exception as e:
+                out["am_jobs"] = f"FAIL: {e!r}"
+            try:
+                out["am_cdm_import"] = f"OK: {am.IsCDMImport!r}"
+            except Exception as e:
+                out["am_cdm_import"] = f"FAIL: {e!r}"
         return out
 
     def _handler_get_info(self, params: dict[str, Any]) -> dict[str, Any]:
