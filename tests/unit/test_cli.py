@@ -421,13 +421,14 @@ def test_mill_drill_no_active_drawing() -> None:
 def test_mill_style() -> None:
     with _mock_com() as app_mock:
         app_mock.ActiveDrawing.Geometries.Count = 3
+        style = MagicMock()
+        style.FileName = r"C:\ALPHACAM\LICOMDIR\Styles\Fronty\Edge_01.ary"
+        app_mock.MillMachiningStyles = [style]
         result = runner.invoke(
             app, ["mill", "style", r"C:\ALPHACAM\LICOMDIR\Styles\Fronty\Edge_01.ary"]
         )
     assert result.exit_code == 0
     assert "ToolPaths" in result.stderr
-    style = app_mock.CreateMillStyle.return_value
-    assert style.FileName == r"C:\ALPHACAM\LICOMDIR\Styles\Fronty\Edge_01.ary"
     style.Apply.assert_called_once()
 
 

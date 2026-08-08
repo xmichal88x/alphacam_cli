@@ -184,8 +184,28 @@ class Application:
 
     def apply_mill_style(self, style_path: str) -> None:
         try:
-            style = self._app.CreateMillStyle()  # type: ignore[attr-defined]
-            style.FileName = style_path  # type: ignore[attr-defined]
+            styles = list(self._app.MillMachiningStyles)  # type: ignore[attr-defined]
+        except Exception as e:
+            raise RuntimeError(f"Failed to apply mill style '{style_path}': {e}") from e  # noqa: TRY003
+
+        target = style_path.replace("\\", "/").lower()
+        target_name = os.path.basename(target).lower()
+        normalized = [
+            (s, str(s.FileName).replace("\\", "/").lower())  # type: ignore[attr-defined]
+            for s in styles
+        ]
+        style = next((s for s, fname in normalized if fname == target), None)
+        if style is None:
+            style = next(
+                (s for s, fname in normalized if os.path.basename(fname) == target_name),
+                None,
+            )
+        if style is None:
+            available = ", ".join(fname for _, fname in normalized[:5]) or "none"
+            raise RuntimeError(  # noqa: TRY003
+                f"Mill style not found: {style_path}. Available styles: {available}"
+            )
+        try:
             style.Apply()  # type: ignore[attr-defined]
         except Exception as e:
             raise RuntimeError(f"Failed to apply mill style '{style_path}': {e}") from e  # noqa: TRY003

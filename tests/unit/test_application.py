@@ -219,16 +219,46 @@ def test_create_mill_data(mock_com: MagicMock) -> None:
             assert md is not None
 
 
+def _make_style(file_name: str) -> MagicMock:
+    style = MagicMock()
+    style.FileName = file_name
+    return style
+
+
 def test_apply_mill_style(mock_com: MagicMock) -> None:
     with mock_com:
         from alphacam_cli.com.manager import alphacam_context
 
         with alphacam_context() as raw:
+            style = _make_style(r"C:\ALPHACAM\LICOMDIR\Styles\Fronty\Edge_01.ary")
+            raw.MillMachiningStyles = [style]
             ac = Application(raw)
-            ac.apply_mill_style(r"C:\ALPHACAM\LICOMDIR\Styles\Fronty\Edge_01.ary")
-            style = raw.CreateMillStyle.return_value
-            assert style.FileName == r"C:\ALPHACAM\LICOMDIR\Styles\Fronty\Edge_01.ary"
+            ac.apply_mill_style("C:/ALPHACAM/LICOMDIR/Styles/Fronty/Edge_01.ary")
             style.Apply.assert_called_once()
+
+
+def test_apply_mill_style_by_basename(mock_com: MagicMock) -> None:
+    with mock_com:
+        from alphacam_cli.com.manager import alphacam_context
+
+        with alphacam_context() as raw:
+            style = _make_style(r"C:\ALPHACAM\LICOMDIR\Styles\Fronty\Edge_01.ary")
+            raw.MillMachiningStyles = [style]
+            ac = Application(raw)
+            ac.apply_mill_style("Edge_01.ary")
+            style.Apply.assert_called_once()
+
+
+def test_apply_mill_style_not_found(mock_com: MagicMock) -> None:
+    with mock_com:
+        from alphacam_cli.com.manager import alphacam_context
+
+        with alphacam_context() as raw:
+            style = _make_style(r"C:\ALPHACAM\LICOMDIR\Styles\Edge.ary")
+            raw.MillMachiningStyles = [style]
+            ac = Application(raw)
+            with pytest.raises(RuntimeError, match="Mill style not found: .*Edge_01.ary"):
+                ac.apply_mill_style("Edge_01.ary")
 
 
 def test_apply_mill_style_error(mock_com: MagicMock) -> None:
@@ -236,7 +266,9 @@ def test_apply_mill_style_error(mock_com: MagicMock) -> None:
         from alphacam_cli.com.manager import alphacam_context
 
         with alphacam_context() as raw:
+            style = _make_style(r"C:\ALPHACAM\LICOMDIR\Styles\Edge.ary")
+            raw.MillMachiningStyles = [style]
+            style.Apply.side_effect = Exception("apply failed")
             ac = Application(raw)
-            raw.CreateMillStyle.side_effect = Exception("style not found")
             with pytest.raises(RuntimeError, match="Failed to apply mill style"):
-                ac.apply_mill_style(r"C:\ALPHACAM\LICOMDIR\Styles\Missing.ary")
+                ac.apply_mill_style(r"C:\ALPHACAM\LICOMDIR\Styles\Edge.ary")
