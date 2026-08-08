@@ -938,8 +938,9 @@ class GatewayServer:
                     out["cdm_job_save"] = f"FAIL: {e!r}"
 
                 detail: Any = None
+                type_name = str(params.get("type_name", "Single Panel Square"))
                 try:
-                    detail = job.AddCDMOrderDetail("")
+                    detail = job.AddCDMOrderDetail(type_name)
                     _am_log("cdm_add_detail", True, repr(detail))
                     out["cdm_add_detail"] = f"OK: {detail!r}"
                 except Exception as e:
