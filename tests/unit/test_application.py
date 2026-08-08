@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import pathlib
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -144,6 +145,19 @@ def test_find_drawing_files(mock_com: MagicMock) -> None:
             ac = Application(raw)
             files = ac.find_drawing_files()
             assert isinstance(files, list)
+
+
+def test_glob_files(mock_com: MagicMock, tmp_path: pathlib.Path) -> None:
+    (tmp_path / "b.amd").write_bytes(b"amd")
+    (tmp_path / "a.amd").write_bytes(b"amd")
+    (tmp_path / "skip.txt").write_bytes(b"txt")
+    with mock_com:
+        from alphacam_cli.com.manager import alphacam_context
+
+        with alphacam_context() as raw:
+            ac = Application(raw)
+            result = ac.glob_files(str(tmp_path), "*.amd")
+    assert result == [str(tmp_path / "a.amd"), str(tmp_path / "b.amd")]
 
 
 def test_get_nesting(mock_com: MagicMock) -> None:

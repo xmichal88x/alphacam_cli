@@ -161,3 +161,26 @@ def test_output_nc_handler_missing_file(server_app: MagicMock, tmp_path: pathlib
     with pytest.raises(COMError, match="NC file not created"):
         gw._handler_output_nc({"path": missing})
     drw.output_nc.assert_called_once_with(missing)
+
+
+def test_glob_files_handler(server_app: MagicMock, tmp_path: pathlib.Path) -> None:
+    part_a = tmp_path / "a.amd"
+    part_b = tmp_path / "b.amd"
+    part_a.write_bytes(b"amd")
+    part_b.write_bytes(b"amd")
+    (tmp_path / "notes.txt").write_bytes(b"txt")
+    gw = GatewayServer()
+    result = gw._handler_glob_files({"directory": str(tmp_path), "pattern": "*.amd"})
+    assert result == [str(part_a), str(part_b)]
+
+
+def test_glob_files_handler_missing_dir(server_app: MagicMock) -> None:
+    gw = GatewayServer()
+    result = gw._handler_glob_files({"directory": str(pathlib.Path("C:/no/such/dir"))})
+    assert result == []
+
+
+def test_glob_files_handler_no_dir(server_app: MagicMock) -> None:
+    gw = GatewayServer()
+    with pytest.raises(COMError, match="directory is required"):
+        gw._handler_glob_files({})

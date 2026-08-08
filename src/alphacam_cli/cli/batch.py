@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import glob
 import os
 from datetime import datetime
 from typing import Any
@@ -69,17 +68,17 @@ def process(
 ) -> None:
     """Batch process multiple .amd files to generate NC code."""
     require_platform()
-    files = sorted(glob.glob(os.path.join(input_dir, pattern)))
-    if not files:
-        console.print(f"[red]No files matching '{pattern}' in {input_dir}[/red]")
-        raise typer.Exit(code=1)
-
-    out = output_dir or input_dir
-    os.makedirs(out, exist_ok=True)
-
     results: list[dict[str, Any]] = []
     with alphacam_context(visible=get_visible()) as raw:
         ac = resolve_app(raw)
+        files = ac.glob_files(input_dir, pattern)
+        if not files:
+            console.print(f"[red]No files matching '{pattern}' in {input_dir}[/red]")
+            raise typer.Exit(code=1)
+
+        out = output_dir or input_dir
+        os.makedirs(out, exist_ok=True)
+
         if post:
             ac.select_post(post)
             console.print(f"[green]Post selected: {post}[/green]")

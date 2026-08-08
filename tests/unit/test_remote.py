@@ -99,3 +99,12 @@ def test_remote_drawing_proxy_output_nc_returns_dict() -> None:
     result = drw.output_nc(r"C:\temp\out.nc")
     assert result == {"success": True, "size": 387}
     session.output_nc.assert_called_once_with(r"C:\temp\out.nc")
+
+
+def test_remote_glob_files() -> None:
+    session = MagicMock()
+    session.glob_files.return_value = ["C:/parts/a.amd", "C:/parts/b.amd"]
+    app = RemoteApplication(session)
+    result = app.glob_files("C:/parts", "*.amd")
+    assert result == ["C:/parts/a.amd", "C:/parts/b.amd"]
+    session.glob_files.assert_called_once_with("C:/parts", "*.amd")

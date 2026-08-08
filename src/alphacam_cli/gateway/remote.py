@@ -170,6 +170,9 @@ class RemoteApplication:
     def find_drawing_files(self, pattern: str = "*.amd") -> list[str]:
         return self._session.find_drawing_files(pattern)  # type: ignore[no-any-return]
 
+    def glob_files(self, directory: str, pattern: str = "*.amd") -> list[str]:
+        return self._session.glob_files(directory, pattern)  # type: ignore[no-any-return]
+
     def create_mill_data(self) -> Any:
         return _RemoteMillData(self._session)
 

@@ -249,3 +249,6 @@ class Application:
     def find_drawing_files(self, pattern: str = "*.amd") -> list[str]:
         base = os.path.join(self.licomdir_path, "parts")
         return sorted(glob.glob(os.path.join(base, pattern)))
+
+    def glob_files(self, directory: str, pattern: str = "*.amd") -> list[str]:
+        return sorted(glob.glob(os.path.join(directory, pattern)))

@@ -167,3 +167,6 @@ class RemoteSession:
 
     def find_drawing_files(self, pattern: str = "*.amd") -> list[str]:
         return self._call("find_drawing_files", {"pattern": pattern})  # type: ignore[no-any-return]
+
+    def glob_files(self, directory: str, pattern: str = "*.amd") -> list[str]:
+        return self._call("glob_files", {"directory": directory, "pattern": pattern})  # type: ignore[no-any-return]

@@ -38,9 +38,11 @@ def _mock_com_batch(app_mock: MagicMock | None = None) -> Iterator[MagicMock]:
 
 
 def test_batch_process_no_files() -> None:
+    app_mock = _make_app_mock()
+    app_mock.glob_files.return_value = []
     with (
-        _mock_com_batch(),
-        patch("alphacam_cli.cli.batch.glob.glob", return_value=[]),
+        _mock_com_batch(app_mock=app_mock),
+        patch("alphacam_cli.cli.batch.resolve_app", return_value=app_mock),
     ):
         result = runner.invoke(app, ["batch", "process", "/nonexistent"])
     assert result.exit_code == 1
@@ -48,9 +50,11 @@ def test_batch_process_no_files() -> None:
 
 
 def test_batch_process_success() -> None:
+    app_mock = _make_app_mock()
+    app_mock.glob_files.return_value = ["file1.amd", "file2.amd"]
     with (
-        _mock_com_batch(),
-        patch("alphacam_cli.cli.batch.glob.glob", return_value=["file1.amd", "file2.amd"]),
+        _mock_com_batch(app_mock=app_mock),
+        patch("alphacam_cli.cli.batch.resolve_app", return_value=app_mock),
         patch(
             "alphacam_cli.cli.batch._process_file",
             return_value={"file": "test.amd", "status": "OK", "error": ""},
@@ -68,12 +72,11 @@ def test_batch_process_continue_on_error() -> None:
             return {"file": file_path, "status": "FAIL", "error": "Something went wrong"}
         return {"file": file_path, "status": "OK", "error": ""}
 
+    app_mock = _make_app_mock()
+    app_mock.glob_files.return_value = ["fail1.amd", "ok1.amd"]
     with (
-        _mock_com_batch(),
-        patch(
-            "alphacam_cli.cli.batch.glob.glob",
-            return_value=["fail1.amd", "ok1.amd"],
-        ),
+        _mock_com_batch(app_mock=app_mock),
+        patch("alphacam_cli.cli.batch.resolve_app", return_value=app_mock),
         patch("alphacam_cli.cli.batch._process_file", side_effect=mock_process_file),
     ):
         result = runner.invoke(app, ["batch", "process", ".", "--continue-on-error"])
@@ -87,12 +90,11 @@ def test_batch_process_break_on_first_error() -> None:
     mock_process = MagicMock(
         side_effect=[{"file": "file1.amd", "status": "FAIL", "error": "First error"}],
     )
+    app_mock = _make_app_mock()
+    app_mock.glob_files.return_value = ["file1.amd", "file2.amd", "file3.amd"]
     with (
-        _mock_com_batch(),
-        patch(
-            "alphacam_cli.cli.batch.glob.glob",
-            return_value=["file1.amd", "file2.amd", "file3.amd"],
-        ),
+        _mock_com_batch(app_mock=app_mock),
+        patch("alphacam_cli.cli.batch.resolve_app", return_value=app_mock),
         patch("alphacam_cli.cli.batch._process_file", mock_process),
     ):
         result = runner.invoke(app, ["batch", "process", "."])
@@ -107,9 +109,11 @@ def test_batch_process_break_on_first_error() -> None:
 def test_batch_process_custom_output_dir() -> None:
     with tempfile.TemporaryDirectory() as tmpdir:
         out_dir = os.path.join(tmpdir, "output")
+        app_mock = _make_app_mock()
+        app_mock.glob_files.return_value = ["test.amd"]
         with (
-            _mock_com_batch(),
-            patch("alphacam_cli.cli.batch.glob.glob", return_value=["test.amd"]),
+            _mock_com_batch(app_mock=app_mock),
+            patch("alphacam_cli.cli.batch.resolve_app", return_value=app_mock),
             patch(
                 "alphacam_cli.cli.batch._process_file",
                 return_value={"file": "test.amd", "status": "OK", "error": ""},
@@ -122,15 +126,15 @@ def test_batch_process_custom_output_dir() -> None:
 
 
 def test_batch_process_post_processor() -> None:
-    post_path = "C:/ALPHACAM/LICOMDAT/RPosts.Alp/fanuc.arp"
+    app_mock = _make_app_mock()
+    app_mock.glob_files.return_value = ["test.amd"]
     with (
-        _mock_com_batch(),
-        patch("alphacam_cli.cli.batch.glob.glob", return_value=["test.amd"]),
+        _mock_com_batch(app_mock=app_mock),
+        patch("alphacam_cli.cli.batch.resolve_app", return_value=app_mock),
         patch(
             "alphacam_cli.cli.batch._process_file",
             return_value={"file": "test.amd", "status": "OK", "error": ""},
         ),
-        patch("alphacam_cli.core.application.glob.glob", return_value=[post_path]),
     ):
         result = runner.invoke(app, ["batch", "process", ".", "--post", "fanuc"])
     assert result.exit_code == 0

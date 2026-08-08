@@ -599,3 +599,12 @@ class GatewayServer:
 
         pattern = str(params.get("pattern", "*.amd"))
         return com_app.find_drawing_files(pattern)  # type: ignore[no-any-return]
+
+    def _handler_glob_files(self, params: dict[str, Any]) -> list[str]:
+        directory = str(params.get("directory", ""))
+        pattern = str(params.get("pattern", "*.amd"))
+        if not directory:
+            raise COMError("directory is required")
+        if not os.path.isdir(directory):
+            return []
+        return sorted(glob_module.glob(os.path.join(directory, pattern)))
