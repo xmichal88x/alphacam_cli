@@ -281,7 +281,7 @@ def test_run_nest_handler(server_app: MagicMock) -> None:
     assert result == {"count": 1, "success": True}
     drw.create_nest_data.assert_called_once_with("nest.anl")
     drw.create_rectangle.assert_called_once_with(0, 0, 2440, 1220)
-    nd.AddSheet.assert_called_once_with(sheet_geo, "MDF", 0.25, 2)
+    nd.AddSheet.assert_called_once_with(sheet_geo.raw_dispatch, "MDF", 18, 1)
     nd.DoNest.assert_called_once()
     assert nd.AddPart.call_args_list == [
         mock.call("part1.amd", 2),

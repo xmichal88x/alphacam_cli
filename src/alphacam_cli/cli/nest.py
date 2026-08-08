@@ -65,40 +65,41 @@ def run(
         console.print("[red]No valid parts in CSV[/red]")
         raise typer.Exit(code=1)
 
+    # Write nest list (.anl) with parts from CSV
+    anl_path = os.path.join(out, "nest.anl")
+    lines = ["$SETUP", "1", "2", "0", "0", "0"]
+    for part in parts:
+        lines.extend(
+            [
+                "$ITEM",
+                part["name"],
+                str(part["count"]),
+                "1",
+                "90",
+                "0",
+            ]
+        )
+    with open(anl_path, "w", encoding="utf-8") as f:
+        f.write("\n".join(lines) + "\n")
+
     with alphacam_context(visible=get_visible()) as raw:
         ac = resolve_app(raw)
 
-        # Create sheet geometry
+        # Create drawing and nest data from the nest list file
         drw = ac.create_temp_drawing()
         if drw is None:
             console.print("[red]Failed to create drawing[/red]")
             raise typer.Exit(code=1)
 
+        nd = drw.create_nest_data(anl_path)
+
+        # Create sheet geometry and run nesting
         sheet_geo = drw.create_rectangle(0, 0, sheet_width, sheet_height)
-
-        # Setup nesting
-        nesting = ac.get_nesting()
-        nesting.suppress_dialogs = True
-        nl = nesting.new_nest_list(os.path.join(out, "nest.anl"))
-
-        # Add each part type (create a drawing per part)
-        for part in parts:
-            np = nl.add_file(part["name"])
-            np.required = part["count"]
-        nl.save()
-
-        # Setup sheet
-        sl = nesting.new_sheet_list()
-        ss = sl.add(sheet_geo)
-        ss.thickness = 18.0
-        ss.required = 1
-
-        # Run nesting
         console.print(f"[yellow]Nesting {len(parts)} part types...[/yellow]")
-        result = nesting.nest(nl, sl)
+        nd.AddSheet(sheet_geo.raw_dispatch, "MDF", 18, 1)
+        nd.DoNest()
         console.print("[green]OK:[/green] Nesting completed")
         console.print(f"     Total parts: {sum(p['count'] for p in parts)}")
-        console.print(f"     NestList parts: {result.count if result else 0}")
 
 
 @app.command("list")
