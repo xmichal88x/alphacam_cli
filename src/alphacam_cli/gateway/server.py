@@ -990,15 +990,18 @@ class GatewayServer:
                         _am_log("cdm_detail_save", False, repr(e))
                         out["cdm_detail_save"] = f"FAIL: {e!r}"
 
-                try:
-                    t0 = time.monotonic()
-                    job.Process()
-                    dur = time.monotonic() - t0
-                    _am_log("cdm_job_process", True, f"{dur:.1f}s")
-                    out["cdm_job_process"] = f"OK: {dur:.1f}s"
-                except Exception as e:
-                    _am_log("cdm_job_process", False, repr(e))
-                    out["cdm_job_process"] = f"FAIL: {e!r}"
+                if bool(params.get("process", False)):
+                    try:
+                        t0 = time.monotonic()
+                        job.Process()
+                        dur = time.monotonic() - t0
+                        _am_log("cdm_job_process", True, f"{dur:.1f}s")
+                        out["cdm_job_process"] = f"OK: {dur:.1f}s"
+                    except Exception as e:
+                        _am_log("cdm_job_process", False, repr(e))
+                        out["cdm_job_process"] = f"FAIL: {e!r}"
+                else:
+                    out["cdm_job_process"] = "SKIP (process=False)"
 
                 try:
                     drw = com_app.get_active_drawing()
