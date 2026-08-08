@@ -1,6 +1,6 @@
 # AlphaCAM — Dokumentacja i zasoby SDK
 
-Lokalny zapas materiałów AlphaCAM: dokumentacja API (wyciągi CHM → .md oraz pełne pliki pomocy), oficjalne przykłady od Hexagon oraz SDK (wrapper .NET, typeliby COM). Z tych materiałów czerpią narzędzia `alphacam_cli`.
+Lokalny zapas materiałów AlphaCAM: dokumentacja API (wyciągi CHM → .md oraz rozpakowane CHM-y w help-unpacked/), oficjalne przykłady od Hexagon oraz SDK (wrapper .NET, typeliby COM). Z tych materiałów czerpią narzędzia `alphacam_cli`.
 
 ## Struktura
 
@@ -11,14 +11,14 @@ Lokalny zapas materiałów AlphaCAM: dokumentacja API (wyciągi CHM → .md oraz
 | `docs/guides/` | README (placeholder) | Rezerwowane |
 | `alphacam-provided-examples/API/` | Oficjalne przykłady Hexagon: `Python/`, `CSharp.Net/`, `VB.Net/`, `VBMacros/`, `AcamAddInsAPI/`, `DotNetAddIns/`, `DotNetPosts/`, `Multidrill/`, `CutWithDisk/`, `AutoGeometryBridge/`, `CSVFileUtility/`, `Delphi/`, `Documents/`, `EditableAddInOps/`, `PolyLinesToLayer/`, `RibbonBarExample/`, `ScaleGeoZLevels/`, `VBATrainingGuide/`, `VisualCPP/`, `WordVBA/`, `ZlevelPreview/` | Wzorce oficjalnego użycia API (automatyzacja, posty, addiny); w `Python/PyCharm Examples/NestingFromCSV/Alphacam_Nesting.py` pełny typelib Nesting v3.0 |
 | `sdk-download/AlphacamSDK/` | Wrapper .NET: `src/` (`AlphacamSDK.cs`, `HelpManager.cs`, `LibraryManager.cs`), `Interfaces/` (IAlphacamCore, IAlphacamGeometry, IAlphacamAutomation), `sdk_config.json`, `docs/` (AUDIT_REPORT, INSTALLATION_GUIDE, PORTABLE_*, ROADMAP, TASKS), `examples/BasicExample.cs` | Uwaga: NIE zawiera nestingu (potwierdzone) |
-| `sdk-download/standalone/help/` | Pełne CHM: `ACAMAPI.chm` (API), `ACAM4.chm` (80 MB, GUI), `AcamReports.chm` (raporty), `ModuleWorks_-_Documentation.chm` (149 MB, frezowanie), `AEDITAPI.chm`, `ConstraintsAPI.chm`, `Feature.chm`, `primitives.chm`, `R2V.chm`, `ACAM4LK.chm`, `AEdit3.chm` | Pełna dokumentacja w formie źródłowej (po rozpakowaniu: menu, okna dialogowe) |
+| `sdk-download/standalone/help-unpacked/` | Rozpakowane CHM-y (ACAM4 103MB, ACAMAPI 5.8MB, ModuleWorks 157MB + 8 innych; README.md z indeksem) | Do bezpośredniego użycia; ~296MB, w .gitignore |
 | `sdk-download/standalone/lib/` | DLL-ki AlphaCAM + `Interop.AlphaCAM*.dll`, `NestUtilities.dll`, pliki `.tlb` | Typeliby COM i interop .NET |
 
 ## Jak korzystać
 
 - **Sygnatury API core** (Application, Drawing, Geometry, MillData...) → `docs/chm-files/acamapi.md` lub `docs/api_docs/` (osobny katalog, dokumentacja po polsku).
 - **Sygnatury API nestingu** (INesting, INestList, ISheetDatabase...) → `alphacam-provided-examples/API/Python/PyCharm Examples/NestingFromCSV/Alphacam_Nesting.py` (pełny typelib Nesting v3.0).
-- **Opisy GUI** (okna dialogowe, menu) → rozpakuj `sdk-download/standalone/help/ACAM4.chm` (`7z x`) i czytaj pliki `.htm` (np. `menus/nesting/...`).
+- **Opisy GUI** (okna dialogowe, menu) → gotowe w `sdk-download/standalone/help-unpacked/ACAM4/` (bez rozpakowywania), czytaj pliki `.htm` (np. `menus/nesting/...`).
 - **Przykłady użycia API** → `alphacam-provided-examples/API/` — wybierz język/katalog (Python, CSharp.Net, VB.Net, VBMacros, addiny...).
 - **SDK .NET** → `sdk-download/AlphacamSDK/` (Core/Geometry/Automation; nie zawiera nestingu — do nestingu użyj typeliba Pythona lub Interop z `standalone/lib/`).
 

@@ -29,3 +29,6 @@ alphacam_diagnostic_*.log
 
 # Huge vendored SDK (CHM/DLL, ~500MB) - keep on disk only
 docs/alphacam-ecosystem/sdk-download/
+
+# Unpacked CHM help (~296MB) - keep on disk only
+docs/alphacam-ecosystem/sdk-download/standalone/help-unpacked/

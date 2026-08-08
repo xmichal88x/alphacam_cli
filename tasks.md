@@ -11,7 +11,7 @@
 | `docs/alphacam-ecosystem/docs/chm-files/` | Wyciągnięte CHM → .md (acamapi, Nesting, AEDITAPI, Constraints, Feature, Primitives) | Szybki ogólny przegląd API |
 | `docs/alphacam-ecosystem/alphacam-provided-examples/API/` | Oficjalne przykłady Hexagon (Python, CSharp.Net, VB.Net, VBMacros, AcamAddInsAPI, DotNetPosts, Multidrill...) | Wzorce oficjalnego użycia API (dowolny obszar) |
 | `docs/alphacam-ecosystem/alphacam-provided-examples/API/Python/PyCharm Examples/NestingFromCSV/Alphacam_Nesting.py` | PEŁNY typelib Nesting v3.0 w Pythonie (sygnatury INesting, INestList, INestData, ISheetDatabase...) | Sygnatury API nestingu |
-| `docs/alphacam-ecosystem/sdk-download/standalone/help/*.chm` | Pełne CHM: ACAMAPI (API), ACAM4 (80 MB GUI — okna dialogowe/menu), AcamReports, ModuleWorks... | Opisy GUI i szczegóły opcji (rozpakuj przez `7z x`) |
+| `docs/alphacam-ecosystem/sdk-download/standalone/help-unpacked/` | ROZPAKOWANE CHM-y (ACAM4/ GUI, ACAMAPI/ API, AcamReports, ModuleWorks...), README.md z indeksem | Opisy GUI i szczegóły (grep/cat od razu, bez 7z) |
 | `docs/alphacam-ecosystem/sdk-download/standalone/lib/` | DLL-ki + Interop.AlphaCAM*.dll, .tlb | Typeliby COM |
 | `docs/alphacam-ecosystem/sdk-download/AlphacamSDK/` | Wrapper .NET (Core/Geometry/Automation, bez nestingu) | Automatyzacja .NET |
 | `docs/gateway.md` | Dokumentacja gateway RPC | Pytania o RPC/handlery |
@@ -120,7 +120,7 @@ NewNestList → AddFile(parts, Required=count) → opcje → NewSheetList → Ad
 - Flagi bool: `--no-aperture-nesting`, `--order-by-part`, `--no-subroutines`, `--minimise-tool-changes`, `--strict-priorities`, `--inner-first`, `--preserve-sheet-edge`
 - Aliasy w advanced: `--gap`→PartGap, `--edge-gap`→EdgeGap, `--lead-gap`→LeadInGap
 
-**Mapowanie na opcje GUI (ACAM4.chm, sdk-download/standalone/help/):** Minimum Gap Between Paths (=Gap/PartGap), Gap at Sheet Edge (=EdgeGap), Extra Gap at Lead-in Start (=LeadGap), Cut Width, Optimization Level (Min-Max), For cuts/For space, Pack To, Subroutines.
+**Mapowanie na opcje GUI (help-unpacked/ACAM4/):** Minimum Gap Between Paths (=Gap/PartGap), Gap at Sheet Edge (=EdgeGap), Extra Gap at Lead-in Start (=LeadGap), Cut Width, Optimization Level (Min-Max), For cuts/For space, Pack To, Subroutines.
 
 **E2E potwierdzone (Session 0, żywy AlphaCAM 2025 Router):** run_nest advanced z 15 opcjami (total_time=20, part_gap=4, edge_gap=8, lead_gap=1, minimise_tool_changes=True itd.) + arkusz MDF_18 z biblioteki → success, **count=1**, rysunek 3 geometrie/24 toolpaths.
 

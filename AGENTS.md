@@ -107,7 +107,7 @@ Najpierw przeczytaj `tasks.md` (stan projektu, logi, recepty E2E).
 | `docs/alphacam-ecosystem/docs/chm-files/` | CHM wyciągnięte do .md: acamapi.md, Nesting.md, AEDITAPI.md, ConstraintsAPI.md, Feature.md, Primitives.md | Szybki przegląd ogólny bez rozpakowywania CHM |
 | `docs/alphacam-ecosystem/alphacam-provided-examples/API/` | OFICJALNE przykłady Hexagon (Python, CSharp.Net, VB.Net, VBMacros, AcamAddInsAPI, DotNetPosts, Multidrill, AutoGeometryBridge, WordVBA, Delphi...) | Wzorce oficjalnego użycia API (automatyzacja, posty, addiny) |
 | `docs/alphacam-ecosystem/alphacam-provided-examples/API/Python/PyCharm Examples/NestingFromCSV/Alphacam_Nesting.py` | PEŁNY typelib Nesting v3.0 w Pythonie — sygnatury INesting, INestList, INestData, ISheetDatabase itd. | **Szukanie sygnatur API nestingu** |
-| `docs/alphacam-ecosystem/sdk-download/standalone/help/` | PEŁNE CHM: ACAMAPI.chm (API), ACAM4.chm (~80MB GUI docs), AcamReports.chm, Feature.chm, primitives.chm, R2V.chm, ModuleWorks_-_Documentation.chm | Opisy GUI i szczegóły (po rozpakowaniu 7z): `menus/...`, okna dialogowe |
+| `docs/alphacam-ecosystem/sdk-download/standalone/help-unpacked/` | ROZPAKOWANE CHM-y do bezpośredniego użycia: ACAM4/ (GUI), ACAMAPI/ (API core), ModuleWorks, AcamReports, Feature... | **Opisy GUI i szczegóły (grep/cat bez rozpakowywania); README.md w środku z indeksem** |
 | `docs/alphacam-ecosystem/sdk-download/standalone/lib/` | DLL-ki + Interop.AlphaCAM*.dll, .tlb | Typeliby COM, interop .NET |
 | `docs/alphacam-ecosystem/sdk-download/AlphacamSDK/` | Wrapper .NET (IAlphacamCore/Geometry/Automation, LibraryManager.cs) — NIE zawiera nestingu | Automatyzacja .NET, nie do nestingu |
 | `docs/gateway.md` | Dokumentacja gateway RPC (handlery, protokół) | Komunikacja z usługą AlphaCAM Gateway (Session 0) |
@@ -121,9 +121,11 @@ sudo apt install p7zip-full
 7z x plik.chm -oWynikowyKatalog
 ```
 
+Uwaga: już rozpakowane w `standalone/help-unpacked/` (nie trzeba ponownie rozpakowywać).
+
 **Wskazówki:**
 - Sygnatury API core (Application, Drawing, Geometry, MillData...): `docs/api_docs/` (podzielone) lub wygenerowany moduł gen_py na Windowsie — typelib Router jest embedded w Acam.exe.
 - Sygnatury API nestingu: `Alphacam_Nesting.py` (pełny typelib Nesting v3.0).
-- Opisów GUI (opcje, okna dialogowe) szukaj w rozpakowanym `ACAM4.chm` (`menus/...`).
+- Opisów GUI (opcje, okna dialogowe) szukaj w `help-unpacked/ACAM4/menus/...`.
 - Recepty E2E są w `tasks.md` — **czytaj `tasks.md` na początku sesji**.
 - Wzorce oficjalnego użycia API: `alphacam-provided-examples/API/`.
