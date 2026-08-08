@@ -112,3 +112,57 @@ Wszystkie zmiany do tego momentu wypchnięte na GitHub (master), serwer na Windo
 2. **Odporność**: brak aktywnego rysunku → czytelny błąd; zły post → błąd; restart usługi w trakcie sesji
 3. **Mill style** na rysunku z makra (PanelRyflowany — geometria z atrybutami LicomUKDMBGeoZLevelTop/Bottom)
 4. **Post list** — weryfikacja `post list` po fixie P6 (RPosts.Alp)
+
+---
+
+## ✅ NESTING DZIAŁA (2026-08-08) — jak zrobić przez API
+
+**WARUNKI KRYTYCZNE:**
+1. Części (.ard) MUSZĄ mieć **zdefiniowaną stronę obróbki (ToolInOut = OUTSIDE/INSIDE, nie CENTER)** ORAZ **wygenerowane toolpaths (obróbkę)** — inaczej `CreateNestData` odrzuca listę ("Błąd przy wczytywaniu listy nakładania").
+   - Sprawdzenie: `d.ToolPaths.Count > 0` (produkcyjne cz1=11, cz2=1, cz11=1; nasze testowe bez obróbki = 0 → odrzucane)
+   - ToolInOut: `geo.ToolInOut = 2` (OUTSIDE), zapisane w .ard przez SaveAs
+2. **Musi być załadowany typelib AcamNest** — BEZ TEGO marshal obiektu NestData do Pythona failuje z `PermissionError(13)` mimo że lista tworzy się w GUI:
+   ```python
+   from win32com.client import gencache
+   gencache.EnsureModule("{6702E3DF-142C-4627-8EA2-4C47EBC78441}", 0, 1, 3)
+   ```
+   (CLSID typelibu AcamNest = AcamRadNest.dll, z rejestru)
+3. **Lista nakładania (.anl) to plik TEKSTOWY** generowany ręcznie:
+   ```
+   $SETUP
+   1        <- Tool Paths (0=Geometry, 1=Tool Paths)
+   2        <- Gap
+   0        <- Lead Gap
+   0        <- Subroutines
+   0        <- Start at
+   $ITEM
+   C:\ścieżka\do\cz1.ard    <- część (z toolpaths!)
+   1        <- liczba
+   1        <- priorytet
+   90       <- kąt obrotu
+   0        <- mirror (0/1)
+   ```
+
+**DZIAŁAJĄCA SEKWENCJA (GUI, Session 2):**
+```python
+gencache.EnsureModule(typelib_acamnest)     # KLUCZOWE
+app = GetActiveObject("Ar5axaps.Application")
+app.New()
+d = app.ActiveDrawing
+nd = d.CreateNestData("ścieżka.anl")        # lista + części
+sheet = d.CreateRectangle(0, 0, 2440, 1220) # arkusz z rysunku (opcja 2)
+nd.AddSheet(sheet, "MDF", 18, 1)            # geometria, materiał, grubość, ilość
+nd.DoNest()                                  # nakładanie ✅
+```
+
+**NestData metody (18):** AddSheet, Direction, DoNest, EdgeGap, Gap, LeadGap, MergeTools, MinimiseToolChanges, OrderByPart, OrderInnerFirst, RepeatFirstRowOrColumn, Resolution, SheetHGap, SheetVGap, Subroutines, ToolPaths
+
+**Ograniczenia:**
+- ❌ **Session 0 (usługa gateway) NIE DZIAŁA** — CreateNestData failuje (0x80004005) — AcamRadNest.dll NIE ładuje się w procesie usługi (Session 0). Zweryfikowane: `tasklist /m` pokazuje AcamRadNest.dll TYLKO w procesie GUI (Session 2)
+- ❌ `App.Nesting` property: E_FAIL w Session 0, PermissionError(13) z Session 2 non-elevated
+- ❌ ProgIDy (Ar5axaps/Am5axaps/Aroutaps) wszystkie tworzą Router bez nestingu w Session 0
+- ✅ Działa z GUI (Session 2, GetActiveObject, użytkownik 48797, schtasks /it)
+- Arkusz z biblioteki: sheet_database_v2.db (SQLite!) — tabele: materials (MDF_18), thicknesses (18mm), sheets (MDF_18 2440x1220 qty100, Arkusz 1 1220x2440 17mm, MDF 1500x840, MDF18 2800x2070) — do wdrożenia
+- Do wdrożenia: 2 opcje arkusza (biblioteka + rysunek), pełna komenda nest: elementy → arkusz → nakładanie → NC
+
+**Do zbadania:** jak załadować AcamRadNest.dll w Session 0 (LoadAddIn z pełną ścieżką failuje E_INVALIDARG; EnableAddIn wymaga 2 param; IsAlphaNest=False; load przez rejestr acadaps-r\Applications2025\Nesting istnieje)
