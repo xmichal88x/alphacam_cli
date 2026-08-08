@@ -37,6 +37,22 @@ ACAM_TAP = 1
 ACAM_BORE = 2
 ACAM_PECK = 3
 
+# Saw corner types (AcamSawCornerType, names verified via Interop.AlphaCAMMill.dll;
+# numeric values to verify against Router typelib)
+ACAM_SAW_CUT_ON = 1
+ACAM_SAW_CUT_PAST = 2
+ACAM_SAW_CUT_TO = 3
+
+# Saw head position (AcamSawHeadPosition)
+ACAM_SAW_HEAD_LEFT = 0
+ACAM_SAW_HEAD_RIGHT = 1
+
+# Engrave types (AcamEngraveType)
+ACAM_ENGRAVE_GEOMETRIES = 0
+ACAM_ENGRAVE_GUIDE_LINES_APPROX = 1
+ACAM_ENGRAVE_GUIDE_LINES_EXACT = 2
+ACAM_ENGRAVE_SIMPLE_EXACT = 3
+
 # NC output destinations
 ACAM_OUT_NC_FILE = 0
 ACAM_OUT_NC_MACHINE = 1

@@ -1,11 +1,14 @@
 from __future__ import annotations
 
+from typing import Any
+
 import typer
 
 from alphacam_cli.cli.common import (
     console,
     get_visible,
     handle_com_errors,
+    path_basename,
     require_platform,
     resolve_app,
 )
@@ -39,6 +42,51 @@ def _validate_feed(feed: float) -> None:
     if feed < 0:
         console.print(f"[red]Feed cannot be negative: {feed}[/red]")
         raise typer.Exit(code=2)
+
+
+def _select_tool_by_name(ac: Any, name: str) -> None:
+    files = ac.find_tool_files()
+    name_norm = name.replace("\\", "/").lower()
+    basename_lower = name.lower()
+    exact_path = [f for f in files if f.replace("\\", "/").lower() == name_norm]
+    exact = [f for f in files if f not in exact_path and path_basename(f).lower() == basename_lower]
+    path_substring = []
+    if "/" in name or "\\" in name:
+        path_substring = [
+            f
+            for f in files
+            if f not in exact_path and f not in exact and name_norm in f.replace("\\", "/").lower()
+        ]
+    prefix = [
+        f
+        for f in files
+        if f not in exact_path
+        and f not in exact
+        and f not in path_substring
+        and path_basename(f).lower().startswith(basename_lower)
+    ]
+    substring = [
+        f
+        for f in files
+        if f not in exact_path
+        and f not in exact
+        and f not in path_substring
+        and f not in prefix
+        and basename_lower in path_basename(f).lower()
+    ]
+    matched = exact_path or exact or path_substring or prefix or substring
+    if not matched:
+        console.print(f"[red]No tool matching '{name}'[/red]")
+        raise typer.Exit(code=1)
+    if len(matched) > 1:
+        console.print("[yellow]Multiple tools matched:[/yellow]")
+        for m in matched:
+            console.print(f"  {path_basename(m)}")
+        console.print("[yellow]Please use a more specific name[/yellow]")
+        raise typer.Exit(code=1)
+    if ac.select_tool(matched[0]) is None:
+        console.print(f"[red]Failed to select tool: {path_basename(matched[0])}[/red]")
+        raise typer.Exit(code=1)
 
 
 @app.command()
@@ -189,6 +237,118 @@ def drill(
         md.drill_tap()
         drw.zoom_all()
         console.print("[green]OK:[/green] Drill done")
+
+
+@app.command()
+@handle_com_errors
+def saw(
+    depth: float = typer.Option(..., "--depth", "-d", help="Final depth (negative)"),
+    spindle: int = typer.Option(12000, "--spindle", "-s", help="Spindle speed RPM"),
+    feed: float = typer.Option(3000, "--feed", "-f", help="Cut feed rate"),
+    down_feed: float = typer.Option(2000, "--down-feed", help="Plunge feed rate"),
+    saw_angle: float = typer.Option(0, "--saw-angle", help="Saw angle (degrees)"),
+    internal_corners: int = typer.Option(
+        1, "--internal-corners", help="Internal corners mode (1=CUT_ON)"
+    ),
+    external_corners: int = typer.Option(
+        1, "--external-corners", help="External corners mode (1=CUT_ON)"
+    ),
+    head_position: int = typer.Option(
+        0, "--head-position", help="Saw head position (0=LEFT, 1=RIGHT)"
+    ),
+    tool: str | None = typer.Option(None, "--tool", help="Tool name or path (optional)"),
+) -> None:
+    """Saw cut on selected geometries."""
+    _validate_depth(depth)
+    _validate_speed(spindle)
+    _validate_feed(feed)
+    _validate_feed(down_feed)
+    require_platform()
+    with alphacam_context(visible=get_visible()) as raw:
+        ac = resolve_app(raw)
+        drw = ac.get_active_drawing()
+        if drw is None:
+            console.print("[red]No active drawing[/red]")
+            raise typer.Exit(code=1)
+
+        if drw.geometries_count == 0:
+            console.print("[yellow]No geometries to machine[/yellow]")
+            raise typer.Exit(code=0)
+
+        if tool:
+            _select_tool_by_name(ac, tool)
+
+        drw.select_all_geometries()
+
+        md = ac.create_mill_data()
+        md.safe_rapid_level = 20
+        md.rapid_down_to = 2
+        md.final_depth = depth
+        md.spindle_speed = spindle
+        md.down_feed = down_feed
+        md.cut_feed = feed
+        md.saw_angle = saw_angle
+        md.saw_internal_corners = internal_corners
+        md.saw_external_corners = external_corners
+        md.saw_head_position = head_position
+
+        console.print("[yellow]Executing Saw...[/yellow]")
+        md.saw()
+        drw.zoom_all()
+        console.print(f"[green]OK:[/green] Saw done ({drw.tool_paths_count} tool paths)")
+
+
+@app.command()
+@handle_com_errors
+def engrave(
+    depth: float = typer.Option(..., "--depth", "-d", help="Engraving depth (negative)"),
+    spindle: int = typer.Option(12000, "--spindle", "-s", help="Spindle speed RPM"),
+    feed: float = typer.Option(3000, "--feed", "-f", help="Cut feed rate"),
+    down_feed: float = typer.Option(2000, "--down-feed", help="Plunge feed rate"),
+    engrave_type: int = typer.Option(
+        0,
+        "--engrave-type",
+        help="Engrave type (0=GEOMETRIES, 1=GUIDE_LINES_APPROX, 2=GUIDE_LINES_EXACT)",
+    ),
+    step_length: float = typer.Option(0.1, "--step-length", help="Step length"),
+    tool: str | None = typer.Option(None, "--tool", help="Tool name or path (optional)"),
+) -> None:
+    """Engrave on selected geometries."""
+    _validate_depth(depth)
+    _validate_speed(spindle)
+    _validate_feed(feed)
+    _validate_feed(down_feed)
+    require_platform()
+    with alphacam_context(visible=get_visible()) as raw:
+        ac = resolve_app(raw)
+        drw = ac.get_active_drawing()
+        if drw is None:
+            console.print("[red]No active drawing[/red]")
+            raise typer.Exit(code=1)
+
+        if drw.geometries_count == 0:
+            console.print("[yellow]No geometries to machine[/yellow]")
+            raise typer.Exit(code=0)
+
+        if tool:
+            _select_tool_by_name(ac, tool)
+
+        drw.select_all_geometries()
+
+        md = ac.create_mill_data()
+        md.safe_rapid_level = 20
+        md.rapid_down_to = 2
+        md.final_depth = depth
+        md.spindle_speed = spindle
+        md.down_feed = down_feed
+        md.cut_feed = feed
+        md.engrave_type = engrave_type
+        md.step_length = step_length
+
+        console.print("[yellow]Executing Engrave...[/yellow]")
+        md.engrave()
+        drw.zoom_all()
+        console.print(f"[green]OK:[/green] Engrave done ({drw.tool_paths_count} tool paths)")
 
 
 @app.command()

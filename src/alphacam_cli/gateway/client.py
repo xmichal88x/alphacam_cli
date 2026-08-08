@@ -166,6 +166,14 @@ class RemoteSession:
     def mill_drill(self, **kwargs: Any) -> dict[str, Any]:
         return self._call("mill_drill", kwargs)  # type: ignore[no-any-return]
 
+    def mill_saw(self, **kwargs: Any) -> dict[str, Any]:
+        params = {key: value for key, value in kwargs.items() if value is not None}
+        return self._call("mill_saw", params)  # type: ignore[no-any-return]
+
+    def mill_engrave(self, **kwargs: Any) -> dict[str, Any]:
+        params = {key: value for key, value in kwargs.items() if value is not None}
+        return self._call("mill_engrave", params)  # type: ignore[no-any-return]
+
     def output_nc(self, path: str, post: str = "") -> dict[str, Any]:
         return self._call("output_nc", {"path": path, "post": post})  # type: ignore[no-any-return]
 

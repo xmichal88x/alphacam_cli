@@ -380,11 +380,89 @@ class _RemoteMillData:
     def bottom_of_hole(self, value: float) -> None:
         self._set("depth", value)
 
+    @property
+    def saw_angle(self) -> float:
+        return float(self._params.get("saw_angle", 0))
+
+    @saw_angle.setter
+    def saw_angle(self, value: float) -> None:
+        self._set("saw_angle", value)
+
+    @property
+    def saw_external_corners(self) -> int:
+        return int(self._params.get("external_corners", 1))
+
+    @saw_external_corners.setter
+    def saw_external_corners(self, value: int) -> None:
+        self._set("external_corners", value)
+
+    @property
+    def saw_internal_corners(self) -> int:
+        return int(self._params.get("internal_corners", 1))
+
+    @saw_internal_corners.setter
+    def saw_internal_corners(self, value: int) -> None:
+        self._set("internal_corners", value)
+
+    @property
+    def saw_open_ends(self) -> int:
+        return int(self._params.get("open_ends", 1))
+
+    @saw_open_ends.setter
+    def saw_open_ends(self, value: int) -> None:
+        self._set("open_ends", value)
+
+    @property
+    def saw_head_position(self) -> int:
+        return int(self._params.get("head_position", 0))
+
+    @saw_head_position.setter
+    def saw_head_position(self, value: int) -> None:
+        self._set("head_position", value)
+
+    @property
+    def engrave_type(self) -> int:
+        return int(self._params.get("engrave_type", 0))
+
+    @engrave_type.setter
+    def engrave_type(self, value: int) -> None:
+        self._set("engrave_type", value)
+
+    @property
+    def step_length(self) -> float:
+        return float(self._params.get("step_length", 0.1))
+
+    @step_length.setter
+    def step_length(self, value: float) -> None:
+        self._set("step_length", value)
+
+    @property
+    def chord_error(self) -> float:
+        return float(self._params.get("chord_error", 0.01))
+
+    @chord_error.setter
+    def chord_error(self, value: float) -> None:
+        self._set("chord_error", value)
+
+    @property
+    def engrave_corner_angle_limit(self) -> float:
+        return float(self._params.get("engrave_corner_angle_limit", 90))
+
+    @engrave_corner_angle_limit.setter
+    def engrave_corner_angle_limit(self, value: float) -> None:
+        self._set("engrave_corner_angle_limit", value)
+
     def rough_finish(self) -> None:
         self._session.mill_rough(**self._params)
 
     def pocket(self) -> None:
         self._session.mill_pocket(**self._params)
+
+    def saw(self) -> None:
+        self._session.mill_saw(**self._params)
+
+    def engrave(self) -> None:
+        self._session.mill_engrave(**self._params)
 
     def drill_tap(self) -> None:
         d_type = self._params.get("drill_type", "drill")

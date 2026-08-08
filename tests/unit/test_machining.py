@@ -81,6 +81,54 @@ def test_mill_data_xy_corners(mock_com: MagicMock) -> None:
     assert md.xy_corners == 1
 
 
+def test_mill_data_saw_angle(mock_com: MagicMock) -> None:
+    md = _make_md(mock_com)
+    md.saw_angle = 15.0
+    assert md.saw_angle == 15.0
+
+
+def test_mill_data_saw_internal_corners(mock_com: MagicMock) -> None:
+    md = _make_md(mock_com)
+    md.saw_internal_corners = 1
+    assert md.saw_internal_corners == 1
+
+
+def test_mill_data_saw_external_corners(mock_com: MagicMock) -> None:
+    md = _make_md(mock_com)
+    md.saw_external_corners = 2
+    assert md.saw_external_corners == 2
+
+
+def test_mill_data_saw_open_ends(mock_com: MagicMock) -> None:
+    md = _make_md(mock_com)
+    md.saw_open_ends = 1
+    assert md.saw_open_ends == 1
+
+
+def test_mill_data_saw_head_position(mock_com: MagicMock) -> None:
+    md = _make_md(mock_com)
+    md.saw_head_position = 1
+    assert md.saw_head_position == 1
+
+
+def test_mill_data_engrave_type(mock_com: MagicMock) -> None:
+    md = _make_md(mock_com)
+    md.engrave_type = 1
+    assert md.engrave_type == 1
+
+
+def test_mill_data_step_length(mock_com: MagicMock) -> None:
+    md = _make_md(mock_com)
+    md.step_length = 0.05
+    assert md.step_length == 0.05
+
+
+def test_mill_data_engrave_corner_angle_limit(mock_com: MagicMock) -> None:
+    md = _make_md(mock_com)
+    md.engrave_corner_angle_limit = 45.0
+    assert md.engrave_corner_angle_limit == 45.0
+
+
 def test_mill_data_rough_finish(mock_com: MagicMock) -> None:
     md = _make_md(mock_com)
     md.rough_finish()

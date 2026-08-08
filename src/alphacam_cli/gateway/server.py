@@ -951,6 +951,67 @@ class GatewayServer:
         drw.zoom_all()
         return {"success": True}
 
+    def _handler_mill_saw(self, params: dict[str, Any]) -> dict[str, int]:
+        from alphacam_cli.gateway.server import _app as com_app
+
+        drw = com_app.get_active_drawing()
+        if drw is None:
+            raise COMError("No active drawing")
+        if drw.geometries_count == 0:
+            raise COMError("No geometries to machine")
+        tool = str(params.get("tool", ""))
+        if tool:
+            if os.path.exists(tool):
+                if com_app.select_tool(tool) is None:
+                    raise COMError(f"Failed to select tool: {os.path.basename(tool)}")
+            else:
+                self._handler_select_tool({"name": tool})
+        drw.select_all_geometries()
+        md = com_app.create_mill_data()
+        md.safe_rapid_level = 20.0
+        md.rapid_down_to = 2.0
+        md.final_depth = float(params.get("depth", -10))
+        md.spindle_speed = int(params.get("spindle", 12000))
+        md.down_feed = float(params.get("down_feed", 2000))
+        md.cut_feed = float(params.get("feed", 3000))
+        md.saw_angle = float(params.get("saw_angle", 0))
+        md.saw_internal_corners = int(params.get("internal_corners", 1))
+        md.saw_external_corners = int(params.get("external_corners", 1))
+        md.saw_head_position = int(params.get("head_position", 0))
+        md.saw()
+        drw.zoom_all()
+        return {"tool_paths_count": drw.tool_paths_count}
+
+    def _handler_mill_engrave(self, params: dict[str, Any]) -> dict[str, int]:
+        from alphacam_cli.gateway.server import _app as com_app
+
+        drw = com_app.get_active_drawing()
+        if drw is None:
+            raise COMError("No active drawing")
+        if drw.geometries_count == 0:
+            raise COMError("No geometries to machine")
+        tool = str(params.get("tool", ""))
+        if tool:
+            if os.path.exists(tool):
+                if com_app.select_tool(tool) is None:
+                    raise COMError(f"Failed to select tool: {os.path.basename(tool)}")
+            else:
+                self._handler_select_tool({"name": tool})
+        drw.select_all_geometries()
+        md = com_app.create_mill_data()
+        md.safe_rapid_level = 20.0
+        md.rapid_down_to = 2.0
+        md.final_depth = float(params.get("depth", -1))
+        md.spindle_speed = int(params.get("spindle", 12000))
+        md.down_feed = float(params.get("down_feed", 2000))
+        md.cut_feed = float(params.get("feed", 3000))
+        md.engrave_type = int(params.get("engrave_type", 0))
+        md.step_length = float(params.get("step_length", 0.1))
+        md.chord_error = float(params.get("chord_error", 0.01))
+        md.engrave()
+        drw.zoom_all()
+        return {"tool_paths_count": drw.tool_paths_count}
+
     def _handler_apply_style(self, params: dict[str, Any]) -> dict[str, Any]:
         from alphacam_cli.gateway.server import _app as com_app
 

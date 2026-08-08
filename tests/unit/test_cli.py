@@ -544,6 +544,70 @@ def test_mill_drill() -> None:
     assert "Drill done" in result.stderr
 
 
+def test_mill_saw() -> None:
+    with _mock_com() as app_mock:
+        app_mock.ActiveDrawing.Geometries.Count = 3
+        result = runner.invoke(app, ["mill", "saw", "-d", "-10", "-s", "12000"])
+    assert result.exit_code == 0
+    assert "Saw done" in result.stderr
+    md = app_mock.CreateMillData.return_value
+    assert md.FinalDepth == -10
+    assert md.SawAngle == 0
+    assert md.SawInternalCorners == 1
+    assert md.SawExternalCorners == 1
+    assert md.SawHeadPosition == 0
+    md.Saw.assert_called_once_with()
+
+
+def test_mill_saw_no_geometries() -> None:
+    with _mock_com():
+        result = runner.invoke(app, ["mill", "saw", "-d", "-10"])
+    assert result.exit_code == 0
+    assert "No geometries" in result.stderr
+
+
+def test_mill_saw_invalid_depth() -> None:
+    result = runner.invoke(app, ["mill", "saw", "--depth", "5"])
+    assert result.exit_code == 2
+    assert "Depth must be negative" in result.stderr
+
+
+def test_mill_saw_no_active_drawing() -> None:
+    with _mock_com() as app_mock:
+        app_mock.ActiveDrawing = None
+        result = runner.invoke(app, ["mill", "saw", "-d", "-10"])
+    assert result.exit_code == 1
+    assert "No active drawing" in result.stderr
+
+
+def test_mill_engrave() -> None:
+    with _mock_com() as app_mock:
+        app_mock.ActiveDrawing.Geometries.Count = 3
+        result = runner.invoke(app, ["mill", "engrave", "-d", "-0.5", "-s", "18000"])
+    assert result.exit_code == 0
+    assert "Engrave done" in result.stderr
+    md = app_mock.CreateMillData.return_value
+    assert md.FinalDepth == -0.5
+    assert md.EngraveType == 0
+    assert md.StepLength == 0.1
+    md.Engrave.assert_called_once_with()
+
+
+def test_mill_engrave_no_geometries() -> None:
+    with _mock_com():
+        result = runner.invoke(app, ["mill", "engrave", "-d", "-0.5"])
+    assert result.exit_code == 0
+    assert "No geometries" in result.stderr
+
+
+def test_mill_engrave_no_active_drawing() -> None:
+    with _mock_com() as app_mock:
+        app_mock.ActiveDrawing = None
+        result = runner.invoke(app, ["mill", "engrave", "-d", "-0.5"])
+    assert result.exit_code == 1
+    assert "No active drawing" in result.stderr
+
+
 def test_mill_rough_invalid_depth() -> None:
     result = runner.invoke(app, ["mill", "rough", "--depth", "5"])
     assert result.exit_code == 2

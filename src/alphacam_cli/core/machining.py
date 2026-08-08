@@ -151,6 +151,86 @@ class MillData:
     def chord_error(self, value: float) -> None:
         self._md.ChordError = value  # type: ignore[attr-defined]
 
+    @property
+    def saw_angle(self) -> float:
+        return float(self._md.SawAngle)  # type: ignore[attr-defined]
+
+    @saw_angle.setter
+    def saw_angle(self, value: float) -> None:
+        self._md.SawAngle = value  # type: ignore[attr-defined]
+
+    @property
+    def saw_external_corners(self) -> int:
+        return int(self._md.SawExternalCorners)  # type: ignore[attr-defined]
+
+    @saw_external_corners.setter
+    def saw_external_corners(self, value: int) -> None:
+        self._md.SawExternalCorners = value  # type: ignore[attr-defined]
+
+    @property
+    def saw_external_corner_distance(self) -> float:
+        return float(self._md.SawExternalCornerDistance)  # type: ignore[attr-defined]
+
+    @saw_external_corner_distance.setter
+    def saw_external_corner_distance(self, value: float) -> None:
+        self._md.SawExternalCornerDistance = value  # type: ignore[attr-defined]
+
+    @property
+    def saw_internal_corners(self) -> int:
+        return int(self._md.SawInternalCorners)  # type: ignore[attr-defined]
+
+    @saw_internal_corners.setter
+    def saw_internal_corners(self, value: int) -> None:
+        self._md.SawInternalCorners = value  # type: ignore[attr-defined]
+
+    @property
+    def saw_open_ends(self) -> int:
+        return int(self._md.SawOpenEnds)  # type: ignore[attr-defined]
+
+    @saw_open_ends.setter
+    def saw_open_ends(self, value: int) -> None:
+        self._md.SawOpenEnds = value  # type: ignore[attr-defined]
+
+    @property
+    def saw_open_ends_distance(self) -> float:
+        return float(self._md.SawOpenEndsDistance)  # type: ignore[attr-defined]
+
+    @saw_open_ends_distance.setter
+    def saw_open_ends_distance(self, value: float) -> None:
+        self._md.SawOpenEndsDistance = value  # type: ignore[attr-defined]
+
+    @property
+    def saw_head_position(self) -> int:
+        return int(self._md.SawHeadPosition)  # type: ignore[attr-defined]
+
+    @saw_head_position.setter
+    def saw_head_position(self, value: int) -> None:
+        self._md.SawHeadPosition = value  # type: ignore[attr-defined]
+
+    @property
+    def engrave_type(self) -> int:
+        return int(self._md.EngraveType)  # type: ignore[attr-defined]
+
+    @engrave_type.setter
+    def engrave_type(self, value: int) -> None:
+        self._md.EngraveType = value  # type: ignore[attr-defined]
+
+    @property
+    def step_length(self) -> float:
+        return float(self._md.StepLength)  # type: ignore[attr-defined]
+
+    @step_length.setter
+    def step_length(self, value: float) -> None:
+        self._md.StepLength = value  # type: ignore[attr-defined]
+
+    @property
+    def engrave_corner_angle_limit(self) -> float:
+        return float(self._md.EngraveCornerAngleLimit)  # type: ignore[attr-defined]
+
+    @engrave_corner_angle_limit.setter
+    def engrave_corner_angle_limit(self, value: float) -> None:
+        self._md.EngraveCornerAngleLimit = value  # type: ignore[attr-defined]
+
     # --- Methods ---
     def rough_finish(self) -> None:
         """Execute rough/finish operation on selected geometries."""

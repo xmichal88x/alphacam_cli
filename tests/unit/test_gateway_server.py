@@ -728,3 +728,89 @@ def test_run_nest_handler_advanced_add_file_failed(
             }
         )
     nesting.DeleteAllNestLists.assert_not_called()
+
+
+def test_mill_saw_handler(server_app: MagicMock) -> None:
+    drw = MagicMock()
+    drw.geometries_count = 3
+    drw.tool_paths_count = 5
+    server_app.get_active_drawing.return_value = drw
+    gw = GatewayServer()
+    result = gw._handler_mill_saw(
+        {
+            "depth": -10,
+            "spindle": 12000,
+            "feed": 3000,
+            "down_feed": 2000,
+            "saw_angle": 15,
+            "internal_corners": 1,
+            "external_corners": 2,
+            "head_position": 1,
+        }
+    )
+    assert result == {"tool_paths_count": 5}
+    drw.select_all_geometries.assert_called_once()
+    md = server_app.create_mill_data.return_value
+    assert md.final_depth == -10
+    assert md.saw_angle == 15
+    assert md.saw_internal_corners == 1
+    assert md.saw_external_corners == 2
+    assert md.saw_head_position == 1
+    md.saw.assert_called_once_with()
+    drw.zoom_all.assert_called_once()
+
+
+def test_mill_saw_handler_no_drawing(server_app: MagicMock) -> None:
+    server_app.get_active_drawing.return_value = None
+    gw = GatewayServer()
+    with pytest.raises(COMError, match="No active drawing"):
+        gw._handler_mill_saw({})
+
+
+def test_mill_saw_handler_no_geometries(server_app: MagicMock) -> None:
+    drw = MagicMock()
+    drw.geometries_count = 0
+    server_app.get_active_drawing.return_value = drw
+    gw = GatewayServer()
+    with pytest.raises(COMError, match="No geometries to machine"):
+        gw._handler_mill_saw({})
+
+
+def test_mill_engrave_handler(server_app: MagicMock) -> None:
+    drw = MagicMock()
+    drw.geometries_count = 2
+    drw.tool_paths_count = 4
+    server_app.get_active_drawing.return_value = drw
+    gw = GatewayServer()
+    result = gw._handler_mill_engrave(
+        {
+            "depth": -0.5,
+            "engrave_type": 1,
+            "step_length": 0.05,
+            "chord_error": 0.01,
+        }
+    )
+    assert result == {"tool_paths_count": 4}
+    md = server_app.create_mill_data.return_value
+    assert md.final_depth == -0.5
+    assert md.engrave_type == 1
+    assert md.step_length == 0.05
+    assert md.chord_error == 0.01
+    md.engrave.assert_called_once_with()
+    drw.zoom_all.assert_called_once()
+
+
+def test_mill_engrave_handler_no_drawing(server_app: MagicMock) -> None:
+    server_app.get_active_drawing.return_value = None
+    gw = GatewayServer()
+    with pytest.raises(COMError, match="No active drawing"):
+        gw._handler_mill_engrave({})
+
+
+def test_mill_engrave_handler_no_geometries(server_app: MagicMock) -> None:
+    drw = MagicMock()
+    drw.geometries_count = 0
+    server_app.get_active_drawing.return_value = drw
+    gw = GatewayServer()
+    with pytest.raises(COMError, match="No geometries to machine"):
+        gw._handler_mill_engrave({})
