@@ -184,16 +184,14 @@ class Application:
         sub_dir = type(self)._TOOL_DIRS.get(self.module_type, "mtools.alp")
         base = self._module_dir(sub_dir)
         files = glob.glob(os.path.join(base, pattern))
-        if not files:
-            files = glob.glob(os.path.join(base, "**", pattern), recursive=True)
+        files += glob.glob(os.path.join(base, "**", pattern), recursive=True)
         return sorted(set(files))
 
     def find_post_files(self, pattern: str = "*.arp") -> list[str]:
         sub_dir = type(self)._POST_DIRS.get(self.module_type, "RPosts.Alp")
         base = self._module_dir(sub_dir)
         files = glob.glob(os.path.join(base, pattern))
-        if not files:
-            files = glob.glob(os.path.join(base, "**", pattern), recursive=True)
+        files += glob.glob(os.path.join(base, "**", pattern), recursive=True)
         return sorted(set(files))
 
     def get_nesting(self) -> Nesting:

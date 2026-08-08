@@ -166,8 +166,8 @@ def test_module_dir_fallback(mock_com: MagicMock, tmp_path: pathlib.Path) -> Non
 def test_find_tool_files_scoped_to_module_dir(mock_com: MagicMock, tmp_path: pathlib.Path) -> None:
     rtools = tmp_path / "LICOMDAT" / "rtools.alp"
     rtools.mkdir(parents=True)
+    (rtools / "top_a.art").write_bytes(b"art")
     (rtools / "sub").mkdir()
-    (rtools / "sub" / "tool_a.art").write_bytes(b"art")
     (rtools / "sub" / "tool_b.art").write_bytes(b"art")
     (tmp_path / "LICOMDAT" / "mtools.alp").mkdir()
     (tmp_path / "LICOMDAT" / "mtools.alp" / "mill_c.art").write_bytes(b"art")
@@ -180,8 +180,8 @@ def test_find_tool_files_scoped_to_module_dir(mock_com: MagicMock, tmp_path: pat
             ac = Application(raw)
             result = ac.find_tool_files("*.art")
     assert result == [
-        str(tmp_path / "LICOMDAT" / "rtools.alp" / "sub" / "tool_a.art"),
         str(tmp_path / "LICOMDAT" / "rtools.alp" / "sub" / "tool_b.art"),
+        str(tmp_path / "LICOMDAT" / "rtools.alp" / "top_a.art"),
     ]
 
 
@@ -237,7 +237,7 @@ def test_find_post_files(mock_com: MagicMock) -> None:
         mock_com,
         patch(
             "alphacam_cli.core.application.glob.glob",
-            return_value=posts,
+            side_effect=[posts, []],
         ) as m_glob,
     ):
         from alphacam_cli.com.manager import alphacam_context
@@ -246,7 +246,10 @@ def test_find_post_files(mock_com: MagicMock) -> None:
             ac = Application(raw)
             result = ac.find_post_files()
     assert result == posts
-    m_glob.assert_called_once_with(os.path.join(r"C:\Licomdat", "RPosts.Alp", "*.arp"))
+    assert m_glob.call_args_list[0][0] == (os.path.join(r"C:\Licomdat", "RPosts.Alp", "*.arp"),)
+    assert m_glob.call_args_list[1][0] == (
+        os.path.join(r"C:\Licomdat", "RPosts.Alp", "**", "*.arp"),
+    )
 
 
 def test_find_post_files_fallback(mock_com: MagicMock) -> None:
