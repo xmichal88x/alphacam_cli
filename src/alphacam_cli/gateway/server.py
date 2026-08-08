@@ -261,6 +261,15 @@ class GatewayServer:
                 out["gencache_nesting"] = f"OK: {n3}"
             except Exception as e:
                 out["gencache_nesting"] = f"FAIL: {e!r}"
+            for addin_name in ("Nesting", "AcamRadNest", "AcamNest"):
+                try:
+                    r2 = app2.LoadAddIn(addin_name)
+                    out[f"load_addin_{addin_name}"] = f"OK: {r2}"
+                    n4 = app2.Nesting
+                    out[f"nesting_after_load_{addin_name}"] = f"OK: {n4}"
+                    break
+                except Exception as e:
+                    out[f"load_addin_{addin_name}"] = f"FAIL: {e!r}"
         except Exception as e:
             out["gencache_app"] = f"FAIL: {e!r}"
         try:
