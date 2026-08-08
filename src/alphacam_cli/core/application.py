@@ -18,12 +18,17 @@ from alphacam_cli.core.machining import MillData
 from alphacam_cli.core.nesting import Nesting
 from alphacam_cli.core.tool import Tool
 
+_ADDINS_INTERFACE_TYPELIB = "{D216BAAC-A717-4793-92D3-1AE37AE3AC2E}"
+_ADDINS_TYPELIB = "{A87DD4DB-67C9-4F1B-BC79-A71EE8C7D1E5}"
+_ADDINS_INTERFACE_CLSID = "{39BFE38A-D3E4-43EA-89D0-584C776B97A9}"
+
 
 class Application:
     """Typed wrapper around AlphaCAM Application COM object."""
 
     def __init__(self, dispatch: win32.CDispatch) -> None:
         self._app = dispatch
+        self._addins: Any | None = None
 
     @property
     def _raw_app(self) -> Any:
@@ -367,3 +372,83 @@ class Application:
 
     def glob_files(self, directory: str, pattern: str = "*.amd") -> list[str]:
         return sorted(glob.glob(os.path.join(directory, pattern)))
+
+    # --- Add-ins interface (Reports, NcOutputManager, AutoStyles) ---
+
+    def get_addins(self) -> Any:
+        """Return the IAddIns interface for add-in automation (cached)."""
+        if self._addins is None:
+            self._addins = self._connect_addins()
+        return self._addins
+
+    def _connect_addins(self) -> Any:
+        try:
+            import pythoncom  # type: ignore[import-untyped]
+            import win32com.client as w32  # type: ignore[import-untyped]
+            from win32com.client import gencache  # type: ignore[import-untyped]
+        except ImportError as e:
+            raise RuntimeError("Add-ins interface requires pywin32 (Windows only)") from e  # noqa: TRY003
+        try:
+            gencache.EnsureModule(_ADDINS_INTERFACE_TYPELIB, 0, 1, 0)
+            gencache.EnsureModule(_ADDINS_TYPELIB, 0, 1, 0)
+            app = gencache.EnsureDispatch("Ar5axaps.Application")
+            clsid = pythoncom.MakeIID(_ADDINS_INTERFACE_CLSID)
+            ai = w32.Dispatch(
+                pythoncom.CoCreateInstance(
+                    clsid, None, pythoncom.CLSCTX_ALL, pythoncom.IID_IDispatch
+                )
+            )
+            return ai.GetAddInsInterface(app)
+        except Exception as e:
+            raise RuntimeError(f"Failed to connect to AlphaCAM add-ins: {e}") from e  # noqa: TRY003
+
+    def get_reports_addin(self) -> Any:
+        addins = self.get_addins()
+        if addins is None:
+            raise RuntimeError("Add-ins interface unavailable")  # noqa: TRY003
+        return addins.GetNewReportsAddIn()
+
+    def get_nc_output_manager_addin(self) -> Any:
+        addins = self.get_addins()
+        if addins is None:
+            raise RuntimeError("Add-ins interface unavailable")  # noqa: TRY003
+        return addins.GetNcOutputManagerAddIn()
+
+    def get_auto_styles_addin(self) -> Any:
+        addins = self.get_addins()
+        if addins is None:
+            raise RuntimeError("Add-ins interface unavailable")  # noqa: TRY003
+        return addins.GetAutoStylesAddIn()
+
+    def reports_create(self) -> dict[str, Any]:
+        """Create production reports for the active drawing (headless, no dialogs)."""
+        reports = self.get_reports_addin()
+        drw = self.get_active_drawing()
+        raw = drw.raw_dispatch if drw is not None else None
+        job = reports.CreateReportsJob(raw, False, True)
+        job.CreateReports()
+        return {"success": True, "job": "ok", "active_drawing": drw is not None}
+
+    def nc_configs(self) -> dict[str, Any]:
+        """List NC output configurations (read-only, no dialogs)."""
+        ncman = self.get_nc_output_manager_addin()
+        coll = ncman.GetOutputConfigurationsCollection()
+        count = int(coll.Count)
+        configs: list[str] = []
+        for i in range(1, count + 1):
+            try:
+                configs.append(str(coll.Item(i).Name))
+            except Exception:
+                configs.append(f"config_{i}")
+        return {"count": count, "configs": configs}
+
+    def auto_style_apply(self, file: str) -> dict[str, Any]:
+        """Apply an auto-style file to the active drawing (no dialogs)."""
+        astyles = self.get_auto_styles_addin()
+        try:
+            astyles.Apply(file)
+        except Exception as e:
+            if "UserInteractive" in str(e) or "UserInteractive" in str(getattr(e, "strerror", "")):
+                raise RuntimeError("auto-style requires GUI (file dialog in Session 0)") from e  # noqa: TRY003
+            raise RuntimeError(f"Failed to apply auto-style '{file}': {e}") from e  # noqa: TRY003
+        return {"success": True, "file": file}

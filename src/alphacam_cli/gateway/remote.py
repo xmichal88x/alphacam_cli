@@ -196,6 +196,15 @@ class RemoteApplication:
     def apply_mill_style(self, style_path: str) -> None:
         self._session.apply_style(style_path)
 
+    def reports_create(self) -> dict[str, Any]:
+        return self._session.reports_create()  # type: ignore[no-any-return]
+
+    def nc_configs(self) -> dict[str, Any]:
+        return self._session.nc_configs()  # type: ignore[no-any-return]
+
+    def auto_style_apply(self, file: str) -> dict[str, Any]:
+        return self._session.auto_style_apply(file)  # type: ignore[no-any-return]
+
     def get_nesting(self) -> Any:
         return _RemoteNesting(self._session)
 

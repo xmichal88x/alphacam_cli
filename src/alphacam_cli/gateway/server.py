@@ -271,6 +271,33 @@ class GatewayServer:
     def _handler_ping(self, params: dict[str, Any]) -> dict[str, bool]:
         return {"pong": True}
 
+    def _handler_reports_create(self, params: dict[str, Any]) -> dict[str, Any]:
+        from alphacam_cli.gateway.server import _app as com_app
+
+        try:
+            return com_app.reports_create()  # type: ignore[no-any-return]
+        except Exception as e:
+            raise COMError(f"reports: create failed: {e}") from e
+
+    def _handler_nc_configs(self, params: dict[str, Any]) -> dict[str, Any]:
+        from alphacam_cli.gateway.server import _app as com_app
+
+        try:
+            return com_app.nc_configs()  # type: ignore[no-any-return]
+        except Exception as e:
+            raise COMError(f"nc configs failed: {e}") from e
+
+    def _handler_auto_style_apply(self, params: dict[str, Any]) -> dict[str, Any]:
+        from alphacam_cli.gateway.server import _app as com_app
+
+        file = str(params.get("file", ""))
+        if not file:
+            raise COMError("file is required")
+        try:
+            return com_app.auto_style_apply(file)  # type: ignore[no-any-return]
+        except Exception as e:
+            raise COMError(str(e)) from e
+
     def _handler_probe_nest(self, params: dict[str, Any]) -> dict[str, str]:
         from alphacam_cli.gateway.server import _app as com_app
 

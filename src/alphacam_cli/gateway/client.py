@@ -180,6 +180,15 @@ class RemoteSession:
     def apply_style(self, style: str, tool: str = "") -> dict[str, Any]:
         return self._call("apply_style", {"style": style, "tool": tool})  # type: ignore[no-any-return]
 
+    def reports_create(self) -> dict[str, Any]:
+        return self._call("reports_create")  # type: ignore[no-any-return]
+
+    def nc_configs(self) -> dict[str, Any]:
+        return self._call("nc_configs")  # type: ignore[no-any-return]
+
+    def auto_style_apply(self, file: str) -> dict[str, Any]:
+        return self._call("auto_style_apply", {"file": file})  # type: ignore[no-any-return]
+
     def batch_process(
         self,
         files: list[str],

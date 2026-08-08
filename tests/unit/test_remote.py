@@ -160,3 +160,30 @@ def test_remote_drawing_proxy_export() -> None:
     result = drw.export(r"C:\parts\out.dxf", "dxf")
     assert result == {"success": True, "path": r"C:\parts\out.dxf"}
     session.export_drawing.assert_called_once_with(r"C:\parts\out.dxf", "dxf")
+
+
+def test_remote_reports_create() -> None:
+    session = MagicMock()
+    session.reports_create.return_value = {"success": True, "job": "ok", "active_drawing": True}
+    app = RemoteApplication(session)
+    result = app.reports_create()
+    assert result == {"success": True, "job": "ok", "active_drawing": True}
+    session.reports_create.assert_called_once_with()
+
+
+def test_remote_nc_configs() -> None:
+    session = MagicMock()
+    session.nc_configs.return_value = {"count": 2, "configs": ["Alpha", "Beta"]}
+    app = RemoteApplication(session)
+    result = app.nc_configs()
+    assert result == {"count": 2, "configs": ["Alpha", "Beta"]}
+    session.nc_configs.assert_called_once_with()
+
+
+def test_remote_auto_style_apply() -> None:
+    session = MagicMock()
+    session.auto_style_apply.return_value = {"success": True, "file": r"C:\styles\auto.style"}
+    app = RemoteApplication(session)
+    result = app.auto_style_apply(r"C:\styles\auto.style")
+    assert result == {"success": True, "file": r"C:\styles\auto.style"}
+    session.auto_style_apply.assert_called_once_with(r"C:\styles\auto.style")

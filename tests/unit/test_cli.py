@@ -77,6 +77,12 @@ _MOCK_PATCHES = [
     ("alphacam_cli.cli.post", "alphacam_context"),
     ("alphacam_cli.cli.nest", "require_platform"),
     ("alphacam_cli.cli.nest", "alphacam_context"),
+    ("alphacam_cli.cli.reports", "require_platform"),
+    ("alphacam_cli.cli.reports", "alphacam_context"),
+    ("alphacam_cli.cli.ncmanager", "require_platform"),
+    ("alphacam_cli.cli.ncmanager", "alphacam_context"),
+    ("alphacam_cli.cli.autostyle", "require_platform"),
+    ("alphacam_cli.cli.autostyle", "alphacam_context"),
     ("alphacam_cli.com.manager", "alphacam_context"),
 ]
 

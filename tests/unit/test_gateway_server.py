@@ -814,3 +814,55 @@ def test_mill_engrave_handler_no_geometries(server_app: MagicMock) -> None:
     gw = GatewayServer()
     with pytest.raises(COMError, match="No geometries to machine"):
         gw._handler_mill_engrave({})
+
+
+def test_reports_create_handler(server_app: MagicMock) -> None:
+    server_app.reports_create.return_value = {
+        "success": True,
+        "job": "ok",
+        "active_drawing": True,
+    }
+    gw = GatewayServer()
+    result = gw._handler_reports_create({})
+    assert result == {"success": True, "job": "ok", "active_drawing": True}
+    server_app.reports_create.assert_called_once_with()
+
+
+def test_reports_create_handler_failure(server_app: MagicMock) -> None:
+    server_app.reports_create.side_effect = RuntimeError("boom")
+    gw = GatewayServer()
+    with pytest.raises(COMError, match="reports: create failed: boom"):
+        gw._handler_reports_create({})
+    server_app.reports_create.assert_called_once_with()
+
+
+def test_nc_configs_handler(server_app: MagicMock) -> None:
+    server_app.nc_configs.return_value = {"count": 2, "configs": ["Alpha", "Beta"]}
+    gw = GatewayServer()
+    result = gw._handler_nc_configs({})
+    assert result == {"count": 2, "configs": ["Alpha", "Beta"]}
+    server_app.nc_configs.assert_called_once_with()
+
+
+def test_auto_style_apply_handler(server_app: MagicMock) -> None:
+    server_app.auto_style_apply.return_value = {"success": True, "file": r"C:\styles\auto.style"}
+    gw = GatewayServer()
+    result = gw._handler_auto_style_apply({"file": r"C:\styles\auto.style"})
+    assert result == {"success": True, "file": r"C:\styles\auto.style"}
+    server_app.auto_style_apply.assert_called_once_with(r"C:\styles\auto.style")
+
+
+def test_auto_style_apply_handler_missing_file(server_app: MagicMock) -> None:
+    gw = GatewayServer()
+    with pytest.raises(COMError, match="file is required"):
+        gw._handler_auto_style_apply({})
+    server_app.auto_style_apply.assert_not_called()
+
+
+def test_auto_style_apply_handler_user_interactive(server_app: MagicMock) -> None:
+    server_app.auto_style_apply.side_effect = RuntimeError(
+        "auto-style requires GUI (file dialog in Session 0)"
+    )
+    gw = GatewayServer()
+    with pytest.raises(COMError, match="auto-style requires GUI"):
+        gw._handler_auto_style_apply({"file": "x"})

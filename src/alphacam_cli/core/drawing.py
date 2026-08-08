@@ -18,6 +18,11 @@ class Drawing:
         self._drw = dispatch
 
     @property
+    def raw_dispatch(self) -> Any:
+        """Return the raw COM dispatch object (for add-in automation)."""
+        return self._drw
+
+    @property
     def geometries_count(self) -> int:
         return int(self._drw.Geometries.Count)  # type: ignore[attr-defined]
 
