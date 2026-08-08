@@ -248,6 +248,18 @@ class GatewayServer:
         except Exception as e:
             out["dispatch_acamnest"] = f"FAIL: {e!r}"
         try:
+            import win32com.client.gencache as gencache  # type: ignore[import-untyped]
+
+            app2 = gencache.EnsureDispatch("Ar5axaps.Application")
+            out["gencache_app"] = f"OK: {app2}"
+            try:
+                n3 = app2.Nesting
+                out["gencache_nesting"] = f"OK: {n3}"
+            except Exception as e:
+                out["gencache_nesting"] = f"FAIL: {e!r}"
+        except Exception as e:
+            out["gencache_app"] = f"FAIL: {e!r}"
+        try:
             mats = com_app.get_active_drawing()
             out["materials"] = "n/a"
         except Exception as e:
