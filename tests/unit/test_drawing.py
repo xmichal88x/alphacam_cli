@@ -52,6 +52,32 @@ def test_rectangle_creation(mock_com: MagicMock) -> None:
             assert p is not None
 
 
+def test_create_nest_data(mock_com: MagicMock) -> None:
+    with mock_com:
+        from alphacam_cli.com.manager import alphacam_context
+        from alphacam_cli.core.drawing import Drawing
+
+        with alphacam_context() as raw:
+            drw = Drawing(raw.ActiveDrawing)
+            nest_data = MagicMock()
+            drw._drw.CreateNestData.return_value = nest_data
+            result = drw.create_nest_data("nest.anl")
+            assert result is nest_data
+            drw._drw.CreateNestData.assert_called_once_with("nest.anl")
+
+
+def test_create_nest_data_none(mock_com: MagicMock) -> None:
+    with mock_com:
+        from alphacam_cli.com.manager import alphacam_context
+        from alphacam_cli.core.drawing import Drawing
+
+        with alphacam_context() as raw:
+            drw = Drawing(raw.ActiveDrawing)
+            drw._drw.CreateNestData.return_value = None
+            with pytest.raises(RuntimeError, match="Failed to create nest data"):
+                drw.create_nest_data("nest.anl")
+
+
 def test_output_nc_with_events(mock_com: MagicMock) -> None:
     with (
         mock_com,

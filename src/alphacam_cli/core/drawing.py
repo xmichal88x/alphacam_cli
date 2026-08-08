@@ -30,6 +30,12 @@ class Drawing:
             raise RuntimeError("Failed to create rectangle")  # noqa: TRY003
         return CamPath(raw)
 
+    def create_nest_data(self, file_name: str) -> Any:
+        raw = self._drw.CreateNestData(file_name)  # type: ignore[attr-defined]
+        if raw is None:
+            raise RuntimeError("Failed to create nest data")  # noqa: TRY003
+        return raw
+
     def create_circle(self, radius: float, cx: float, cy: float) -> CamPath:
         raw = self._drw.CreateCircle(radius, cx, cy)  # type: ignore[attr-defined]
         if raw is None:

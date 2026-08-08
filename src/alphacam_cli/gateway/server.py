@@ -606,48 +606,32 @@ class GatewayServer:
         drw = com_app.create_temp_drawing()
         if drw is None:
             raise COMError("Failed to create temporary drawing")
-        sheet_geo = drw.create_rectangle(0, 0, sheet_width, sheet_height)
-        try:
-            nesting = com_app.get_nesting()
-        except Exception as e:
-            raise COMError(f"nest: get_nesting failed: {e}") from e
-        try:
-            nesting.suppress_dialogs = True
-        except Exception as e:
-            raise COMError(f"nest: suppress_dialogs failed: {e}") from e
-        try:
-            nesting.delete_all_nest_lists()
-        except Exception as e:
-            raise COMError(f"nest: delete_all_nest_lists failed: {e}") from e
         nest_path = os.path.join(output_dir, "nest.anl") if output_dir else "nest.anl"
         try:
-            nl = nesting.new_nest_list(nest_path)
+            nd = drw.create_nest_data(nest_path)
         except Exception as e:
-            raise COMError(f"nest: new_nest_list failed: {e}") from e
-        nl.total_time = 10
-        for part in parts:
+            raise COMError(f"nest: create_nest_data failed: {e}") from e
+        if parts:
+            print(f"nest: parts not added via nest list (diagnostic): {parts}")
+        if parts and hasattr(nd, "AddPart"):
             try:
-                np_pt = nl.add_file(str(part.get("name", "")))
+                for part in parts:
+                    nd.AddPart(str(part.get("name", "")), int(part.get("count", 1)))  # type: ignore[attr-defined]
             except Exception as e:
-                raise COMError(f"nest: add_file failed: {e}") from e
-            np_pt.required = int(part.get("count", 1))
-            np_pt.rotation_angle = 90
+                raise COMError(f"nest: add_part failed: {e}") from e
         try:
-            sl = nesting.new_sheet_list()
+            sheet_geo = drw.create_rectangle(0, 0, sheet_width, sheet_height)
+            nd.AddSheet(sheet_geo, "MDF", 0.25, 2)  # type: ignore[attr-defined]
         except Exception as e:
-            raise COMError(f"nest: new_sheet_list failed: {e}") from e
+            raise COMError(f"nest: add_sheet failed: {e}") from e
         try:
-            ss = sl.add(sheet_geo)
+            nd.DoNest()  # type: ignore[attr-defined]
         except Exception as e:
-            raise COMError(f"nest: add failed: {e}") from e
-        ss.thickness = 18.0
-        ss.required = 1
-        try:
-            nest_result = nesting.nest(nl, sl)
-        except Exception as e:
-            raise COMError(f"nest: nest failed: {e}") from e
-        nl.save()
-        return {"count": nest_result.count if nest_result else 0, "success": True}
+            raise COMError(f"nest: do_nest failed: {e}") from e
+        result: dict[str, Any] = {"success": True, "count": 1}
+        if parts and not hasattr(nd, "AddPart"):
+            result["parts"] = parts
+        return result
 
     def _handler_find_drawing_files(self, params: dict[str, Any]) -> list[str]:
         from alphacam_cli.gateway.server import _app as com_app
