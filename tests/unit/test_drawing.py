@@ -13,7 +13,7 @@ def test_drawing_creation(mock_com: MagicMock) -> None:
         from alphacam_cli.core.drawing import Drawing
 
         with alphacam_context() as raw:
-            drw = Drawing(raw.CreateTempDrawing())
+            drw = Drawing(raw.ActiveDrawing)
             assert drw.geometries_count == 0
             assert drw.tool_paths_count == 0
 
@@ -75,7 +75,7 @@ def test_create_circle(mock_com: MagicMock) -> None:
         from alphacam_cli.core.drawing import CamPath, Drawing
 
         with alphacam_context() as raw:
-            drw = Drawing(raw.CreateTempDrawing())
+            drw = Drawing(raw.ActiveDrawing)
             path_mock = MagicMock()
             drw._drw.CreateCircle.return_value = path_mock
             path = drw.create_circle(50, 100, 100)
@@ -89,7 +89,7 @@ def test_create_text(mock_com: MagicMock) -> None:
         from alphacam_cli.core.drawing import Drawing, Text
 
         with alphacam_context() as raw:
-            drw = Drawing(raw.CreateTempDrawing())
+            drw = Drawing(raw.ActiveDrawing)
             text_mock = MagicMock()
             text_mock.Height = 10.0
             text_mock.Text = "Hello"
@@ -109,7 +109,7 @@ def test_create_2d_geometry(mock_com: MagicMock) -> None:
         from alphacam_cli.core.drawing import Drawing, Geo2D
 
         with alphacam_context() as raw:
-            drw = Drawing(raw.CreateTempDrawing())
+            drw = Drawing(raw.ActiveDrawing)
             raw_geo = MagicMock()
             drw._drw.Create2DGeometry.return_value = raw_geo
             geo = drw.create_2d_geometry(10, 20)
@@ -123,7 +123,7 @@ def test_create_polygon(mock_com: MagicMock) -> None:
         from alphacam_cli.core.drawing import CamPath, Drawing
 
         with alphacam_context() as raw:
-            drw = Drawing(raw.CreateTempDrawing())
+            drw = Drawing(raw.ActiveDrawing)
             path_mock = MagicMock()
             drw._drw.CreatePolygon.return_value = path_mock
             path = drw.create_polygon(50, 6, False, 100, 100)
@@ -137,7 +137,7 @@ def test_save_as(mock_com: MagicMock) -> None:
         from alphacam_cli.core.drawing import Drawing
 
         with alphacam_context() as raw:
-            drw = Drawing(raw.CreateTempDrawing())
+            drw = Drawing(raw.ActiveDrawing)
             drw.save_as("test.amd")
             drw._drw.SaveAs.assert_called_once_with("test.amd")
 
@@ -150,7 +150,7 @@ def test_output_nc(mock_com: MagicMock) -> None:
         from alphacam_cli.core.drawing import Drawing
 
         with alphacam_context() as raw:
-            drw = Drawing(raw.CreateTempDrawing())
+            drw = Drawing(raw.ActiveDrawing)
             drw.output_nc("test.nc")
             drw._drw.OutputNC.assert_called_once_with("test.nc", ACAM_OUT_NC_FILE, False)
 
@@ -161,7 +161,7 @@ def test_clear(mock_com: MagicMock) -> None:
         from alphacam_cli.core.drawing import Drawing
 
         with alphacam_context() as raw:
-            drw = Drawing(raw.CreateTempDrawing())
+            drw = Drawing(raw.ActiveDrawing)
             drw.clear()
             drw._drw.Clear.assert_called_once_with(
                 True, False, True, False, False, False, False, False
@@ -174,7 +174,7 @@ def test_select_all_geometries(mock_com: MagicMock) -> None:
         from alphacam_cli.core.drawing import Drawing
 
         with alphacam_context() as raw:
-            drw = Drawing(raw.CreateTempDrawing())
+            drw = Drawing(raw.ActiveDrawing)
             drw.select_all_geometries()
             drw._drw.SetGeosSelected.assert_called_once_with(True)
 
@@ -185,7 +185,7 @@ def test_select_geometry(mock_com: MagicMock) -> None:
         from alphacam_cli.core.drawing import Drawing
 
         with alphacam_context() as raw:
-            drw = Drawing(raw.CreateTempDrawing())
+            drw = Drawing(raw.ActiveDrawing)
             coll = drw._drw.Geometries
             coll.Count = 3
 
@@ -241,7 +241,7 @@ def test_geo2d_add_line_close(mock_com: MagicMock) -> None:
         from alphacam_cli.core.drawing import CamPath, Drawing, Geo2D
 
         with alphacam_context() as raw:
-            drw = Drawing(raw.CreateTempDrawing())
+            drw = Drawing(raw.ActiveDrawing)
             raw_geo = MagicMock()
             raw_path = MagicMock()
             raw_geo.CloseAndFinishLine.return_value = raw_path

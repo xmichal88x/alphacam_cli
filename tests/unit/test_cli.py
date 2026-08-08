@@ -30,7 +30,6 @@ def _make_app_mock() -> MagicMock:
     drw.Geometries.Count = 0
     drw.ToolPaths.Count = 0
     app.ActiveDrawing = drw
-    app.CreateTempDrawing.return_value = drw
     app.OpenDrawing.return_value = drw
 
     tool = MagicMock()

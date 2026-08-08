@@ -24,11 +24,6 @@ def _make_app_mock() -> MagicMock:
     app.PostFileName = "fanuc.pst"
     app.ApiVersion = 20240315
 
-    drw = MagicMock()
-    drw.Geometries.Count = 0
-    drw.ToolPaths.Count = 0
-    app.CreateTempDrawing.return_value = drw
-
     md = MagicMock()
     app.CreateMillData.return_value = md
 
