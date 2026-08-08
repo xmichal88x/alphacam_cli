@@ -368,8 +368,11 @@ class GatewayServer:
         if tool_side not in ("outside", "inside"):
             raise COMError(f"Invalid tool side: '{tool_side}'. Use 'outside' or 'inside'")
         side = -1 if tool_side == "outside" else 1
+        start_x = float(params.get("start_x", 0.0))
+        start_y = float(params.get("start_y", 0.0))
         for geo in drw.geometries():
             geo.tool_in_out = side
+            geo.set_start_point(start_x, start_y)
         drw.select_all_geometries()
         md = com_app.create_mill_data()
         md.safe_rapid_level = float(params.get("rapid", 10))
@@ -382,6 +385,7 @@ class GatewayServer:
         md.max_depth_per_cut = float(params.get("max_depth_per_cut", 2.5))
         md.width_of_cut = float(params.get("width_of_cut", 5))
         md.stock = float(params.get("stock", 0.5))
+        md.xy_corners = 1
         md.rough_finish()
         drw.zoom_all()
         return {"tool_paths_count": drw.tool_paths_count}

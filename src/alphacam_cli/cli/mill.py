@@ -54,6 +54,8 @@ def rough(
     max_depth_per_cut: float = typer.Option(2.5, "--max-depth", "-m", help="Max depth per pass"),
     material_top: float = typer.Option(0, "--material-top", help="Material top Z"),
     tool_side: str = typer.Option("outside", "--side", help="Tool side: outside/inside"),
+    start_x: float = typer.Option(0.0, "--start-x", help="Start point X (direction)"),
+    start_y: float = typer.Option(0.0, "--start-y", help="Start point Y (direction)"),
 ) -> None:
     """Rough/finish machining on selected geometries."""
     _validate_depth(depth)
@@ -81,6 +83,7 @@ def rough(
         for geo in drw.geometries():
             geo.tool_in_out = side
             geo.selected = True
+            geo.set_start_point(start_x, start_y)
 
         md = ac.create_mill_data()
         md.safe_rapid_level = rapid
@@ -93,6 +96,9 @@ def rough(
         md.max_depth_per_cut = max_depth_per_cut
         md.width_of_cut = width_of_cut
         md.stock = stock
+        md.xy_corners = 1
+        md.start_x = start_x
+        md.start_y = start_y
 
         # Fallback chain: RoughFinish -> process type 2
         console.print("[yellow]Executing RoughFinish...[/yellow]")

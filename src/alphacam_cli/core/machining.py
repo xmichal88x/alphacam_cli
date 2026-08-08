@@ -112,6 +112,14 @@ class MillData:
         self._md.PocketType = value  # type: ignore[attr-defined]
 
     @property
+    def xy_corners(self) -> int:
+        return int(self._md.XYCorners)  # type: ignore[attr-defined]
+
+    @xy_corners.setter
+    def xy_corners(self, value: int) -> None:
+        self._md.XYCorners = value  # type: ignore[attr-defined]
+
+    @property
     def surface_mc_action(self) -> int:
         return int(self._md.SurfaceMCAction)  # type: ignore[attr-defined]
 

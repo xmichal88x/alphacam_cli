@@ -75,3 +75,15 @@ def test_remote_select_tool_none() -> None:
     session.select_tool.return_value = None
     app = RemoteApplication(session)
     assert app.select_tool(r"C:\tools\Flat-10mm.amt") is None
+
+
+def test_remote_mill_data_sends_xy_corners_and_start_point() -> None:
+    from alphacam_cli.gateway.remote import _RemoteMillData
+
+    session = MagicMock()
+    md = _RemoteMillData(session)
+    md.xy_corners = 1
+    md.start_x = 50.0
+    md.start_y = 100.0
+    md.rough_finish()
+    session.mill_rough.assert_called_once_with(xy_corners=1, start_x=50.0, start_y=100.0)

@@ -75,6 +75,12 @@ def test_mill_data_stock(mock_com: MagicMock) -> None:
     assert md.stock == 1.0
 
 
+def test_mill_data_xy_corners(mock_com: MagicMock) -> None:
+    md = _make_md(mock_com)
+    md.xy_corners = 1
+    assert md.xy_corners == 1
+
+
 def test_mill_data_rough_finish(mock_com: MagicMock) -> None:
     md = _make_md(mock_com)
     md.rough_finish()

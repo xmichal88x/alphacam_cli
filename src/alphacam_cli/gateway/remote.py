@@ -297,6 +297,30 @@ class _RemoteMillData:
         self._set("pocket_type", value)
 
     @property
+    def xy_corners(self) -> int:
+        return int(self._params.get("xy_corners", 0))
+
+    @xy_corners.setter
+    def xy_corners(self, value: int) -> None:
+        self._set("xy_corners", value)
+
+    @property
+    def start_x(self) -> float:
+        return float(self._params.get("start_x", 0.0))
+
+    @start_x.setter
+    def start_x(self, value: float) -> None:
+        self._set("start_x", value)
+
+    @property
+    def start_y(self) -> float:
+        return float(self._params.get("start_y", 0.0))
+
+    @start_y.setter
+    def start_y(self, value: float) -> None:
+        self._set("start_y", value)
+
+    @property
     def drill_type(self) -> int:
         return 0
 
