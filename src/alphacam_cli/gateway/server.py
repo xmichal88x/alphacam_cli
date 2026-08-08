@@ -843,7 +843,8 @@ class GatewayServer:
         return out
 
     def _handler_cdm_probe(self, params: dict[str, Any]) -> dict[str, str]:
-        from alphacam_cli.gateway.server import _app as com_app
+        import queue as _queue
+        import threading
 
         out: dict[str, str] = {}
 
@@ -856,74 +857,70 @@ class GatewayServer:
 
         _am_log("start", True)
         out["start"] = "OK"
-        ai: Any = None
-        try:
+
+        def work() -> None:
             import pythoncom  # type: ignore[import-untyped]
             import win32com.client as w32  # type: ignore[import-untyped]
 
-            _am_log("cdm_co_create_before", True, "")
-            clsid = pythoncom.MakeIID("{39BFE38A-D3E4-43EA-89D0-584C776B97A9}")
-            ai = w32.Dispatch(
-                pythoncom.CoCreateInstance(
-                    clsid, None, pythoncom.CLSCTX_ALL, pythoncom.IID_IDispatch
-                )
-            )
-            _am_log("cdm_co_create", True, repr(ai))
-            out["cdm_co_create"] = f"OK: {ai!r}"
-        except Exception as e:
-            _am_log("cdm_co_create", False, repr(e))
-            out["cdm_co_create"] = f"FAIL: {e!r}"
-        addins: Any = None
-        if ai is not None:
+            pythoncom.CoInitialize()
             try:
-                raw = com_app._app  # type: ignore[attr-defined]
-                if hasattr(com_app, "raw_dispatch"):
-                    raw = com_app.raw_dispatch  # type: ignore[attr-defined]
-                _am_log("cdm_get_addins_before", True, "")
-                addins = ai.GetAddInsInterface(raw)
-                _am_log("cdm_get_addins", True, repr(addins))
-                out["cdm_get_addins"] = f"OK: {addins!r}"
-            except Exception as e:
-                _am_log("cdm_get_addins", False, repr(e))
-                out["cdm_get_addins"] = f"FAIL: {e!r}"
-        am: Any = None
-        if addins is not None:
+                _am_log("work_enter", True, "")
+                ai: Any = None
+                try:
+                    clsid = pythoncom.MakeIID("{39BFE38A-D3E4-43EA-89D0-584C776B97A9}")
+                    ai = w32.Dispatch(
+                        pythoncom.CoCreateInstance(
+                            clsid, None, pythoncom.CLSCTX_ALL, pythoncom.IID_IDispatch
+                        )
+                    )
+                    _am_log("cdm_co_create", True, repr(ai))
+                    out["cdm_co_create"] = f"OK: {ai!r}"
+                except Exception as e:
+                    _am_log("cdm_co_create", False, repr(e))
+                    out["cdm_co_create"] = f"FAIL: {e!r}"
+                if ai is not None:
+                    try:
+                        app2 = w32.Dispatch("Ar5axaps.Application")
+                        _am_log("cdm_dispatch_app", True, repr(app2))
+                        out["cdm_dispatch_app"] = f"OK: {app2!r}"
+                        addins = ai.GetAddInsInterface(app2)
+                        _am_log("cdm_get_addins", True, repr(addins))
+                        out["cdm_get_addins"] = f"OK: {addins!r}"
+                        am = addins.GetAutomationManagerAddIn()
+                        _am_log("cdm_get_am", True, repr(am))
+                        out["cdm_get_am"] = f"OK: {am!r}"
+                        if am is not None:
+                            try:
+                                out["cdm_authorised"] = f"OK: {am.IsCDMAuthorised()}"
+                            except Exception as e:
+                                out["cdm_authorised"] = f"FAIL: {e!r}"
+                            try:
+                                out["cdm_customers_count"] = f"OK: {am.Customers.Count}"
+                            except Exception as e:
+                                out["cdm_customers_count"] = f"FAIL: {e!r}"
+                            out["result"] = "CDM_OK"
+                    except Exception as e:
+                        _am_log("cdm_flow", False, repr(e))
+                        out["cdm_flow"] = f"FAIL: {e!r}"
+            finally:
+                pythoncom.CoUninitialize()
+
+        result_q: _queue.Queue[Any] = _queue.Queue()
+
+        def runner() -> None:
             try:
-                _am_log("cdm_get_am_before", True, "")
-                am = addins.GetAutomationManagerAddIn()
-                _am_log("cdm_get_am", True, repr(am))
-                out["cdm_get_am"] = f"OK: {am!r}"
-            except Exception as e:
-                _am_log("cdm_get_am", False, repr(e))
-                out["cdm_get_am"] = f"FAIL: {e!r}"
-        if am is not None:
-            authorised = False
-            try:
-                authorised = bool(am.IsCDMAuthorised())
-                out["cdm_authorised"] = f"OK: {authorised}"
-            except Exception as e:
-                out["cdm_authorised"] = f"FAIL: {e!r}"
-            try:
-                out["cdm_customers_count"] = f"OK: {am.Customers.Count}"
-            except Exception as e:
-                out["cdm_customers_count"] = f"FAIL: {e!r}"
-            try:
-                out["cdm_jobs_count"] = f"OK: {am.Jobs.Count}"
-            except Exception as e:
-                out["cdm_jobs_count"] = f"FAIL: {e!r}"
-            try:
-                job = am.NewCDMJob()
-                out["cdm_new_job"] = f"OK: {job!r}"
-            except Exception as e:
-                out["cdm_new_job"] = f"FAIL: {e!r}"
-            try:
-                db = am.ImportCDMDatabase()
-                out["cdm_import_db"] = f"OK: {db!r}"
-            except Exception as e:
-                out["cdm_import_db"] = f"FAIL: {e!r}"
-            out["result"] = "CDM_OK" if authorised else "CDM_FAIL"
-        else:
-            out["result"] = "CDM_FAIL"
+                work()
+                result_q.put("done")
+            except Exception as e:  # pragma: no cover
+                result_q.put(f"worker died: {e!r}")
+
+        t = threading.Thread(target=runner, daemon=True)
+        t.start()
+        try:
+            result_q.get(timeout=60)
+        except _queue.Empty:
+            out["timeout"] = "worker hung >60s (modal dialog in Session 0?)"
+        out.setdefault("result", "CDM_FAIL")
         return out
 
     def _handler_get_info(self, params: dict[str, Any]) -> dict[str, Any]:
