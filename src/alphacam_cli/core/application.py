@@ -95,16 +95,11 @@ class Application:
             return None
         return Drawing(raw)
 
-    def set_active_drawing(self, drawing: Drawing) -> None:
-        self._app.ActiveDrawing = drawing._drw  # type: ignore[attr-defined]
-
     def create_temp_drawing(self) -> Drawing | None:
         raw = self._app.CreateTempDrawing()  # type: ignore[attr-defined]
         if raw is None:
             return None
-        drw = Drawing(raw)
-        self.set_active_drawing(drw)
-        return drw
+        return Drawing(raw)
 
     def open_drawing(self, path: str) -> Drawing | None:
         raw = self._app.OpenDrawing(path)  # type: ignore[attr-defined]
@@ -153,7 +148,10 @@ class Application:
     def find_tool_files(self, pattern: str = "*.art") -> list[str]:
         sub_dir = type(self)._TOOL_DIRS.get(self.module_type, "mtools.alp")
         base = os.path.join(self.licomdat_path, sub_dir)
-        return sorted(glob.glob(os.path.join(base, pattern)))
+        files = glob.glob(os.path.join(base, pattern))
+        if not files:
+            files = glob.glob(os.path.join(self.licomdat_path, "**", pattern), recursive=True)
+        return sorted(set(files))
 
     def get_nesting(self) -> Nesting:
         raw = self._app.Nesting  # type: ignore[attr-defined]
