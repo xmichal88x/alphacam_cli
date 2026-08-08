@@ -252,6 +252,10 @@ class GatewayServer:
 
             app2 = gencache.EnsureDispatch("Ar5axaps.Application")
             out["gencache_app"] = f"OK: {app2}"
+            members = [
+                m for m in dir(app2) if any(s in m.lower() for s in ("nest", "level", "addin"))
+            ]
+            out["app2_members"] = f"{members}"
             try:
                 n3 = app2.Nesting
                 out["gencache_nesting"] = f"OK: {n3}"
