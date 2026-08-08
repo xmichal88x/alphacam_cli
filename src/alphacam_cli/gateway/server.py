@@ -624,64 +624,103 @@ class GatewayServer:
                 out["stl_deselect"] = "OK"
             except Exception as e:
                 out["stl_deselect"] = f"FAIL: {e!r}"
+
+        def _am_log(step: str, ok: bool, detail: str = "") -> None:
+            try:
+                with open(r"C:\temp\am_probe_gw.log", "a", encoding="utf-8") as f:
+                    f.write(f"{step}: {'OK' if ok else 'FAIL'} {detail}\n")
+            except Exception:
+                pass
+
+        _am_log("am_probe_start", True)
         try:
             import win32com.client.gencache as gencache  # type: ignore[import-untyped]
 
             mod = gencache.EnsureModule("{D216BAAC-A717-4793-92D3-1AE37AE3AC2E}", 0, 1, 0)
+            _am_log("am_typelib_interface", True, repr(mod))
             out["am_typelib_interface"] = f"OK: {mod!r}"
         except Exception as e:
+            _am_log("am_typelib_interface", False, repr(e))
             out["am_typelib_interface"] = f"FAIL: {e!r}"
         try:
             import win32com.client.gencache as gencache  # type: ignore[import-untyped]
 
             mod = gencache.EnsureModule("{A87DD4DB-67C9-4F1B-BC79-A71EE8C7D1E5}", 0, 1, 0)
+            _am_log("am_typelib_addins", True, repr(mod))
             out["am_typelib_addins"] = f"OK: {mod!r}"
         except Exception as e:
+            _am_log("am_typelib_addins", False, repr(e))
             out["am_typelib_addins"] = f"FAIL: {e!r}"
         ai: Any = None
         try:
+            import pythoncom  # type: ignore[import-untyped]
             import win32com.client as w32  # type: ignore[import-untyped]
 
-            ai = w32.Dispatch("Alphacam.AddIns.Interface.AddInsInterface")
-            out["am_addins_interface"] = f"OK: {ai!r}"
+            clsid = pythoncom.MakeIID("{39BFE38A-D3E4-43EA-89D0-584C776B97A9}")
+            ai = w32.Dispatch(
+                pythoncom.CoCreateInstance(
+                    clsid, None, pythoncom.CLSCTX_ALL, pythoncom.IID_IDispatch
+                )
+            )
+            _am_log("am_co_create", True, repr(ai))
+            out["am_co_create"] = f"OK: {ai!r}"
         except Exception as e:
-            out["am_addins_interface"] = f"FAIL: {e!r}"
+            _am_log("am_co_create", False, repr(e))
+            out["am_co_create"] = f"FAIL: {e!r}"
         addins: Any = None
         if ai is not None:
             try:
                 addins = ai.GetAddInsInterface(app3)
+                _am_log("am_get_addins", True, repr(addins))
                 out["am_get_addins"] = f"OK: {addins!r}"
             except Exception as e:
+                _am_log("am_get_addins", False, repr(e))
                 out["am_get_addins"] = f"FAIL: {e!r}"
         am: Any = None
         if addins is not None:
             try:
                 am = addins.GetAutomationManagerAddIn()
+                _am_log("am_get_automation_manager", True, repr(am))
                 out["am_get_automation_manager"] = f"OK: {am!r}"
             except Exception as e:
+                _am_log("am_get_automation_manager", False, repr(e))
                 out["am_get_automation_manager"] = f"FAIL: {e!r}"
         if am is not None:
             try:
-                out["am_running"] = f"OK: {am.IsAutomationManagerAlreadyRunning!r}"
+                detail = f"{am.IsAutomationManagerAlreadyRunning!r}"
+                _am_log("am_running", True, detail)
+                out["am_running"] = f"OK: {detail}"
             except Exception as e:
+                _am_log("am_running", False, repr(e))
                 out["am_running"] = f"FAIL: {e!r}"
             try:
-                out["am_cdm_authorised"] = f"OK: {am.IsCDMAuthorised!r}"
+                detail = f"{am.IsCDMAuthorised!r}"
+                _am_log("am_cdm_authorised", True, detail)
+                out["am_cdm_authorised"] = f"OK: {detail}"
             except Exception as e:
+                _am_log("am_cdm_authorised", False, repr(e))
                 out["am_cdm_authorised"] = f"FAIL: {e!r}"
             try:
+                _am_log("am_jobs", True, f"customers={am.Customers.Count}")
                 out["am_jobs"] = f"OK: {am.Customers.Count}"
             except AttributeError as e:
+                _am_log("am_jobs", False, repr(e))
                 out["am_jobs"] = f"FAIL: {e!r}"
                 try:
+                    _am_log("am_jobs", True, f"jobs={am.Jobs.Count}")
                     out["am_jobs"] = f"OK: {am.Jobs.Count}"
                 except Exception as e2:
+                    _am_log("am_jobs", False, repr(e2))
                     out["am_jobs"] = f"FAIL: {e2!r}"
             except Exception as e:
+                _am_log("am_jobs", False, repr(e))
                 out["am_jobs"] = f"FAIL: {e!r}"
             try:
-                out["am_cdm_import"] = f"OK: {am.IsCDMImport!r}"
+                detail = f"{am.IsCDMImport!r}"
+                _am_log("am_cdm_import", True, detail)
+                out["am_cdm_import"] = f"OK: {detail}"
             except Exception as e:
+                _am_log("am_cdm_import", False, repr(e))
                 out["am_cdm_import"] = f"FAIL: {e!r}"
         return out
 
