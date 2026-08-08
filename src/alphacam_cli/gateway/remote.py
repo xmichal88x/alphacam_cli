@@ -35,6 +35,11 @@ def _ensure_dict(obj: dict[str, Any] | None) -> dict[str, Any]:
     return {} if obj is None else obj
 
 
+def _basename(path: str) -> str:
+    normalized = path.replace("\\", "/")
+    return normalized.rsplit("/", 1)[-1]
+
+
 class _DrawingProxy:
     def __init__(self, session: RemoteSession, info: dict[str, Any]) -> None:
         self._session = session
@@ -147,7 +152,7 @@ class RemoteApplication:
         return _DrawingProxy(self._session, info)
 
     def select_tool(self, path: str) -> _ToolProxy | None:
-        basename = os.path.basename(path) if path else ""
+        basename = _basename(path) if path else ""
         data = self._session.select_tool(basename)
         if data is None:
             return None
