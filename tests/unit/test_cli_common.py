@@ -3,10 +3,26 @@ from __future__ import annotations
 import typer
 from typer.testing import CliRunner
 
-from alphacam_cli.cli.common import handle_com_errors
+from alphacam_cli.cli.common import handle_com_errors, path_basename
 from alphacam_cli.com.manager import AlphacamComError, AlphacamConnectionError
 
 runner = CliRunner()
+
+
+def test_path_basename_windows() -> None:
+    assert path_basename(r"C:\temp\parts\part1.amd") == "part1.amd"
+
+
+def test_path_basename_forward_slash() -> None:
+    assert path_basename("/temp/parts/part1.amd") == "part1.amd"
+
+
+def test_path_basename_mixed() -> None:
+    assert path_basename(r"C:\temp/parts\part1.amd") == "part1.amd"
+
+
+def test_path_basename_bare_file() -> None:
+    assert path_basename("part1.amd") == "part1.amd"
 
 
 def test_handle_com_errors_success() -> None:

@@ -25,6 +25,11 @@ def set_visible(value: bool) -> None:
     _visible = value
 
 
+def path_basename(path: str) -> str:
+    normalized = path.replace("\\", "/")
+    return normalized.rsplit("/", 1)[-1]
+
+
 def require_platform() -> None:
     """Check we're on Windows before trying COM operations."""
     if is_remote():

@@ -11,6 +11,7 @@ from alphacam_cli.cli.common import (
     console,
     get_visible,
     handle_com_errors,
+    path_basename,
     require_platform,
     resolve_app,
 )
@@ -27,7 +28,7 @@ def _process_file(
     file_path: str,
     output_dir: str,
 ) -> dict[str, Any]:
-    basename = os.path.splitext(os.path.basename(file_path))[0]
+    basename = os.path.splitext(path_basename(file_path))[0]
     result: dict[str, Any] = {"file": file_path, "status": STATUS_OK, "error": ""}
 
     try:
@@ -86,7 +87,7 @@ def process(
         with Progress() as progress:
             task = progress.add_task("Processing...", total=len(files))
             for f in files:
-                basename = os.path.splitext(os.path.basename(f))[0]
+                basename = os.path.splitext(path_basename(f))[0]
                 progress.update(task, description=f"Processing {basename}...")
                 result = _process_file(ac, f, out)
                 results.append(result)

@@ -7,11 +7,11 @@ from alphacam_cli.cli.common import (
     console,
     get_visible,
     handle_com_errors,
+    path_basename,
     require_platform,
     resolve_app,
 )
 from alphacam_cli.com.manager import alphacam_context
-from alphacam_cli.gateway.remote import _basename
 
 app = typer.Typer(help="Tool operations")
 
@@ -37,7 +37,7 @@ def list(
         t.add_column("Path", style="green")
 
         for i, f in enumerate(files, 1):
-            t.add_row(str(i), _basename(f), f)
+            t.add_row(str(i), path_basename(f), f)
         console.print(t)
 
 
@@ -53,14 +53,16 @@ def select(
         files = ac.find_tool_files()
 
         basename_lower = name.lower()
-        exact = [f for f in files if _basename(f).lower() == basename_lower]
+        exact = [f for f in files if path_basename(f).lower() == basename_lower]
         prefix = [
-            f for f in files if f not in exact and _basename(f).lower().startswith(basename_lower)
+            f
+            for f in files
+            if f not in exact and path_basename(f).lower().startswith(basename_lower)
         ]
         substring = [
             f
             for f in files
-            if f not in exact and f not in prefix and basename_lower in _basename(f).lower()
+            if f not in exact and f not in prefix and basename_lower in path_basename(f).lower()
         ]
         matched = exact or prefix or substring
         if not matched:
@@ -70,14 +72,14 @@ def select(
         if len(matched) > 1:
             console.print("[yellow]Multiple tools matched:[/yellow]")
             for m in matched:
-                console.print(f"  {_basename(m)}")
+                console.print(f"  {path_basename(m)}")
             console.print("[yellow]Please use a more specific name[/yellow]")
             raise typer.Exit(code=1)
 
         tool_path = matched[0]
         tool = ac.select_tool(tool_path)
         if tool is None:
-            console.print(f"[red]Failed to select tool: {_basename(tool_path)}[/red]")
+            console.print(f"[red]Failed to select tool: {path_basename(tool_path)}[/red]")
             raise typer.Exit(code=1)
 
         t = Table(title="Tool Selected")

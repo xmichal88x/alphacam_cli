@@ -139,3 +139,33 @@ def test_batch_process_post_processor() -> None:
         result = runner.invoke(app, ["batch", "process", ".", "--post", "fanuc"])
     assert result.exit_code == 0
     assert "Post selected: fanuc" in result.stderr
+
+
+def test_process_file_windows_path() -> None:
+    from alphacam_cli.cli.batch import _process_file
+
+    drw = MagicMock()
+    ac = MagicMock()
+    ac.open_drawing.return_value = drw
+
+    result = _process_file(ac, r"C:\temp\parts\part1.amd", "C:/temp/parts/out")
+
+    ac.open_drawing.assert_called_once_with(r"C:\temp\parts\part1.amd")
+    drw.output_nc.assert_called_once_with(os.path.join("C:/temp/parts/out", "part1.nc"))
+    drw.save_as.assert_called_once_with(os.path.join("C:/temp/parts/out", "part1.amd"))
+    assert result == {"file": r"C:\temp\parts\part1.amd", "status": "OK", "error": ""}
+
+
+def test_process_file_forward_slash_path() -> None:
+    from alphacam_cli.cli.batch import _process_file
+
+    drw = MagicMock()
+    ac = MagicMock()
+    ac.open_drawing.return_value = drw
+
+    result = _process_file(ac, "/temp/parts/part2.amd", "/tmp/out")
+
+    ac.open_drawing.assert_called_once_with("/temp/parts/part2.amd")
+    drw.output_nc.assert_called_once_with(os.path.join("/tmp/out", "part2.nc"))
+    drw.save_as.assert_called_once_with(os.path.join("/tmp/out", "part2.amd"))
+    assert result["status"] == "OK"
