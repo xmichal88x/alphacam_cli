@@ -597,6 +597,33 @@ class GatewayServer:
                 out["sheetdb_insert0"] = f"FAIL: {e!r}"
         else:
             out["sheetdb_insert0"] = "SKIP: nesting and app3 unavailable"
+        stl_d: Any = None
+        try:
+            stl_d = com_app.open_cad_file(r"C:\temp\nest_out\slotted_disk.stl", "stl")
+            out["stl_import"] = (
+                f"OK geometries={stl_d.geometries_count}" if stl_d else "OK drawing=None"
+            )
+        except Exception as e:
+            out["stl_import"] = f"FAIL: {e!r}"
+        if stl_d is not None:
+            try:
+                stl_d._drw.SetGeosSelected(True)  # type: ignore[attr-defined]
+                out["stl_select"] = "OK"
+            except Exception as e:
+                out["stl_select"] = f"FAIL: {e!r}"
+            for stl_type in (0, 1, 2):
+                try:
+                    stl_d._drw.SaveStlFile(  # type: ignore[attr-defined]
+                        rf"C:\temp\nest_out\stl_t{stl_type}.stl", stl_type, 0.1
+                    )
+                    out[f"stl_export_t{stl_type}"] = "OK"
+                except Exception as e:
+                    out[f"stl_export_t{stl_type}"] = f"FAIL: {e!r}"
+            try:
+                stl_d._drw.SetGeosSelected(False)  # type: ignore[attr-defined]
+                out["stl_deselect"] = "OK"
+            except Exception as e:
+                out["stl_deselect"] = f"FAIL: {e!r}"
         return out
 
     def _handler_get_info(self, params: dict[str, Any]) -> dict[str, Any]:
