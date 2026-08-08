@@ -676,6 +676,28 @@ class GatewayServer:
             except Exception as e:
                 _am_log("am_get_addins", False, repr(e))
                 out["am_get_addins"] = f"FAIL: {e!r}"
+        if addins is not None:
+            try:
+                ncman = addins.GetNcOutputManagerAddIn()
+                _am_log("am_nc_output_manager", True, repr(ncman))
+                out["am_nc_output_manager"] = f"OK: {ncman!r}"
+            except Exception as e:
+                _am_log("am_nc_output_manager", False, repr(e))
+                out["am_nc_output_manager"] = f"FAIL: {e!r}"
+            try:
+                astyles = addins.GetAutoStylesAddIn()
+                _am_log("am_auto_styles", True, repr(astyles))
+                out["am_auto_styles"] = f"OK: {astyles!r}"
+            except Exception as e:
+                _am_log("am_auto_styles", False, repr(e))
+                out["am_auto_styles"] = f"FAIL: {e!r}"
+            try:
+                reports = addins.GetNewReportsAddIn()
+                _am_log("am_reports", True, repr(reports))
+                out["am_reports"] = f"OK: {reports!r}"
+            except Exception as e:
+                _am_log("am_reports", False, repr(e))
+                out["am_reports"] = f"FAIL: {e!r}"
         am: Any = None
         if addins is not None:
             try:
