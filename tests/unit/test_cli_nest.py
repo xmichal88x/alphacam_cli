@@ -101,7 +101,7 @@ def test_nest_run_drawing_fails() -> None:
         patch("os.path.isfile", return_value=True),
         patch("builtins.open", mock_open(read_data=csv_data)),
     ):
-        mock_app.CreateTempDrawing.return_value = None
+        mock_app.ActiveDrawing = None
         result = runner.invoke(app, ["nest", "run", "parts.csv"])
     assert result.exit_code == 1
     assert "Failed to create drawing" in result.stderr

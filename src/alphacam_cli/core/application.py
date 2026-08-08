@@ -96,7 +96,8 @@ class Application:
         return Drawing(raw)
 
     def create_temp_drawing(self) -> Drawing | None:
-        raw = self._app.CreateTempDrawing()  # type: ignore[attr-defined]
+        self._app.New()  # type: ignore[attr-defined]
+        raw = self._app.ActiveDrawing  # type: ignore[attr-defined]
         if raw is None:
             return None
         return Drawing(raw)

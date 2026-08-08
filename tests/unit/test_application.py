@@ -161,7 +161,19 @@ def test_create_temp_drawing(mock_com: MagicMock) -> None:
         with alphacam_context() as raw:
             ac = Application(raw)
             drw = ac.create_temp_drawing()
+            raw.New.assert_called_once()
             assert drw is not None
+
+
+def test_create_temp_drawing_none(mock_com: MagicMock) -> None:
+    with mock_com:
+        from alphacam_cli.com.manager import alphacam_context
+
+        with alphacam_context() as raw:
+            ac = Application(raw)
+            raw.ActiveDrawing = None
+            result = ac.create_temp_drawing()
+            assert result is None
 
 
 def test_create_mill_data(mock_com: MagicMock) -> None:

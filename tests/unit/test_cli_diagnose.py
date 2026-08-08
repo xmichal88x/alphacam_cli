@@ -76,7 +76,7 @@ def test_diagnose_win32com_not_installed() -> None:
 
 def test_diagnose_create_temp_drawing_none() -> None:
     with _mock_alphacam_context() as app_mock:
-        app_mock.CreateTempDrawing.return_value = None
+        app_mock.ActiveDrawing = None
         result = runner.invoke(app, [])
     assert result.exit_code == 0
     assert "CreateTempDrawing returned None" in result.stderr
