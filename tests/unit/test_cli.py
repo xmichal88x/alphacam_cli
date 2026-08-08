@@ -298,6 +298,34 @@ def test_tool_list_empty() -> None:
     assert "No tools found" in result.stderr
 
 
+def test_tool_list_default_pattern_router() -> None:
+    app_mock = _make_app_mock()
+    app_mock.ProgramLetter = 82  # 'R' - Router
+    with (
+        _mock_com(app_mock),
+        patch(
+            "alphacam_cli.core.application.Application.find_tool_files", return_value=[]
+        ) as mock_find,
+    ):
+        result = runner.invoke(app, ["tool", "list"])
+    assert result.exit_code == 0
+    mock_find.assert_called_once_with("*.art")
+
+
+def test_tool_list_default_pattern_mill() -> None:
+    app_mock = _make_app_mock()
+    app_mock.ProgramLetter = 77  # 'M' - Mill
+    with (
+        _mock_com(app_mock),
+        patch(
+            "alphacam_cli.core.application.Application.find_tool_files", return_value=[]
+        ) as mock_find,
+    ):
+        result = runner.invoke(app, ["tool", "list"])
+    assert result.exit_code == 0
+    mock_find.assert_called_once_with("*.amt")
+
+
 def test_tool_select_by_name() -> None:
     paths = ["C:\\tools\\Flat-10mm.amt", "C:\\tools\\Ball-6mm.amt"]
     with (
@@ -318,6 +346,47 @@ def test_tool_select_no_match() -> None:
         result = runner.invoke(app, ["tool", "select", "NotFound"])
     assert result.exit_code == 1
     assert "No tool matching" in result.stderr
+
+
+def test_tool_select_full_path() -> None:
+    paths = [r"C:\tools\Reichenbacher\Ball 10mm 2F.art", "C:\\tools\\Flat-10mm.amt"]
+    with (
+        _mock_com(),
+        patch("alphacam_cli.core.application.Application.find_tool_files", return_value=paths),
+    ):
+        result = runner.invoke(app, ["tool", "select", r"C:\tools\Reichenbacher\Ball 10mm 2F.art"])
+    assert result.exit_code == 0
+    assert "Diameter" in result.stderr
+
+
+def test_tool_select_partial_path() -> None:
+    paths = [
+        r"C:\tools\Reichenbacher\Ball 10mm 2F.art",
+        r"C:\tools\OtherDir\Ball 10mm 2F.art",
+        "C:\\tools\\Flat-10mm.amt",
+    ]
+    with (
+        _mock_com(),
+        patch("alphacam_cli.core.application.Application.find_tool_files", return_value=paths),
+    ):
+        result = runner.invoke(app, ["tool", "select", r"Reichenbacher\Ball 10mm 2F"])
+    assert result.exit_code == 0
+    assert "Diameter" in result.stderr
+
+
+def test_tool_select_duplicate_basenames_multiple() -> None:
+    paths = [
+        r"C:\tools\SubA\Drill - 10mm dia.art",
+        r"C:\tools\SubB\Drill - 10mm dia.art",
+        r"C:\tools\SubC\Drill - 10mm dia.art",
+    ]
+    with (
+        _mock_com(),
+        patch("alphacam_cli.core.application.Application.find_tool_files", return_value=paths),
+    ):
+        result = runner.invoke(app, ["tool", "select", "Drill - 10mm dia"])
+    assert result.exit_code == 1
+    assert "Multiple tools matched" in result.stderr
 
 
 def test_tool_current() -> None:

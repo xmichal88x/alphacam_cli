@@ -137,6 +137,28 @@ def test_find_tool_files(mock_com: MagicMock) -> None:
             assert isinstance(files, list)
 
 
+def test_find_tool_files_scoped_to_module_dir(mock_com: MagicMock, tmp_path: pathlib.Path) -> None:
+    rtools = tmp_path / "rtools.alp"
+    rtools.mkdir()
+    (rtools / "sub").mkdir()
+    (rtools / "sub" / "tool_a.art").write_bytes(b"art")
+    (rtools / "sub" / "tool_b.art").write_bytes(b"art")
+    (tmp_path / "mtools.alp").mkdir()
+    (tmp_path / "mtools.alp" / "mill_c.art").write_bytes(b"art")
+    with mock_com:
+        from alphacam_cli.com.manager import alphacam_context
+
+        with alphacam_context() as raw:
+            raw.LicomdatPath = str(tmp_path)
+            raw.ProgramLetter = 82  # 'R'
+            ac = Application(raw)
+            result = ac.find_tool_files("*.art")
+    assert result == [
+        str(tmp_path / "rtools.alp" / "sub" / "tool_a.art"),
+        str(tmp_path / "rtools.alp" / "sub" / "tool_b.art"),
+    ]
+
+
 def test_find_drawing_files(mock_com: MagicMock) -> None:
     with mock_com:
         from alphacam_cli.com.manager import alphacam_context
@@ -216,7 +238,9 @@ def test_find_post_files_fallback(mock_com: MagicMock) -> None:
             ac = Application(raw)
             result = ac.find_post_files()
     assert result == posts
-    assert m_glob.call_args_list[1][0] == (os.path.join(r"C:\Licomdat", "**", "*.arp"),)
+    assert m_glob.call_args_list[1][0] == (
+        os.path.join(r"C:\Licomdat", "RPosts.Alp", "**", "*.arp"),
+    )
     assert m_glob.call_args_list[1].kwargs == {"recursive": True}
 
 

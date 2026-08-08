@@ -19,12 +19,16 @@ app = typer.Typer(help="Tool operations")
 @app.command()
 @handle_com_errors
 def list(
-    pattern: str = typer.Option("*.amt", "--pattern", "-p", help="Tool file pattern"),
+    pattern: str = typer.Option(
+        "", "--pattern", "-p", help="Tool file pattern (default: .art on Router, .amt on Mill)"
+    ),
 ) -> None:
     """List available tools from the AlphaCAM tool library."""
     require_platform()
     with alphacam_context(visible=get_visible()) as raw:
         ac = resolve_app(raw)
+        if not pattern:
+            pattern = "*.art" if getattr(ac, "module_type", "M") == "R" else "*.amt"
         files = ac.find_tool_files(pattern)
 
         if not files:
@@ -52,19 +56,39 @@ def select(
         ac = resolve_app(raw)
         files = ac.find_tool_files()
 
+        name_norm = name.replace("\\", "/").lower()
         basename_lower = name.lower()
-        exact = [f for f in files if path_basename(f).lower() == basename_lower]
+        exact_path = [f for f in files if f.replace("\\", "/").lower() == name_norm]
+        exact = [
+            f for f in files if f not in exact_path and path_basename(f).lower() == basename_lower
+        ]
+        path_substring = []
+        if "/" in name or "\\" in name:
+            path_substring = [
+                f
+                for f in files
+                if f not in exact_path
+                and f not in exact
+                and name_norm in f.replace("\\", "/").lower()
+            ]
         prefix = [
             f
             for f in files
-            if f not in exact and path_basename(f).lower().startswith(basename_lower)
+            if f not in exact_path
+            and f not in exact
+            and f not in path_substring
+            and path_basename(f).lower().startswith(basename_lower)
         ]
         substring = [
             f
             for f in files
-            if f not in exact and f not in prefix and basename_lower in path_basename(f).lower()
+            if f not in exact_path
+            and f not in exact
+            and f not in path_substring
+            and f not in prefix
+            and basename_lower in path_basename(f).lower()
         ]
-        matched = exact or prefix or substring
+        matched = exact_path or exact or path_substring or prefix or substring
         if not matched:
             console.print(f"[red]No tool matching '{name}'[/red]")
             raise typer.Exit(code=1)

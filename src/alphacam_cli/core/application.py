@@ -175,7 +175,7 @@ class Application:
         base = os.path.join(self.licomdat_path, sub_dir)
         files = glob.glob(os.path.join(base, pattern))
         if not files:
-            files = glob.glob(os.path.join(self.licomdat_path, "**", pattern), recursive=True)
+            files = glob.glob(os.path.join(base, "**", pattern), recursive=True)
         return sorted(set(files))
 
     def find_post_files(self, pattern: str = "*.arp") -> list[str]:
@@ -183,7 +183,7 @@ class Application:
         base = os.path.join(self.licomdat_path, sub_dir)
         files = glob.glob(os.path.join(base, pattern))
         if not files:
-            files = glob.glob(os.path.join(self.licomdat_path, "**", pattern), recursive=True)
+            files = glob.glob(os.path.join(base, "**", pattern), recursive=True)
         return sorted(set(files))
 
     def get_nesting(self) -> Nesting:
