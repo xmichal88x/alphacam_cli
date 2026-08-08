@@ -152,8 +152,7 @@ class RemoteApplication:
         return _DrawingProxy(self._session, info)
 
     def select_tool(self, path: str) -> _ToolProxy | None:
-        basename = _basename(path) if path else ""
-        data = self._session.select_tool(basename)
+        data = self._session.select_tool(path)
         if data is None:
             return None
         return _ToolProxy(data)

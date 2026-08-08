@@ -54,20 +54,24 @@ def test_basename_windows_and_posix(path: str, expected: str) -> None:
     assert _basename(path) == expected
 
 
-def test_remote_select_tool_sends_basename_only() -> None:
+def test_remote_select_tool_sends_full_path() -> None:
     session = MagicMock()
     session.select_tool.return_value = {
-        "name": "Ball End - 10mm",
+        "name": "Drill - 10mm dia",
         "diameter": 10.0,
         "number": 1,
         "length": 50.0,
         "tool_type": 0,
     }
     app = RemoteApplication(session)
-    tool = app.select_tool(r"C:\ALPHACAM\LICOMDAT\RTools.Alp\Ball End - 10mm.art")
+    tool = app.select_tool(
+        r"C:\ALPHACAM\LICOMDAT\rtools.alp\Inch\Drills - Twist\Drill - 10mm dia.art"
+    )
     assert tool is not None
     assert isinstance(tool, _ToolProxy)
-    session.select_tool.assert_called_once_with("Ball End - 10mm.art")
+    session.select_tool.assert_called_once_with(
+        r"C:\ALPHACAM\LICOMDAT\rtools.alp\Inch\Drills - Twist\Drill - 10mm dia.art"
+    )
 
 
 def test_remote_select_tool_none() -> None:
