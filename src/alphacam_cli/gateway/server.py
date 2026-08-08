@@ -1012,6 +1012,7 @@ class GatewayServer:
                     out["cdm_job_config"] = f"FAIL: {e!r}"
                 if bool(params.get("process", False)):
                     try:
+                        _am_log("cdm_process_before", True, "")
                         t0 = time.monotonic()
                         job.Process()
                         dur = time.monotonic() - t0
