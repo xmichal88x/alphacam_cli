@@ -58,12 +58,26 @@ Recepty E2E (Session 0 nesting) w sekcjach poniżej; kluczowe: reg copy HKCU→H
 
 ---
 
+## Nowe komendy (2026-08-08) — przemysł 4.0
+
+| Komenda | Opis | Status E2E |
+|---|---|---|
+| `drawing import <plik>` | Import CAD (auto: dxf/dwg/iges/step/stl/vda/cadl), `--cabinets` (DxfSpecial=1) | ✅ DXF, IGES (3 geo), STL (291 geo) |
+| `drawing export <plik>` | Export (auto: dxf/iges/stl/emf/wmf) | ✅ DXF, IGES; ⚠️ STL tylko z modeli solid |
+| `drawing parametric W H` | Panel z offset/fillet, opcjonalna obróbka rough | ✅ 2 geometrie (outer/inner), 2 toolpathy |
+| `mill saw` | Piłowanie: saw-angle, internal/external corners, head-position | ✅ 7 toolpaths (piła.art) |
+| `mill engrave` | Grawerowanie: engrave-type, step-length | ✅ 9 toolpaths |
+
+⚠️ **Ograniczenie STL export:** `SaveStlFile` eksportuje wyłącznie modele STL/solid (Edit|Solid Model). Geometrie facetowe po imporcie (STL/DXF) NIE są eksportowalne → czytelny błąd "stl export failed: no facetable geometry". Do eksportu STL wymagany model solid.
+
+---
+
 ## Podsumowanie
 
 | Obszar | Stan |
 |---|---|
 | Kod + typy | ✅ ruff 0, mypy 0 |
-| Testy jednostkowe | ✅ 227 passed, 3 skipped (2026-08-08) |
+| Testy jednostkowe | ✅ 339 passed, 3 skipped (2026-08-08) |
 | E2E na żywym AlphaCAM 2025 | ✅ create → mill style .ary → nc output (Reichenbacher) → NC 591 B |
 | COM safety | ✅ przez gateway (usługa Session 0, STA+CoMarshal) |
 | CI/CD | ⚠️ brak coverage gate, brak .exe build |
@@ -125,6 +139,16 @@ NewNestList → AddFile(parts, Required=count) → opcje → NewSheetList → Ad
 **E2E potwierdzone (Session 0, żywy AlphaCAM 2025 Router):** run_nest advanced z 15 opcjami (total_time=20, part_gap=4, edge_gap=8, lead_gap=1, minimise_tool_changes=True itd.) + arkusz MDF_18 z biblioteki → success, **count=1**, rysunek 3 geometrie/24 toolpaths.
 
 **Tryb podstawowy (bez --advanced) działa jak dotąd** — CreateNestData/AddSheet/DoNest (Sesje 2-4).
+
+### Sesja 6 (2026-08-08): FUNKCJE PRZEMYSŁU 4.0 (drawing import/export/parametric, mill saw/engrave)
+
+- **`drawing import <plik>`** — `--fmt` auto (dxf/dwg/iges/step/stl/vda/cadl), `--cabinets` (DxfSpecial=1). E2E: DXF OK, IGES OK (3 geometrie), STL OK (291 geometrii z pliku slotted_disk.stl)
+- **`drawing export <plik>`** — `--fmt` auto (dxf/iges/stl/emf/wmf). E2E: DXF OK, IGES OK; ⚠️ **STL ograniczony przez AlphaCAM**: `SaveStlFile` eksportuje modele STL/solid (Edit|Solid Model), NIE geometrie facetowe po imporcie → czytelny błąd "stl export failed: no facetable geometry"; do eksportu STL wymagany model solid
+- **`drawing parametric WIDTH HEIGHT`** — `--offset` (50), `--fillet` (5), `--depth` (opcjonalna obróbka rough), `--tool`, `--spindle`, `--feed`, `--down-feed`. E2E: panel 800×400 → 2 geometrie (outer ToolInOut=-1, inner=1); z depth=-10 + narzędziem → 2 toolpathy
+- **`mill saw`** — `-d/--depth` (wymagane <0), `-s/--spindle`, `-f/--feed`, `--down-feed`, `--saw-angle` (0), `--internal-corners` (1=CUT_ON), `--external-corners` (1), `--head-position` (0=LEFT, 1=RIGHT), `--tool`. E2E: narzędzie "piła.art" (Reichenbacher) → 7 toolpaths
+- **`mill engrave`** — `-d/--depth` (wymagane <0), `-s`, `-f`, `--down-feed`, `--engrave-type` (0=GEOMETRIES, 1=GUIDE_LINES_APPROX, 2=GUIDE_LINES_EXACT), `--step-length` (0.1), `--tool`. E2E: → 9 toolpaths
+- Enums (zweryfikowane przez Interop.AlphaCAMMill.dll): AcamSawCornerType CUT_ON/CUT_PAST/CUT_TO; AcamSawHeadPosition LEFT/RIGHT; AcamEngraveType GEOMETRIES/GUIDE_LINES_APPROX/GUIDE_LINES_EXACT/SIMPLE_EXACT
+- Wszystko przez gateway RPC (Session 0). Testy: **339 passed, 3 skipped**
 
 ---
 

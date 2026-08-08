@@ -247,6 +247,34 @@ Create a new drawing with a rectangle and optional fillet and text.
 alphacam drawing create --width 200 --height 100 --fillet 5 --text "Panel A"
 ```
 
+#### `parametric`
+
+Create a parametric panel: outer and inner rectangles with offset and fillet, plus optional rough machining.
+
+**Arguments:**
+
+| Argument | Type | Description |
+|----------|------|-------------|
+| `width`, `height` | `float` | Panel dimensions (required) |
+
+**Options:**
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `--offset` | `float` | `50` | Offset between outer and inner geometry |
+| `--fillet` | `float` | `5` | Corner fillet radius |
+| `--depth`, `-d` | `float` | `None` | If set, run rough machining to this depth |
+| `--tool` | `str` | `""` | Tool name for machining |
+| `--spindle`, `-s` | `int` | `12000` | Spindle speed (RPM) |
+| `--feed`, `-f` | `float` | `3000` | Cut feed rate |
+| `--down-feed` | `float` | `2000` | Plunge feed rate |
+
+**Example:**
+
+```bash
+alphacam drawing parametric 800 400 --depth -10 --tool "Flat - 10mm"
+```
+
 #### `save`
 
 Save the active drawing to an `.amd` file.
@@ -277,6 +305,55 @@ Open an existing `.amd` drawing file.
 
 ```bash
 alphacam drawing open panel_a.amd
+```
+
+#### `import`
+
+Import a CAD file into the active drawing. Format is auto-detected from the file extension.
+
+**Arguments:**
+
+| Argument | Type | Description |
+|----------|------|-------------|
+| `path` | `str` | Input CAD file (required) |
+
+**Options:**
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `--fmt` | `str` | `""` (auto) | Format: `dxf`, `dwg`, `iges`, `step`, `stl`, `vda`, `cadl` |
+| `--cabinets` | `bool` | `False` | Enable cabinets mode (DxfSpecial=1) for DXF import |
+
+**Example:**
+
+```bash
+alphacam drawing import panel.dxf
+alphacam drawing import panel.stl --fmt stl
+```
+
+#### `export`
+
+Export the active drawing to a CAD file. Format is auto-detected from the file extension.
+
+**Arguments:**
+
+| Argument | Type | Description |
+|----------|------|-------------|
+| `path` | `str` | Output CAD file (required) |
+
+**Options:**
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `--fmt` | `str` | `""` (auto) | Format: `dxf`, `iges`, `stl`, `emf`, `wmf` |
+
+> **Note:** STL export requires a solid model (`SaveStlFile` — Edit | Solid Model). Faceted geometry imported from STL/DXF is not exportable.
+
+**Example:**
+
+```bash
+alphacam drawing export panel.dxf
+alphacam drawing export model.stl --fmt stl
 ```
 
 #### `info`
@@ -405,6 +482,52 @@ Drill, tap, or peck on selected circle geometries.
 ```bash
 alphacam mill drill --depth -20 --type peck --spindle 12000
 alphacam mill drill --type tap
+```
+
+#### `saw`
+
+Sawing operation on selected geometries.
+
+**Options:**
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `--depth`, `-d` | `float` | required | Final depth (required, negative) |
+| `--spindle`, `-s` | `int` | `12000` | Spindle speed (RPM) |
+| `--feed`, `-f` | `float` | `3000` | Cut feed rate |
+| `--down-feed` | `float` | `2000` | Plunge feed rate |
+| `--saw-angle` | `float` | `0` | Saw tilt angle |
+| `--internal-corners` | `int` | `1` | Internal corners mode (`1`=CUT_ON; AcamSawCornerType) |
+| `--external-corners` | `int` | `1` | External corners mode (`1`=CUT_ON; AcamSawCornerType) |
+| `--head-position` | `int` | `0` | Saw head: `0`=LEFT, `1`=RIGHT |
+| `--tool` | `str` | `""` | Tool name to select |
+
+**Example:**
+
+```bash
+alphacam mill saw --depth -10 --saw-angle 5 --head-position 1
+```
+
+#### `engrave`
+
+Engraving operation on selected geometries.
+
+**Options:**
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `--depth`, `-d` | `float` | required | Final depth (required, negative) |
+| `--spindle`, `-s` | `int` | `12000` | Spindle speed (RPM) |
+| `--feed`, `-f` | `float` | `3000` | Cut feed rate |
+| `--down-feed` | `float` | `2000` | Plunge feed rate |
+| `--engrave-type` | `int` | `0` | `0`=GEOMETRIES, `1`=GUIDE_LINES_APPROX, `2`=GUIDE_LINES_EXACT |
+| `--step-length` | `float` | `0.1` | Step length for guide line engraving |
+| `--tool` | `str` | `""` | Tool name to select |
+
+**Example:**
+
+```bash
+alphacam mill engrave --depth -3 --engrave-type 2
 ```
 
 ---
@@ -553,8 +676,11 @@ AlphaCAM Diagnostics
 |---------|-------------|:------------:|:------:|
 | `alphacam connect info` | Test COM connection, show AlphaCAM version | Yes | ✅ |
 | `alphacam drawing create` | Create drawing with rectangle | Yes | ✅ |
+| `alphacam drawing parametric` | Parametric panel (outer/inner + optional rough) | Yes | ✅ |
 | `alphacam drawing save` | Save active drawing to `.amd` | Yes | ✅ |
 | `alphacam drawing open` | Open `.amd` file | Yes | ✅ |
+| `alphacam drawing import` | Import CAD file (dxf/dwg/iges/step/stl/vda/cadl) | Yes | ✅ |
+| `alphacam drawing export` | Export drawing to CAD file (dxf/iges/stl/emf/wmf) | Yes | ✅ |
 | `alphacam drawing info` | Show active drawing info | Yes | ✅ |
 | `alphacam tool list` | List available tool files | Yes | ✅ |
 | `alphacam tool select` | Select tool by name | Yes | ✅ |
@@ -562,6 +688,8 @@ AlphaCAM Diagnostics
 | `alphacam mill rough` | Rough/finish machining | Yes | ✅ |
 | `alphacam mill pocket` | Pocket machining | Yes | ✅ |
 | `alphacam mill drill` | Drill/tap/peck | Yes | ✅ |
+| `alphacam mill saw` | Saw cutting (saw-angle, corners, head position) | Yes | ✅ |
+| `alphacam mill engrave` | Engraving (engrave-type, step-length) | Yes | ✅ |
 | `alphacam nc output` | Generate NC code | Yes | ✅ |
 | `alphacam batch process` | Batch `.amd` → `.nc` | Yes | ✅ |
 | `alphacam nest run` | Run nesting from CSV | Yes | ✅ |
