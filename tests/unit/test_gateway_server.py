@@ -218,6 +218,80 @@ def test_select_post_handler_full_path(
     server_app.select_post.assert_called_once_with(post_path)
 
 
+def test_drawing_parametric_handler(server_app: MagicMock) -> None:
+    drw = MagicMock()
+    drw.geometries_count = 2
+    drw.tool_paths_count = 0
+    server_app.create_temp_drawing.return_value = drw
+    outer = MagicMock()
+    inner = MagicMock()
+    outer.tool_in_out = -1
+    inner.tool_in_out = 1
+    drw.create_panel.return_value = (outer, inner)
+    gw = GatewayServer()
+    result = gw._handler_drawing_parametric({"width": 800, "height": 400})
+    assert result["success"] is True
+    assert result["geometries_count"] == 2
+    assert result["tool_paths_count"] == 0
+    assert result["outer"] == {"tool_in_out": -1}
+    assert result["inner"] == {"tool_in_out": 1}
+    drw.create_panel.assert_called_once_with(800, 400, 50, 5)
+    server_app.create_mill_data.assert_not_called()
+    drw.zoom_all.assert_called_once()
+
+
+def test_drawing_parametric_handler_machines(server_app: MagicMock) -> None:
+    drw = MagicMock()
+    drw.geometries_count = 2
+    drw.tool_paths_count = 2
+    server_app.create_temp_drawing.return_value = drw
+    outer = MagicMock()
+    inner = MagicMock()
+    outer.tool_in_out = -1
+    inner.tool_in_out = 1
+    drw.create_panel.return_value = (outer, inner)
+    from alphacam_cli.core.machining import MillData
+
+    md = MillData(MagicMock())
+    server_app.create_mill_data.return_value = md
+    gw = GatewayServer()
+    result = gw._handler_drawing_parametric(
+        {
+            "width": 800,
+            "height": 400,
+            "depth": -19,
+            "tool": "Flat - 20mm",
+            "spindle": 18000,
+            "feed": 4000,
+            "down_feed": 1500,
+        }
+    )
+    server_app.select_tool.assert_called_once_with("Flat - 20mm")
+    assert md._md.SafeRapidLevel == 10
+    assert md._md.RapidDownTo == 2
+    assert md._md.MaterialTop == 0
+    assert md._md.FinalDepth == -19
+    assert md._md.SpindleSpeed == 18000
+    assert md._md.CutFeed == 4000
+    assert md._md.DownFeed == 1500
+    assert md._md.RoughFinish.call_count == 2
+    assert outer.selected is False
+    assert inner.selected is False
+    assert result["tool_paths_count"] == 2
+
+
+def test_drawing_parametric_handler_invalid_size(server_app: MagicMock) -> None:
+    gw = GatewayServer()
+    with pytest.raises(COMError, match="width and height must be positive"):
+        gw._handler_drawing_parametric({"width": 0, "height": 400})
+
+
+def test_drawing_parametric_handler_positive_depth(server_app: MagicMock) -> None:
+    gw = GatewayServer()
+    with pytest.raises(COMError, match="depth must be negative"):
+        gw._handler_drawing_parametric({"width": 800, "height": 400, "depth": 5})
+
+
 def test_output_nc_handler(server_app: MagicMock, tmp_path: pathlib.Path) -> None:
     drw = MagicMock()
     server_app.get_active_drawing.return_value = drw
@@ -255,6 +329,69 @@ def test_save_active_drawing_handler_creates_parent_dir(
     assert result == {"success": True}
     assert amd_file.parent.exists()
     drw.save_as.assert_called_once_with(str(amd_file))
+
+
+def test_open_cad_file_handler(server_app: MagicMock) -> None:
+    drw = MagicMock()
+    drw.geometries_count = 4
+    drw.tool_paths_count = 1
+    server_app.open_cad_file.return_value = drw
+    gw = GatewayServer()
+    result = gw._handler_open_cad_file({"path": r"C:\parts\panel.dxf", "fmt": "dxf"})
+    assert result == {"geometries_count": 4, "tool_paths_count": 1}
+    server_app.open_cad_file.assert_called_once_with(r"C:\parts\panel.dxf", "dxf", clear=False)
+    server_app.set_dxf_cabinets.assert_not_called()
+
+
+def test_open_cad_file_handler_cabinets(server_app: MagicMock) -> None:
+    drw = MagicMock()
+    server_app.open_cad_file.return_value = drw
+    gw = GatewayServer()
+    gw._handler_open_cad_file({"path": r"C:\parts\panel.dxf", "fmt": "dxf", "cabinets": True})
+    server_app.set_dxf_cabinets.assert_called_once_with(True)
+
+
+def test_open_cad_file_handler_missing_path(server_app: MagicMock) -> None:
+    gw = GatewayServer()
+    with pytest.raises(COMError, match="path is required"):
+        gw._handler_open_cad_file({"fmt": "dxf"})
+
+
+def test_open_cad_file_handler_missing_fmt(server_app: MagicMock) -> None:
+    gw = GatewayServer()
+    with pytest.raises(COMError, match="fmt is required"):
+        gw._handler_open_cad_file({"path": r"C:\parts\panel.dxf"})
+
+
+def test_open_cad_file_handler_none(server_app: MagicMock) -> None:
+    server_app.open_cad_file.return_value = None
+    gw = GatewayServer()
+    with pytest.raises(COMError, match="Failed to open CAD file"):
+        gw._handler_open_cad_file({"path": r"C:\parts\panel.dxf", "fmt": "dxf"})
+
+
+def test_export_drawing_handler(server_app: MagicMock, tmp_path: pathlib.Path) -> None:
+    drw = MagicMock()
+    server_app.get_active_drawing.return_value = drw
+    dxf_file = tmp_path / "nested" / "out.dxf"
+    gw = GatewayServer()
+    result = gw._handler_export_drawing({"path": str(dxf_file), "fmt": "dxf"})
+    assert result == {"success": True, "path": str(dxf_file)}
+    assert dxf_file.parent.exists()
+    drw.export.assert_called_once_with(str(dxf_file), "dxf")
+
+
+def test_export_drawing_handler_no_drawing(server_app: MagicMock) -> None:
+    server_app.get_active_drawing.return_value = None
+    gw = GatewayServer()
+    with pytest.raises(COMError, match="No active drawing"):
+        gw._handler_export_drawing({"path": r"C:\parts\out.dxf", "fmt": "dxf"})
+
+
+def test_export_drawing_handler_missing_path(server_app: MagicMock) -> None:
+    gw = GatewayServer()
+    with pytest.raises(COMError, match="path is required"):
+        gw._handler_export_drawing({"fmt": "dxf"})
 
 
 def test_glob_files_handler(server_app: MagicMock, tmp_path: pathlib.Path) -> None:

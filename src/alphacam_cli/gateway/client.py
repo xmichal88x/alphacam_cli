@@ -89,6 +89,36 @@ class RemoteSession:
     def create_temp_drawing(self) -> dict[str, Any]:
         return self._call("create_temp_drawing")  # type: ignore[no-any-return]
 
+    def drawing_parametric(
+        self,
+        width: float,
+        height: float,
+        offset: float = 50,
+        fillet: float = 5,
+        depth: float | None = None,
+        tool: str | None = None,
+        spindle: int | None = None,
+        feed: float | None = None,
+        down_feed: float | None = None,
+    ) -> dict[str, Any]:
+        params: dict[str, Any] = {
+            "width": width,
+            "height": height,
+            "offset": offset,
+            "fillet": fillet,
+        }
+        if depth is not None:
+            params["depth"] = depth
+        if tool is not None:
+            params["tool"] = tool
+        if spindle is not None:
+            params["spindle"] = spindle
+        if feed is not None:
+            params["feed"] = feed
+        if down_feed is not None:
+            params["down_feed"] = down_feed
+        return self._call("drawing_parametric", params)  # type: ignore[no-any-return]
+
     def zoom_all(self) -> dict[str, Any]:
         return self._call("zoom_all")  # type: ignore[no-any-return]
 

@@ -39,6 +39,21 @@ def test_remote_new_drawing_none() -> None:
     assert app.new_drawing() is None
 
 
+def test_remote_drawing_parametric() -> None:
+    session = MagicMock()
+    session.drawing_parametric.return_value = {
+        "success": True,
+        "geometries_count": 2,
+        "tool_paths_count": 2,
+    }
+    app = RemoteApplication(session)
+    result = app.drawing_parametric(800, 400, offset=60, fillet=3, depth=-19)
+    assert result["success"] is True
+    session.drawing_parametric.assert_called_once_with(
+        800, 400, offset=60, fillet=3, depth=-19, tool=None, spindle=None, feed=None, down_feed=None
+    )
+
+
 @pytest.mark.parametrize(
     ("path", "expected"),
     [
@@ -112,3 +127,36 @@ def test_remote_glob_files() -> None:
     result = app.glob_files("C:/parts", "*.amd")
     assert result == ["C:/parts/a.amd", "C:/parts/b.amd"]
     session.glob_files.assert_called_once_with("C:/parts", "*.amd")
+
+
+def test_remote_open_cad_file() -> None:
+    session = MagicMock()
+    session.open_cad_file.return_value = {"geometries_count": 5, "tool_paths_count": 2}
+    app = RemoteApplication(session)
+    drw = app.open_cad_file(r"C:\parts\panel.dxf", "dxf")
+    assert drw is not None
+    assert isinstance(drw, _DrawingProxy)
+    assert drw.geometries_count == 5
+    assert drw.tool_paths_count == 2
+    session.open_cad_file.assert_called_once_with(
+        r"C:\parts\panel.dxf", "dxf", clear=False, cabinets=False
+    )
+
+
+def test_remote_open_cad_file_none() -> None:
+    session = MagicMock()
+    session.open_cad_file.return_value = None
+    app = RemoteApplication(session)
+    assert app.open_cad_file(r"C:\parts\panel.dxf", "dxf") is None
+
+
+def test_remote_drawing_proxy_export() -> None:
+    session = MagicMock()
+    session.get_active_drawing.return_value = {"geometries_count": 1}
+    session.export_drawing.return_value = {"success": True, "path": r"C:\parts\out.dxf"}
+    app = RemoteApplication(session)
+    drw = app.get_active_drawing()
+    assert drw is not None
+    result = drw.export(r"C:\parts\out.dxf", "dxf")
+    assert result == {"success": True, "path": r"C:\parts\out.dxf"}
+    session.export_drawing.assert_called_once_with(r"C:\parts\out.dxf", "dxf")

@@ -632,6 +632,59 @@ class GatewayServer:
         drw.zoom_all()
         return {"geometries_count": drw.geometries_count}
 
+    def _handler_drawing_parametric(self, params: dict[str, Any]) -> dict[str, Any]:
+        from alphacam_cli.gateway.server import _app as com_app
+
+        width = float(params.get("width", 0))
+        height = float(params.get("height", 0))
+        if width <= 0 or height <= 0:
+            raise COMError("width and height must be positive numbers")
+        offset = float(params.get("offset", 50))
+        fillet = float(params.get("fillet", 5))
+        depth = params.get("depth")
+        depth_val = float(depth) if depth is not None else None
+        if depth_val is not None and depth_val >= 0:
+            raise COMError("depth must be negative")
+        tool = params.get("tool")
+        tool_val = str(tool) if tool else None
+        spindle = params.get("spindle")
+        spindle_val = int(spindle) if spindle is not None else None
+        feed = params.get("feed")
+        feed_val = float(feed) if feed is not None else None
+        down_feed = params.get("down_feed")
+        down_feed_val = float(down_feed) if down_feed is not None else None
+
+        drw = com_app.create_temp_drawing()
+        if drw is None:
+            raise COMError("Failed to create drawing")
+        outer, inner = drw.create_panel(width, height, offset, fillet)
+        if depth_val is not None:
+            if tool_val:
+                com_app.select_tool(tool_val)
+            md = com_app.create_mill_data()
+            md.safe_rapid_level = 10.0
+            md.rapid_down_to = 2.0
+            md.material_top = 0.0
+            md.final_depth = depth_val
+            if spindle_val is not None:
+                md.spindle_speed = spindle_val
+            if feed_val is not None:
+                md.cut_feed = feed_val
+            if down_feed_val is not None:
+                md.down_feed = down_feed_val
+            for path in (outer, inner):
+                path.selected = True
+                md.rough_finish()
+                path.selected = False
+        drw.zoom_all()
+        return {
+            "success": True,
+            "geometries_count": drw.geometries_count,
+            "tool_paths_count": drw.tool_paths_count,
+            "outer": {"tool_in_out": outer.tool_in_out},
+            "inner": {"tool_in_out": inner.tool_in_out},
+        }
+
     def _handler_create_temp_drawing(self, params: dict[str, Any]) -> dict[str, int]:
         from alphacam_cli.gateway.server import _app as com_app
 

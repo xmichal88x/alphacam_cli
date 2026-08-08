@@ -256,6 +256,65 @@ def test_drawing_create_with_fillet_text() -> None:
     assert "5.0" in result.stderr
 
 
+def test_drawing_parametric() -> None:
+    with _mock_com() as app_mock:
+        drw = app_mock.ActiveDrawing
+        drw.Geometries.Count = 2
+        drw.ToolPaths.Count = 0
+        drw.create_panel.return_value = (MagicMock(), MagicMock())
+        result = runner.invoke(app, ["drawing", "parametric", "800", "400"])
+    assert result.exit_code == 0
+    assert "Panel 800x400 created (offset=50, fillet=5)" in result.stderr
+    assert "Geometries: 2" in result.stderr
+    assert "ToolPaths: 0" in result.stderr
+    assert "machined" not in result.stderr
+
+
+def test_drawing_parametric_machined() -> None:
+    with _mock_com() as app_mock:
+        drw = app_mock.ActiveDrawing
+        drw.Geometries.Count = 2
+        drw.ToolPaths.Count = 2
+        drw.create_panel.return_value = (MagicMock(), MagicMock())
+        result = runner.invoke(
+            app,
+            [
+                "drawing",
+                "parametric",
+                "800",
+                "400",
+                "--offset",
+                "60",
+                "--depth",
+                "-19",
+                "--tool",
+                "Flat - 20mm",
+                "--spindle",
+                "18000",
+                "--feed",
+                "4000",
+                "--down-feed",
+                "1500",
+            ],
+        )
+    assert result.exit_code == 0
+    assert "Panel 800x400 created (offset=60, fillet=5)" in result.stderr
+    assert "Panel machined at depth=-19" in result.stderr
+    md = app_mock.CreateMillData.return_value
+    assert md.FinalDepth == -19
+    assert md.SpindleSpeed == 18000
+    assert md.CutFeed == 4000
+    assert md.DownFeed == 1500
+    assert md.RoughFinish.call_count == 2
+
+
+def test_drawing_parametric_positive_depth_rejected() -> None:
+    with _mock_com():
+        result = runner.invoke(app, ["drawing", "parametric", "800", "400", "--depth", "5"])
+    assert result.exit_code == 2
+    assert "Depth must be negative" in result.stderr
+
+
 def test_drawing_save() -> None:
     with _mock_com():
         result = runner.invoke(app, ["drawing", "save", "output.amd"])
@@ -277,6 +336,63 @@ def test_drawing_info() -> None:
     assert result.exit_code == 0
     assert "Geometries" in result.stderr
     assert "ToolPaths" in result.stderr
+
+
+def test_drawing_import_auto_fmt() -> None:
+    with _mock_com() as app_mock:
+        result = runner.invoke(app, ["drawing", "import", "panel.dxf"])
+    assert result.exit_code == 0
+    assert "CAD File Imported" in result.stderr
+    assert "DXF" in result.stderr
+    assert "Geometries" in result.stderr
+    app_mock.OpenDxfFile.assert_called_once_with("panel.dxf", False)
+
+
+def test_drawing_import_step() -> None:
+    with _mock_com() as app_mock:
+        result = runner.invoke(app, ["drawing", "import", "panel.step", "-f", "step"])
+    assert result.exit_code == 0
+    assert "STEP" in result.stderr
+    app_mock.OpenStepFileEx.assert_called_once_with("panel.step", False, 0)
+
+
+def test_drawing_import_cabinets() -> None:
+    with _mock_com() as app_mock:
+        result = runner.invoke(app, ["drawing", "import", "cabinets.dxf", "--cabinets"])
+    assert result.exit_code == 0
+    assert app_mock.CadInputSettings.DxfSpecial == 1
+    app_mock.OpenDxfFile.assert_called_once_with("cabinets.dxf", False)
+
+
+def test_drawing_import_no_extension() -> None:
+    with _mock_com():
+        result = runner.invoke(app, ["drawing", "import", "panel"])
+    assert result.exit_code == 1
+    assert "Cannot infer format" in result.stderr
+
+
+def test_drawing_export_auto_fmt() -> None:
+    with _mock_com() as app_mock:
+        result = runner.invoke(app, ["drawing", "export", "panel.dxf"])
+    assert result.exit_code == 0
+    assert "Exported to panel.dxf" in result.stderr
+    app_mock.ActiveDrawing.SaveDxfFile.assert_called_once_with("panel.dxf", False, 2)
+
+
+def test_drawing_export_stl() -> None:
+    with _mock_com() as app_mock:
+        result = runner.invoke(app, ["drawing", "export", "panel.stl", "-f", "stl"])
+    assert result.exit_code == 0
+    assert "STL" in result.stderr
+    app_mock.ActiveDrawing.SaveStlFile.assert_called_once_with("panel.stl", 0, 0.1)
+
+
+def test_drawing_export_no_drawing() -> None:
+    with _mock_com() as app_mock:
+        app_mock.ActiveDrawing = None
+        result = runner.invoke(app, ["drawing", "export", "panel.dxf"])
+    assert result.exit_code == 1
+    assert "No active drawing" in result.stderr
 
 
 def test_tool_list() -> None:

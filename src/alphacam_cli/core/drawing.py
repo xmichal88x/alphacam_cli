@@ -62,6 +62,32 @@ class Drawing:
             raise RuntimeError("Failed to create polygon")  # noqa: TRY003
         return CamPath(raw)
 
+    def create_panel(
+        self,
+        width: float,
+        height: float,
+        offset: float = 50,
+        fillet: float = 5,
+    ) -> tuple[CamPath, CamPath]:
+        """Create a parametric door/frame panel (official CreateDoor.py pattern).
+
+        Returns (outer, inner): a filleted outer rectangle (tool outside)
+        and an inner contour with a 2-point arc (tool inside).
+        """
+        outer = self.create_rectangle(0, 0, width, height)
+        if fillet > 0:
+            outer.fillet(fillet)
+        outer.tool_in_out = -1  # Outside
+
+        geo2d = self.create_2d_geometry(offset, offset)
+        geo2d.add_line(width - offset, offset)
+        geo2d.add_line(width - offset, height - 2 * offset)
+        geo2d.add_arc_2point(width / 2, height - offset, offset, height - 2 * offset)
+        inner = geo2d.close_and_finish_line()
+        inner.tool_in_out = 1  # Inside
+
+        return outer, inner
+
     def zoom_all(self) -> None:
         self._drw.ZoomAll()  # type: ignore[attr-defined]
 

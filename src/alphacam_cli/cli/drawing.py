@@ -60,6 +60,51 @@ def create(
 
 @app.command()
 @handle_com_errors
+def parametric(
+    width: float = typer.Argument(..., help="Panel width"),
+    height: float = typer.Argument(..., help="Panel height"),
+    offset: float = typer.Option(50, "--offset", help="Inset of the inner contour"),
+    fillet: float = typer.Option(5, "--fillet", "-f", help="Corner fillet radius"),
+    depth: float | None = typer.Option(
+        None, "--depth", "-d", help="Machining depth (negative); enables machining"
+    ),
+    tool: str | None = typer.Option(None, "--tool", "-t", help="Tool name or path"),
+    spindle: int | None = typer.Option(None, "--spindle", "-s", help="Spindle speed RPM"),
+    feed: float | None = typer.Option(None, "--feed", help="Cut feed rate"),
+    down_feed: float | None = typer.Option(None, "--down-feed", help="Plunge feed rate"),
+) -> None:
+    """Create a parametric door/frame panel (outer filleted rectangle + inner arched contour)."""
+    if depth is not None and depth >= 0:
+        console.print(f"[red]Depth must be negative (got: {depth})[/red]")
+        raise typer.Exit(code=2)
+    require_platform()
+    with alphacam_context(visible=get_visible()) as raw:
+        ac = resolve_app(raw)
+        result = ac.drawing_parametric(
+            width,
+            height,
+            offset=offset,
+            fillet=fillet,
+            depth=depth,
+            tool=tool,
+            spindle=spindle,
+            feed=feed,
+            down_feed=down_feed,
+        )
+        console.print(
+            f"[green]OK:[/green] Panel {width:g}x{height:g} created "
+            f"(offset={offset:g}, fillet={fillet:g})"
+        )
+        console.print(
+            f"      Geometries: {result['geometries_count']}, "
+            f"ToolPaths: {result['tool_paths_count']}"
+        )
+        if depth is not None:
+            console.print(f"[green]OK:[/green] Panel machined at depth={depth:g}")
+
+
+@app.command()
+@handle_com_errors
 def save(
     path: str = typer.Argument(..., help="Output .amd file path"),
 ) -> None:

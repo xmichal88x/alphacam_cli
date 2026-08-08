@@ -199,6 +199,50 @@ class Application:
         drw.zoom_all()
         return drw
 
+    def drawing_parametric(
+        self,
+        width: float,
+        height: float,
+        offset: float = 50,
+        fillet: float = 5,
+        depth: float | None = None,
+        tool: str | None = None,
+        spindle: int | None = None,
+        feed: float | None = None,
+        down_feed: float | None = None,
+    ) -> dict[str, Any]:
+        """Create a parametric door/frame panel and optionally machine it."""
+        drw = self.create_temp_drawing()
+        if drw is None:
+            raise RuntimeError("Failed to create drawing")  # noqa: TRY003
+        outer, inner = drw.create_panel(width, height, offset, fillet)
+        if depth is not None:
+            if tool:
+                self.select_tool(tool)
+            md = self.create_mill_data()
+            md.safe_rapid_level = 10.0
+            md.rapid_down_to = 2.0
+            md.material_top = 0.0
+            md.final_depth = depth
+            if spindle is not None:
+                md.spindle_speed = spindle
+            if feed is not None:
+                md.cut_feed = feed
+            if down_feed is not None:
+                md.down_feed = down_feed
+            for path in (outer, inner):
+                path.selected = True
+                md.rough_finish()
+                path.selected = False
+        drw.zoom_all()
+        return {
+            "success": True,
+            "geometries_count": drw.geometries_count,
+            "tool_paths_count": drw.tool_paths_count,
+            "outer": {"tool_in_out": outer.tool_in_out},
+            "inner": {"tool_in_out": inner.tool_in_out},
+        }
+
     def quit(self) -> None:
         try:
             self._app.Quit()  # type: ignore[attr-defined]

@@ -94,6 +94,70 @@ def test_new_drawing_none(mock_com: MagicMock) -> None:
             assert result is None
 
 
+def test_drawing_parametric_creates_panel(mock_com: MagicMock) -> None:
+    with mock_com:
+        from alphacam_cli.com.manager import alphacam_context
+
+        with alphacam_context() as raw:
+            ac = Application(raw)
+            result = ac.drawing_parametric(800, 400)
+            assert result["success"] is True
+            assert result["outer"] == {"tool_in_out": -1}
+            assert result["inner"] == {"tool_in_out": 1}
+            raw.New.assert_called_once()
+            raw.ActiveDrawing.CreateRectangle.assert_called_once_with(0, 0, 800, 400)
+            raw.ActiveDrawing.CreateRectangle.return_value.Fillet.assert_called_once_with(5)
+            raw.ActiveDrawing.Create2DGeometry.assert_called_once_with(50, 50)
+            raw.ActiveDrawing.ZoomAll.assert_called_once()
+            raw.CreateMillData.assert_not_called()
+
+
+def test_drawing_parametric_machines(mock_com: MagicMock) -> None:
+    with mock_com:
+        from alphacam_cli.com.manager import alphacam_context
+
+        with alphacam_context() as raw:
+            ac = Application(raw)
+            result = ac.drawing_parametric(
+                800,
+                400,
+                offset=60,
+                fillet=3,
+                depth=-19,
+                tool="Flat - 20mm",
+                spindle=18000,
+                feed=4000,
+                down_feed=1500,
+            )
+            assert result["success"] is True
+            raw.SelectTool.assert_called_once_with("Flat - 20mm")
+            md = raw.CreateMillData.return_value
+            assert md.SafeRapidLevel == 10
+            assert md.RapidDownTo == 2
+            assert md.MaterialTop == 0
+            assert md.FinalDepth == -19
+            assert md.SpindleSpeed == 18000
+            assert md.CutFeed == 4000
+            assert md.DownFeed == 1500
+            assert md.RoughFinish.call_count == 2
+            assert raw.ActiveDrawing.CreateRectangle.return_value.Selected is False
+            assert (
+                raw.ActiveDrawing.Create2DGeometry.return_value.CloseAndFinishLine.return_value.Selected
+                is False
+            )
+
+
+def test_drawing_parametric_no_machining_without_depth(mock_com: MagicMock) -> None:
+    with mock_com:
+        from alphacam_cli.com.manager import alphacam_context
+
+        with alphacam_context() as raw:
+            ac = Application(raw)
+            ac.drawing_parametric(800, 400, spindle=18000)
+            raw.SelectTool.assert_not_called()
+            raw.CreateMillData.assert_not_called()
+
+
 def test_quit(mock_com: MagicMock) -> None:
     with mock_com:
         from alphacam_cli.com.manager import alphacam_context
@@ -336,6 +400,116 @@ def test_open_drawing_none(mock_com: MagicMock) -> None:
             raw.OpenDrawing.return_value = None
             result = ac.open_drawing("missing.amd")
             assert result is None
+
+
+def test_open_cad_file_dxf(mock_com: MagicMock) -> None:
+    with mock_com:
+        from alphacam_cli.com.manager import alphacam_context
+
+        with alphacam_context() as raw:
+            ac = Application(raw)
+            drw = ac.open_cad_file(r"C:\parts\panel.dxf", "dxf")
+            assert drw is not None
+            raw.OpenDxfFile.assert_called_once_with(r"C:\parts\panel.dxf", False)
+
+
+def test_open_cad_file_dwg_clear(mock_com: MagicMock) -> None:
+    with mock_com:
+        from alphacam_cli.com.manager import alphacam_context
+
+        with alphacam_context() as raw:
+            ac = Application(raw)
+            ac.open_cad_file(r"C:\parts\panel.dwg", "dwg", clear=True)
+            raw.OpenDxfFile.assert_called_once_with(r"C:\parts\panel.dwg", True)
+
+
+def test_open_cad_file_iges(mock_com: MagicMock) -> None:
+    with mock_com:
+        from alphacam_cli.com.manager import alphacam_context
+
+        with alphacam_context() as raw:
+            ac = Application(raw)
+            ac.open_cad_file(r"C:\parts\panel.igs", "iges")
+            raw.OpenIgesFile.assert_called_once_with(r"C:\parts\panel.igs", False, 0)
+
+
+def test_open_cad_file_step(mock_com: MagicMock) -> None:
+    with mock_com:
+        from alphacam_cli.com.manager import alphacam_context
+
+        with alphacam_context() as raw:
+            ac = Application(raw)
+            ac.open_cad_file(r"C:\parts\panel.step", "step")
+            raw.OpenStepFileEx.assert_called_once_with(r"C:\parts\panel.step", False, 0)
+
+
+def test_open_cad_file_step_fallback(mock_com: MagicMock) -> None:
+    with mock_com:
+        from alphacam_cli.com.manager import alphacam_context
+
+        with alphacam_context() as raw:
+            raw.OpenStepFileEx.side_effect = AttributeError("no OpenStepFileEx")
+            ac = Application(raw)
+            ac.open_cad_file(r"C:\parts\panel.stp", "stp")
+            raw.OpenStepFile.assert_called_once_with(r"C:\parts\panel.stp", False)
+
+
+def test_open_cad_file_stl(mock_com: MagicMock) -> None:
+    with mock_com:
+        from alphacam_cli.com.manager import alphacam_context
+
+        with alphacam_context() as raw:
+            ac = Application(raw)
+            ac.open_cad_file(r"C:\parts\panel.stl", "stl")
+            raw.OpenStlFile.assert_called_once_with(r"C:\parts\panel.stl", False)
+
+
+def test_open_cad_file_unknown_format(mock_com: MagicMock) -> None:
+    with mock_com:
+        from alphacam_cli.com.manager import alphacam_context
+
+        with alphacam_context() as raw:
+            ac = Application(raw)
+            with pytest.raises(ValueError, match="Unsupported CAD format: xyz"):
+                ac.open_cad_file(r"C:\parts\panel.xyz", "xyz")
+
+
+def test_open_cad_file_com_error(mock_com: MagicMock) -> None:
+    with mock_com:
+        from alphacam_cli.com.manager import alphacam_context
+
+        with alphacam_context() as raw:
+            raw.OpenDxfFile.side_effect = RuntimeError("com failed")
+            ac = Application(raw)
+            with pytest.raises(RuntimeError, match=r"Failed to open CAD file .*dxf.*: com failed"):
+                ac.open_cad_file(r"C:\parts\panel.dxf", "dxf")
+
+
+def test_set_dxf_cabinets(mock_com: MagicMock) -> None:
+    with mock_com:
+        from alphacam_cli.com.manager import alphacam_context
+
+        with alphacam_context() as raw:
+            ac = Application(raw)
+            ac.set_dxf_cabinets(True)
+            assert raw.CadInputSettings.DxfSpecial == 1
+            ac.set_dxf_cabinets(False)
+            assert raw.CadInputSettings.DxfSpecial == 0
+
+
+def test_set_dxf_cabinets_error(mock_com: MagicMock) -> None:
+    class _RaiseOnSet:
+        def __setattr__(self, name: str, value: int) -> None:
+            raise RuntimeError("no settings")  # noqa: TRY003
+
+    with mock_com:
+        from alphacam_cli.com.manager import alphacam_context
+
+        with alphacam_context() as raw:
+            raw.CadInputSettings = _RaiseOnSet()
+            ac = Application(raw)
+            with pytest.raises(RuntimeError, match="Failed to set DXF cabinets input"):
+                ac.set_dxf_cabinets(True)
 
 
 def test_create_temp_drawing(mock_com: MagicMock) -> None:

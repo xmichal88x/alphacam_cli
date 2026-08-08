@@ -211,6 +211,30 @@ class RemoteApplication:
             return None
         return _DrawingProxy(self._session, info)
 
+    def drawing_parametric(
+        self,
+        width: float,
+        height: float,
+        offset: float = 50,
+        fillet: float = 5,
+        depth: float | None = None,
+        tool: str | None = None,
+        spindle: int | None = None,
+        feed: float | None = None,
+        down_feed: float | None = None,
+    ) -> dict[str, Any]:
+        return self._session.drawing_parametric(
+            width,
+            height,
+            offset=offset,
+            fillet=fillet,
+            depth=depth,
+            tool=tool,
+            spindle=spindle,
+            feed=feed,
+            down_feed=down_feed,
+        )
+
 
 class _RemoteMillData:
     def __init__(self, session: RemoteSession) -> None:

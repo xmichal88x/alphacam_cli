@@ -144,6 +144,48 @@ def test_create_2d_geometry(mock_com: MagicMock) -> None:
             drw._drw.Create2DGeometry.assert_called_once_with(10, 20)
 
 
+def test_create_panel(mock_com: MagicMock) -> None:
+    with mock_com:
+        from alphacam_cli.com.manager import alphacam_context
+        from alphacam_cli.core.drawing import CamPath, Drawing
+
+        with alphacam_context() as raw:
+            drw = Drawing(raw.ActiveDrawing)
+            outer_raw = MagicMock()
+            inner_raw = MagicMock()
+            raw_geo = MagicMock()
+            raw_geo.CloseAndFinishLine.return_value = inner_raw
+            drw._drw.CreateRectangle.return_value = outer_raw
+            drw._drw.Create2DGeometry.return_value = raw_geo
+
+            outer, inner = drw.create_panel(800, 400, 50, 5)
+
+            assert isinstance(outer, CamPath)
+            assert isinstance(inner, CamPath)
+            drw._drw.CreateRectangle.assert_called_once_with(0, 0, 800, 400)
+            outer_raw.Fillet.assert_called_once_with(5.0)
+            assert outer_raw.ToolInOut == -1
+            drw._drw.Create2DGeometry.assert_called_once_with(50, 50)
+            raw_geo.AddLine.assert_any_call(750, 50)
+            raw_geo.AddLine.assert_any_call(750, 300)
+            raw_geo.AddArc2Point.assert_called_once_with(400, 350, 50, 300)
+            raw_geo.CloseAndFinishLine.assert_called_once()
+            assert inner_raw.ToolInOut == 1
+
+
+def test_create_panel_no_fillet(mock_com: MagicMock) -> None:
+    with mock_com:
+        from alphacam_cli.com.manager import alphacam_context
+        from alphacam_cli.core.drawing import Drawing
+
+        with alphacam_context() as raw:
+            drw = Drawing(raw.ActiveDrawing)
+            outer_raw = MagicMock()
+            drw._drw.CreateRectangle.return_value = outer_raw
+            outer, _ = drw.create_panel(800, 400, 50, 0)
+            assert outer_raw.Fillet.call_count == 0
+
+
 def test_create_polygon(mock_com: MagicMock) -> None:
     with mock_com:
         from alphacam_cli.com.manager import alphacam_context
