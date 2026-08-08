@@ -853,6 +853,7 @@ class GatewayServer:
         _am_log("start", True)
 
         def work() -> dict[str, str]:
+            _am_log("work_enter", True, "")
             from alphacam_cli.gateway.server import _app as com_app
 
             out: dict[str, str] = {}
