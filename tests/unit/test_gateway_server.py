@@ -85,6 +85,61 @@ def test_apply_style_handler_tool_by_name(
     server_app.select_tool.assert_called_once_with(files[0])
 
 
+def test_apply_style_handler_tool_partial_path(
+    server_app: MagicMock, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import alphacam_cli.gateway.server as server_module
+
+    drw = MagicMock()
+    drw.geometries_count = 1
+    server_app.get_active_drawing.return_value = drw
+    tool_path = r"C:\ALPHACAM\LICOMDAT\RTools.Alp\Reichenbacher\Ball 10mm 2F.art"
+    server_app.find_tool_files.return_value = [tool_path]
+    monkeypatch.setattr(server_module.os.path, "exists", lambda p: False)
+    gw = GatewayServer()
+    result = gw._handler_apply_style(
+        {"style": r"C:\ALPHACAM\LICOMDIR\Styles\Edge.ary", "tool": r"Reichenbacher\Ball 10mm 2F"}
+    )
+    assert result["success"] is True
+    server_app.select_tool.assert_called_once_with(tool_path)
+
+
+def test_select_tool_handler_by_name(server_app: MagicMock) -> None:
+    tool_path = r"C:\ALPHACAM\LICOMDAT\RTools.Alp\Reichenbacher\Ball 10mm 2F.art"
+    server_app.find_tool_files.return_value = [tool_path]
+    gw = GatewayServer()
+    gw._handler_select_tool({"name": "Ball 10mm 2F.art"})
+    server_app.select_tool.assert_called_once_with(tool_path)
+
+
+def test_select_tool_handler_full_path(server_app: MagicMock) -> None:
+    tool_path = r"C:\ALPHACAM\LICOMDAT\RTools.Alp\Reichenbacher\Ball 10mm 2F.art"
+    server_app.find_tool_files.return_value = [tool_path]
+    gw = GatewayServer()
+    gw._handler_select_tool({"name": tool_path})
+    server_app.select_tool.assert_called_once_with(tool_path)
+
+
+def test_select_tool_handler_partial_path(server_app: MagicMock) -> None:
+    tool_path = r"C:\ALPHACAM\LICOMDAT\RTools.Alp\Reichenbacher\Ball 10mm 2F.art"
+    server_app.find_tool_files.return_value = [tool_path]
+    gw = GatewayServer()
+    gw._handler_select_tool({"name": r"Reichenbacher\Ball 10mm 2F"})
+    server_app.select_tool.assert_called_once_with(tool_path)
+
+
+def test_select_tool_handler_duplicate_basenames(server_app: MagicMock) -> None:
+    files = [
+        r"C:\ALPHACAM\LICOMDAT\RTools.Alp\SubA\Drill - 10mm dia.art",
+        r"C:\ALPHACAM\LICOMDAT\RTools.Alp\SubB\Drill - 10mm dia.art",
+    ]
+    server_app.find_tool_files.return_value = files
+    gw = GatewayServer()
+    with pytest.raises(COMError, match="Multiple tools matched"):
+        gw._handler_select_tool({"name": "Drill - 10mm dia"})
+    server_app.select_tool.assert_not_called()
+
+
 def test_list_posts_handler(server_app: MagicMock) -> None:
     posts = [
         "C:/ALPHACAM/LICOMDAT/RPosts.Alp/fanuc.arp",

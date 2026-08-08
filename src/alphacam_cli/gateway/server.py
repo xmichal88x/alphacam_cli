@@ -316,19 +316,41 @@ class GatewayServer:
         if not name:
             raise COMError("name is required")
         files = com_app.find_tool_files()
+        name_norm = name.replace("\\", "/").lower()
         basename_lower = name.lower()
-        exact = [f for f in files if os.path.basename(f).lower() == basename_lower]
+        exact_path = [f for f in files if f.replace("\\", "/").lower() == name_norm]
+        exact = [
+            f
+            for f in files
+            if f not in exact_path and os.path.basename(f).lower() == basename_lower
+        ]
+        path_substring: list[str] = []
+        if "/" in name or "\\" in name:
+            path_substring = [
+                f
+                for f in files
+                if f not in exact_path
+                and f not in exact
+                and name_norm in f.replace("\\", "/").lower()
+            ]
         prefix = [
             f
             for f in files
-            if f not in exact and os.path.basename(f).lower().startswith(basename_lower)
+            if f not in exact_path
+            and f not in exact
+            and f not in path_substring
+            and os.path.basename(f).lower().startswith(basename_lower)
         ]
         substring = [
             f
             for f in files
-            if f not in exact and f not in prefix and basename_lower in os.path.basename(f).lower()
+            if f not in exact_path
+            and f not in exact
+            and f not in path_substring
+            and f not in prefix
+            and basename_lower in os.path.basename(f).lower()
         ]
-        matched = exact or prefix or substring
+        matched = exact_path or exact or path_substring or prefix or substring
         if not matched:
             raise COMError(f"No tool matching '{name}'")
         if len(matched) > 1:
@@ -447,7 +469,7 @@ class GatewayServer:
                 if com_app.select_tool(tool) is None:
                     raise COMError(f"Failed to select tool: {os.path.basename(tool)}")
             else:
-                self._handler_select_tool({"name": os.path.basename(tool)})
+                self._handler_select_tool({"name": tool})
         drw = com_app.get_active_drawing()
         if drw is None:
             raise COMError("No active drawing")
