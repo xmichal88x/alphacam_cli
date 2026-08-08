@@ -72,6 +72,10 @@ class NestList:
     def total_time(self) -> int:
         return int(self._nl.TotalTime)  # type: ignore[attr-defined]
 
+    @total_time.setter
+    def total_time(self, value: int) -> None:
+        self._nl.TotalTime = value  # type: ignore[attr-defined]
+
     def add_file(self, filename: str) -> NestPart:
         raw = self._nl.AddFile(filename)  # type: ignore[attr-defined]
         if raw is None:

@@ -118,6 +118,17 @@ def test_nest_list_properties(mock_com: MagicMock) -> None:
             assert nl.total_time == 0
 
 
+def test_nest_list_total_time_setter(mock_com: MagicMock) -> None:
+    with mock_com:
+        from alphacam_cli.com.manager import alphacam_context
+
+        with alphacam_context() as raw:
+            n = Nesting(raw.Nesting)
+            nl = n.new_nest_list("test.nst")
+            nl.total_time = 10
+            assert nl._nl.TotalTime == 10
+
+
 def test_nest_list_raw_dispatch(mock_com: MagicMock) -> None:
     with mock_com:
         from alphacam_cli.com.manager import alphacam_context

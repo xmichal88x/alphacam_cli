@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import pathlib
+from unittest import mock
 from unittest.mock import MagicMock
 
 import pytest
@@ -257,3 +258,76 @@ def test_glob_files_handler_no_dir(server_app: MagicMock) -> None:
     gw = GatewayServer()
     with pytest.raises(COMError, match="directory is required"):
         gw._handler_glob_files({})
+
+
+def test_run_nest_handler(server_app: MagicMock) -> None:
+    drw = MagicMock()
+    server_app.create_temp_drawing.return_value = drw
+    nesting = MagicMock()
+    server_app.get_nesting.return_value = nesting
+    nl = MagicMock()
+    nesting.new_nest_list.return_value = nl
+    np = MagicMock()
+    nl.add_file.return_value = np
+    sl = MagicMock()
+    nesting.new_sheet_list.return_value = sl
+    ss = MagicMock()
+    sl.add.return_value = ss
+    nest_result = MagicMock()
+    nest_result.count = 4
+    nesting.nest.return_value = nest_result
+
+    calls: list[str] = []
+    nesting.nest.side_effect = lambda *a, **k: (calls.append("nest"), nest_result)[1]
+    nl.save.side_effect = lambda: calls.append("save")
+
+    gw = GatewayServer()
+    result = gw._handler_run_nest(
+        {
+            "parts": [{"name": "part1.amd", "count": 2}, {"name": "part2.amd", "count": 1}],
+            "output_dir": "",
+            "sheet_width": 2440,
+            "sheet_height": 1220,
+        }
+    )
+
+    assert result == {"count": 4, "success": True}
+    server_app.get_nesting.assert_called_once()
+    assert nesting.suppress_dialogs is True
+    nesting.delete_all_nest_lists.assert_called_once()
+    nesting.new_nest_list.assert_called_once()
+    assert nl.total_time == 10
+    assert nl.add_file.call_args_list == [mock.call("part1.amd"), mock.call("part2.amd")]
+    assert np.required == 1
+    assert np.rotation_angle == 90
+    assert calls == ["nest", "save"]
+    nesting.new_sheet_list.assert_called_once()
+    sl.add.assert_called_once()
+    assert ss.thickness == 18.0
+    assert ss.required == 1
+    nesting.nest.assert_called_once()
+
+
+def test_run_nest_handler_add_file_failed(server_app: MagicMock) -> None:
+    drw = MagicMock()
+    server_app.create_temp_drawing.return_value = drw
+    nesting = MagicMock()
+    server_app.get_nesting.return_value = nesting
+    nl = MagicMock()
+    nesting.new_nest_list.return_value = nl
+    nl.add_file.side_effect = RuntimeError("boom")
+
+    gw = GatewayServer()
+    with pytest.raises(COMError, match=r"nest: add_file failed: boom"):
+        gw._handler_run_nest({"parts": [{"name": "part.amd", "count": 1}]})
+    nesting.nest.assert_not_called()
+
+
+def test_run_nest_handler_get_nesting_failed(server_app: MagicMock) -> None:
+    drw = MagicMock()
+    server_app.create_temp_drawing.return_value = drw
+    server_app.get_nesting.side_effect = RuntimeError("boom")
+
+    gw = GatewayServer()
+    with pytest.raises(COMError, match=r"nest: get_nesting failed: boom"):
+        gw._handler_run_nest({"parts": [{"name": "part.amd", "count": 1}]})
