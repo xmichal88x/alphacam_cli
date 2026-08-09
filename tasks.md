@@ -582,3 +582,20 @@ detail.Width=600; detail.Length=400; detail.Quantity=2; detail.SaveToDatabase()
 - PowerShell: `param()` musi być pierwszą instrukcją
 - Testy ręczne skryptów ps1 przez SSH z parametrami ze spacjami są ZWODNICZE (cmd rozbija argumenty — '$JobName' = 'Material') — testować przez handler/subprocess, nie przez ssh z paramami
 - `CDM.mdb` (Access, C:\ALPHACAM\LICOMDAT\CDM\) — stara baza CDM: AD_MATERIALS ma tylko "17mm"; OLEDB providers nie zainstalowane — odczyt przez mdbtools na Linuxie
+
+### ✅ CDM IMPORT — USTAWIENIA DOMYŚLNE Z BAZY (2026-08-09, E2E)
+
+**"Ustawienia domyślne" (zakładka AM) w bazie:**
+- `AM_Settings`: fkConfigurationSettingID=41 (Fronty), fkSetupID=1, fkToolOrderID=1 — domyślna konfiguracja/setup/tool (NewCDMJob bierze je AUTOMATYCZNIE — nie trzeba ustawiać)
+- `AM_JobFileDefaults` (per konfiguracja): dla 41 → fkSetupID=1, fkToolOrderID=2, **fkMaterialID=4** (arkusz MDF18 2800x2070 z SQLite sheets)
+- GUI nowe zadanie (Nowe Zadanie 12): cfg=41, setup=1, tool=1, **mat=0** (GUI NIE ustawia materiału na jobie! materiały tylko per produkt)
+- Materiał domyślny z defaults: fkMaterialID=4 (ID z SQLite sheets — MDF18)
+
+**Implementacja (commit `2b3df46`, 478 passed):**
+- `scripts/vdb5_job_defaults.ps1` — AM_Settings cfg → nazwa configu + AM_JobFileDefaults fkMaterialID → JSON
+- `cdm import`: `--config`/`--material` JAWNE (priorytet) → brak → defaults z bazy (config z AM_Settings, materiał z AM_JobFileDefaults) — **zero hardcode'ów** (usunięte "Fronty")
+- materiał ustawiany na jobie ORAZ detailach (CDM_OrderDetails.fkMaterialID — GUI tak czyta)
+- E2E: CSV 5-kolumnowy bez materiału, bez opcji → job 177: cfg=41, mat=4, detale mat=4, Material: MDF18
+- `--job` (istniejące zadanie): config niezmieniany (zachowuje swoją); materiał ustawiany jeśli podany/defaults
+
+**Flow produkcyjny finalny:** `alphacam cdm import zamowienie.csv --name "Zamowienie X"` → zadanie z defaultami (Fronty + MDF18) + pozycje z CSV (materiał z CSV kol 6 nadpisuje default; --material/--config nadpisują wszystko).
