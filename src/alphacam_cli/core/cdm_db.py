@@ -747,6 +747,8 @@ def lookups() -> dict[str, list[dict[str, Any]]]:
     result: dict[str, list[dict[str, Any]]] = {}
     for key in LOOKUP_KEYS:
         rows = data.get(key)
+        if isinstance(rows, dict):
+            rows = [rows]
         if not isinstance(rows, list):
             result[key] = []
             continue

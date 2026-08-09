@@ -1368,3 +1368,33 @@ def test_lookups_skips_malformed_rows(monkeypatch: pytest.MonkeyPatch) -> None:
     data = cdm_db.lookups()
     assert len(data["setups"]) == 1
     assert data["setups"][0]["id"] == 1
+
+
+def test_lookups_single_row_section_wrapped_as_dict(monkeypatch: pytest.MonkeyPatch) -> None:
+    stdout = (
+        f'{{"customers": {_CUSTOMER_ROW_1},'
+        f' "fittings": {_FITTING_ROW},'
+        f' "machining_orders": [{_MACHINING_ORDER_ROW}]}}'
+    )
+    _mock_run(monkeypatch, stdout=stdout)
+    data = cdm_db.lookups()
+    assert data["customers"] == [
+        {
+            "id": 1,
+            "name": "Not Selected",
+            "address_line_1": "",
+            "address_line_2": "",
+            "city": "",
+            "country": "",
+            "post_zip_code": "",
+            "contact_name": "",
+            "telephone_number": "",
+            "email_address": "",
+            "website_address": "",
+        }
+    ]
+    assert data["fittings"] == [
+        {"id": 1, "fk_job_file_id": 0, "fitting_type": "sys", "fitting_file": ""}
+    ]
+    assert len(data["machining_orders"]) == 1
+    assert data["machining_orders"][0]["machining_style_name"] == "BALL 2MM 2F:0:0"
