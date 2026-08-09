@@ -844,9 +844,10 @@ class GatewayServer:
             raise COMError(f"cdm: automation manager unavailable: {e}") from e
         if cdm_db.find_cdm_job(am, job_name) is not None:
             raise COMError(f"cdm: job already exists: {job_name}")
+        materials = cdm_db.sheet_materials()
         material_id: int | None = None
         if material_name is not None:
-            material_id = cdm_db.sheet_materials().get(material_name)
+            material_id = materials.get(material_name)
             if material_id is None:
                 raise COMError(f"cdm: material not found: {material_name}")
         else:
@@ -854,7 +855,7 @@ class GatewayServer:
         material_label: str | None = material_name
         if material_label is None and material_id is not None:
             material_label = next(
-                (n for n, mid in cdm_db.sheet_materials().items() if mid == material_id),
+                (n for n, mid in materials.items() if mid == material_id),
                 None,
             )
         try:

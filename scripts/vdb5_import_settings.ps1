@@ -20,7 +20,7 @@ try {
     $settingsById = @{}
     $order = New-Object System.Collections.ArrayList
     $cmd = $conn.CreateCommand()
-    $cmd.CommandText = 'SELECT ImportSettingID, ImportSettingName, Selected, DelimiterChar, IgnoreHeader, IsCDMImport, SubDelimiterChar, CreateJob FROM AM_ImportSettings'
+    $cmd.CommandText = 'SELECT ImportSettingID, ImportSettingName, Selected, DelimiterChar, IgnoreHeader, IsCDMImport, SubDelimiterChar, CreateJob FROM AM_ImportSettings ORDER BY ImportSettingID'
     $reader = $cmd.ExecuteReader()
     while ($reader.Read()) {
         $id = [int]$reader.GetValue(0)

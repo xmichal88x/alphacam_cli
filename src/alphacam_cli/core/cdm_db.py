@@ -710,11 +710,8 @@ def parse_cdm_rows_mapped(
                     detail["custom_fields"][name.removeprefix("door_custom_field_")] = raw
             else:
                 target = MAPPED_FIELD_TARGETS.get(name)
-                if target is not None:
-                    if raw:
-                        detail[target] = raw
-                elif raw:
-                    detail[name] = raw
+                if raw and target is not None:
+                    detail[target] = raw
         if invalid is not None:
             errors.append(invalid)
             continue
