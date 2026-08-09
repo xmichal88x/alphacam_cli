@@ -58,33 +58,59 @@
 
 ### P1 — Stabilność i coverage
 
-- [ ] **manager.py:128-135** — STA worker `except Exception` cicho połyka błędy gdy `result_sent=True`. Main thread nigdy się nie dowie o awarii wątku STA. Fix: zawsze wkładać błąd do `result_queue` (użyć `maxsize=2` by nie blokować).
-- [ ] **Pokrycie error pathów** — dodać testy dla brakujących linii w:
-  - `mill.py:35-36,63-64,96-99,122-123,157-158,165-166` (87%)
-  - `diagnose.py:30-31,47,57-58` (88%)
-  - `nest.py:44,55-57,69-70,115-119` (86%)
-  - `nc.py:25-26,30-31,44-45` (81%)
-  - `main.py:74-79` (85%)
+- [x] **manager.py:128-135** — STA worker `except Exception` cicho połyka błędy gdy `result_sent=True`. Main thread nigdy się nie dowie o awarii wątku STA. Fix: zawsze wkładać błąd do `result_queue` (użyć `maxsize=2` by nie blokować). (commit f198d47)
+- [x] **Pokrycie error pathów** — dodać testy dla brakujących linii w: (commit d547826, 734 testów; coverage: mill 100%, diagnose 100%, nest 100%, main 100%; nc już był 100%)
+  - [x] `mill.py:35-36,63-64,96-99,122-123,157-158,165-166` (87% → 100%)
+  - [x] `diagnose.py:30-31,47,57-58` (88% → 100%)
+  - [x] `nest.py:44,55-57,69-70,115-119` (86% → 100%)
+  - [x] `nc.py:25-26,30-31,44-45` (81% → 100%)
+  - [x] `main.py:74-79` (85% → 100%)
 
 ### P2 — Jakość i DX
 
-- [ ] **README: update test count** — mówi "20+ unit tests", powinno być "165+"
-- [ ] **`nest.py:list_nests()`** — nie używa `@handle_com_errors` (inconsistency)
-- [ ] **`publish.yml`** — dodać `ruff check tests/` i `mypy tests/` przed publikacją
-- [ ] **Pre-commit hooks** — dodać `.pre-commit-config.yaml` z ruff + mypy
-- [ ] **CONTRIBUTING.md** — instructions for local dev, adding commands, running tests
+- [x] **README: update test count** — mówi "20+ unit tests", powinno być "165+" (commit 2543920 — "734+ unit tests")
+- [x] **`nest.py:list_nests()`** — nie używa `@handle_com_errors` (inconsistency) (potwierdzone — już było w HEAD)
+- [x] **`publish.yml`** — dodać `ruff check tests/` i `mypy tests/` przed publikacją (a3764cb — plik już zawierał `ruff check src/ tests/` i `mypy src/ tests/`; dodatkowo naprawiono mypy tests/ — bb39ed3 — i ruff B009 — b877af1)
+- [x] **Pre-commit hooks** — dodać `.pre-commit-config.yaml` z ruff + mypy (a3764cb — `.pre-commit-config.yaml` istnieje)
+- [x] **CONTRIBUTING.md** — instructions for local dev, adding commands, running tests (2543920/a3764cb — plik istnieje)
 
 ### P3 — Kosmetyka i detale
 
-- [ ] **Przesunąć classifier na `5 - Production/Stable`** — po zakończeniu P1
+- [x] **Przesunąć classifier na `5 - Production/Stable`** — po zakończeniu P1 (już było w pyproject)
 - [ ] **GitHub PAT** — dodać `workflow` scope lub przejść na SSH
-- [ ] **Dodać `--show-completion` dokumentację** w README
+- [x] **Dodać `--show-completion` dokumentację** w README (już była)
 
 ## Zadania wymagające Windows (do zrobienia przez użytkownika)
 
-- [ ] **Testy integracyjne** — 3 testy w `test_workflows.py` (create→mill→nc, batch, nest)
-- [ ] **Weryfikacja marshal path na realnym AlphaCAM** — potwierdzić że `result` typu "marshaled" a nie "simple"
+- [x] **Testy integracyjne** — 3 testy w `test_workflows.py` (create→mill→nc, batch, nest) — CZĘŚCIOWO: mill_nc PASS + nest PASS (Session 0, komity 8b5619c/269fd40/0f21f05); batch NIE przechodzi — hang drugiego OutputNC w jednej sesji COM (potwierdzone 12/12 przebiegów) — osobne P1
+- [x] **Weryfikacja marshal path na realnym AlphaCAM** — potwierdzić że `result` typu "marshaled" a nie "simple" — potwierdzone "marshaled" end-to-end (probe na maszynie, obiekt IAlphaCamApp przez CoGetInterfaceAndReleaseStream)
 - [ ] **Rozszerzenie puli ProgID** — dodać autodetekcję lub dokumentację jak znaleźć
+
+---
+
+## Manifest (arkusz→WO) — braki zdiagnozowane 2026-08-09
+
+### M1 — Odczyt wyników nestingu (BLOKER manifestu)
+- [ ] **core/nesting.py + core/drawing.py**: wrapper na `GetNestData` / `NestPartInstance` (pozycja, rotacja, sheet assignment) / `GetNestInformation` — obecnie `create_nest_data()` zwraca surowy COM (drawing.py:39), brak jakiegokolwiek odczytu wyników nestingu
+- [ ] **CLI: komenda `nest inspect`** — odczyt wynikowego nestingu: części → arkusz, pozycje, rotacje (wyjście JSON/tekst)
+
+### M2 — Odczyt wynikowego .anl (BLOKER manifestu)
+- [ ] **cli/nest.py**: po `nd.DoNest()` (i w trybie advanced po `nesting.Nest`) odczytać wynik — obecnie komenda kończy się po nestingu bez odczytu wyników (nest.py:258-260)
+- [ ] **Parser .anl wynikowego** (części, ilości, przypisanie do arkuszy)
+
+### M3 — CDM: wyniki nestingu (zależne od RQ-PA-016 / eksperymentu na produkcji)
+- [ ] **cli/cdm.py**: komenda odczytu wyników CDM po przetworzeniu przez Automation Manager (co wypluwa: arkusz → drzwi) — na razie order-details czyta tylko dane wejściowe zamówienia; do potwierdzenia formatu wyników na produkcji
+
+### M4 — .ard nie generowany mimo deklaracji
+- [ ] **cli/nest.py**: help `run` deklaruje "Output directory for .anl and .ard files" (nest.py:29) ale .ard nie jest zapisywany — poprawić (albo generować raport, albo zmienić help)
+
+### M5 — Walidacja konwencji nazw części vs numer WO
+- [ ] Komenda/skrypt walidujący czy nazwy części w CSV/CDM pasują do wzorca `WC-<order>-<product>` (konwencja konektora Woo→WO) — wspiera weryfikację blokera A.4 planu automatyzacji
+
+### M6 — Zależności i weryfikacja (nie blokery)
+- [ ] Testy integracyjne (3 workflows: create→mill→nc, batch, nest) — czekają na Windows+AlphaCAM (już w sekcji wymagających Windows; odwołać się do tego)
+- [ ] Weryfikacja marshal path na realnym AlphaCAM (już w sekcji wymagających Windows)
+- [ ] RQ-PA-016 (repo production-automation): co dokładnie generuje CDM po przetworzeniu CSV — determinuje implementację M3
 
 ---
 
@@ -171,3 +197,8 @@
 2. **Brak wsparcia dla Nesting z geometrią** — CSV tylko wymiary, nie tworzy geometrii
 3. **OutputNC wymaga event sink** — zaimplementowane w tej sesji (`output_nc_with_events`)
 4. **COM safety** — STA thread + result_sent guard + keep_alive ✅
+
+### Nowe P1 (znalezione w tej sesji 2026-08-09)
+
+- [ ] **Batch hang: drugi OutputNC w tej samej sesji COM wisi w Session 0** (12/12 przebiegów: part_0.nc=177B OK, part_1.nc=0B wisi). Diagnoza: core/drawing.py output_nc (linia ~153) — COM call OutputNC nie wraca przy drugim wywołaniu w jednej sesji. Do zbadania: output_nc_with_events/NcEventHandler, świeży context per plik w batch, lub retry. Blokuje test_batch_processing.
+- [ ] **Acam.exe trzyma handle pliku NC po OutputNC w Session 0** (>60s) — test mill_nc obejście: cleanup best-effort (teardown_class); do zbadania czy OutputNC zamyka plik po zamknięciu sesji COM.
