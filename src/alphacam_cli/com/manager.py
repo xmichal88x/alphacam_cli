@@ -72,7 +72,7 @@ def alphacam_context(
 
     logger = logging.getLogger("alphacam")
 
-    result_queue: queue.Queue[Any] = queue.Queue()
+    result_queue: queue.Queue[Any] = queue.Queue(maxsize=2)
     stop_event = threading.Event()
 
     def sta_worker() -> None:
@@ -141,8 +141,11 @@ def alphacam_context(
                 if com_initialized:
                     pythoncom.CoUninitialize()  # type: ignore[attr-defined]
         except Exception as exc:
-            with contextlib.suppress(Exception):
+            try:
                 result_queue.put_nowait(("error", exc))
+                logger.warning("STA worker error: %r", exc)
+            except queue.Full:
+                logger.warning("STA worker error after result delivered: %r", exc)
 
     thread = threading.Thread(target=sta_worker, daemon=True)
     thread.start()

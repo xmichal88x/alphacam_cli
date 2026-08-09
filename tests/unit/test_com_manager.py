@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import logging
 import queue
 import time
+from typing import Any
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -233,3 +235,62 @@ def test_sta_worker_late_error_handled(mock_com: MagicMock) -> None:
             time.sleep(0.15)
 
         assert call_count > 1, "Pump should have been called multiple times"
+
+
+def test_sta_worker_error_after_result_not_swallowed(
+    mock_com: MagicMock, caplog: pytest.LogCaptureFixture
+) -> None:
+    """Late STA worker errors reach the queue; when the queue is full they are logged."""
+    from alphacam_cli.com.manager import alphacam_context
+
+    with mock_com, caplog.at_level(logging.WARNING, logger="alphacam"):
+        call_count = 0
+
+        def failing_pump() -> None:
+            nonlocal call_count
+            call_count += 1
+            if call_count > 1:
+                raise RuntimeError
+
+        with (
+            patch("pythoncom.PumpWaitingMessages", side_effect=failing_pump),
+            alphacam_context(keep_alive=True),
+        ):
+            time.sleep(0.15)
+
+        assert call_count > 1, "Pump should have been called multiple times"
+        assert any("late error after yield" in r.message for r in caplog.records)
+
+    caplog.clear()
+
+    real_queue: queue.Queue[Any] = queue.Queue(maxsize=2)
+
+    class FullForLateErrorQueue:
+        """Queue whose put_nowait raises queue.Full for late worker errors."""
+
+        def __init__(self, maxsize: int = 0) -> None:
+            self._q = real_queue
+
+        def put(self, item: Any) -> None:
+            self._q.put(item)
+
+        def put_nowait(self, item: Any) -> None:
+            if item[0] == "error":
+                raise queue.Full
+            self._q.put_nowait(item)
+
+        def get(self, timeout: float | None = None) -> Any:
+            return self._q.get(timeout=timeout)
+
+        def get_nowait(self) -> Any:
+            return self._q.get_nowait()
+
+    with mock_com, caplog.at_level(logging.WARNING, logger="alphacam"):
+        with (
+            patch("pythoncom.PumpWaitingMessages", side_effect=RuntimeError("STA worker crashed")),
+            patch("alphacam_cli.com.manager.queue.Queue", new=FullForLateErrorQueue),
+            alphacam_context(keep_alive=True),
+        ):
+            time.sleep(0.15)
+
+        assert any("STA worker error after result delivered" in r.message for r in caplog.records)
