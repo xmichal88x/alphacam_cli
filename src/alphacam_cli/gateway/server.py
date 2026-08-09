@@ -799,7 +799,12 @@ class GatewayServer:
             self._logger.warning("cdm types: vdb5 read failed: %r", e)
             return [], False
         if not isinstance(rows, list):
-            return [], False
+            if isinstance(rows, dict) and isinstance(rows.get("value"), list):
+                rows = rows["value"]
+            elif isinstance(rows, dict):
+                rows = [rows]
+            else:
+                return [], False
         names: list[str] = []
         for row in rows:
             if not isinstance(row, dict):

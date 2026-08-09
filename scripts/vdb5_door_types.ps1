@@ -15,7 +15,11 @@ try {
         }
         $rows += $row
     }
-    , $rows | ConvertTo-Json -Compress
+    $json = $rows | ConvertTo-Json -Compress
+    if ($json -notmatch '^\s*\[') {
+        $json = "[$json]"
+    }
+    Write-Output $json
 } finally {
     $conn.Close()
 }

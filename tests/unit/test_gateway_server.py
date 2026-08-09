@@ -1267,6 +1267,28 @@ def test_cdm_types_handler_vdb5_skips_system_row(
     assert result == {"types": [{"id": 1, "name": "Typ Frontu 1"}], "source": "vdb5+com"}
 
 
+def test_cdm_types_handler_vdb5_value_wrap(
+    server_app: MagicMock, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _, _, am = _mock_cdm_com(monkeypatch)
+    _mock_vdb5_run(monkeypatch, stdout='{"value": [{"TypeName": "Typ Frontu 1"}]}')
+    am.Jobs.Count = 0
+    gw = GatewayServer()
+    result = gw._handler_cdm_types({})
+    assert result == {"types": [{"id": 1, "name": "Typ Frontu 1"}], "source": "vdb5+com"}
+
+
+def test_cdm_types_handler_vdb5_single_object(
+    server_app: MagicMock, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _, _, am = _mock_cdm_com(monkeypatch)
+    _mock_vdb5_run(monkeypatch, stdout='{"TypeName": "Typ Frontu 1"}')
+    am.Jobs.Count = 0
+    gw = GatewayServer()
+    result = gw._handler_cdm_types({})
+    assert result == {"types": [{"id": 1, "name": "Typ Frontu 1"}], "source": "vdb5+com"}
+
+
 def test_cdm_jobs_handler(server_app: MagicMock, monkeypatch: pytest.MonkeyPatch) -> None:
     _, _, am = _mock_cdm_com(monkeypatch)
     j1 = MagicMock()
