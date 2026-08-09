@@ -25,15 +25,15 @@ try {
     $ids = New-Object System.Collections.Generic.List[int]
     while ($r2.Read()) { $ids.Add([int]$r2.GetValue(0)) }
     $r2.Close()
-    $values = $Values -split ';'
-    if ($ids.Count -ne $values.Count) {
-        Write-Error "row count mismatch: $($ids.Count) rows vs $($values.Count) values"
+    $flags = $Values -split ';'
+    if ($ids.Count -ne $flags.Count) {
+        Write-Error "row count mismatch: $($ids.Count) rows vs $($flags.Count) values"
         exit 1
     }
     $updated = 0
     for ($i = 0; $i -lt $ids.Count; $i++) {
         $flag = 0
-        if ($values[$i] -eq '1') { $flag = 1 }
+        if ($flags[$i] -eq '1') { $flag = 1 }
         $cmd3 = $conn.CreateCommand()
         $cmd3.CommandText = "UPDATE CDM_OrderDetails SET [HasDrilling] = $flag WHERE CDMOrderDetailID = $($ids[$i])"
         $updated += $cmd3.ExecuteNonQuery()
