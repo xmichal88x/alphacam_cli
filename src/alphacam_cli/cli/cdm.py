@@ -262,7 +262,7 @@ def _print_import_preview(result: dict[str, Any]) -> None:
         t.add_column("W x L", justify="right")
         t.add_column("Material")
         t.add_column("Klient")
-        t.add_column("Nr zamowienia")
+        t.add_column("Nr zamówienia")
         t.add_column("Komentarz")
         t.add_column("Custom")
         t.add_column("JobName")
@@ -529,6 +529,9 @@ def config_show(
 ) -> None:
     """Show a single CDM configuration (basic, nesting and CDM settings)."""
     require_platform()
+    if not name or not name.strip():
+        console.print("[red]ERROR:[/red] Configuration name is required")
+        raise typer.Exit(code=1)
     with alphacam_context(visible=get_visible()) as raw:
         ac = resolve_app(raw)
         result = ac.cdm_configs(show=name)

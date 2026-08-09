@@ -1098,6 +1098,22 @@ def test_cdm_config_show_not_found() -> None:
     assert "Configuration not found: NOPE" in result.stderr
 
 
+def test_cdm_config_show_empty_name() -> None:
+    from tests.unit.test_cli import _mock_com
+
+    with (
+        _mock_com(),
+        patch(
+            "alphacam_cli.core.application.Application.cdm_configs",
+            return_value={"configs": [], "show": ""},
+        ) as mock_configs,
+    ):
+        result = runner.invoke(app, ["cdm", "config", "show", ""])
+    assert result.exit_code == 1
+    assert "Configuration name is required" in result.stderr
+    mock_configs.assert_not_called()
+
+
 def test_cdm_setups_list_command() -> None:
     from tests.unit.test_cli import _mock_com
 
