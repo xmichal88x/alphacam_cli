@@ -689,6 +689,64 @@ def test_parse_cdm_rows_mapped_invalid_values() -> None:
     ]
 
 
+def test_parse_cdm_rows_mapped_rotation_method_int() -> None:
+    field_map = {
+        1: "door_type",
+        2: "door_quantity",
+        3: "door_width",
+        4: "door_height",
+        5: "door_rotation_method",
+    }
+    rows = [["P003", "1", "500", "400", "3"]]
+    details, errors = cdm_db.parse_cdm_rows_mapped(rows, field_map, False)
+    assert errors == []
+    assert details[0]["rotation_method"] == 3
+    assert isinstance(details[0]["rotation_method"], int)
+
+
+def test_parse_cdm_rows_mapped_rotation_method_invalid() -> None:
+    field_map = {
+        1: "door_type",
+        2: "door_quantity",
+        3: "door_width",
+        4: "door_height",
+        5: "door_rotation_method",
+    }
+    rows = [["P003", "1", "500", "400", "abc"]]
+    details, errors = cdm_db.parse_cdm_rows_mapped(rows, field_map, False)
+    assert details == []
+    assert errors == ["row 1: invalid value for door_rotation_method: abc"]
+
+
+def test_parse_cdm_rows_mapped_nest_priority_int() -> None:
+    field_map = {
+        1: "door_type",
+        2: "door_quantity",
+        3: "door_width",
+        4: "door_height",
+        5: "door_nest_priority",
+    }
+    rows = [["P003", "1", "500", "400", "7"]]
+    details, errors = cdm_db.parse_cdm_rows_mapped(rows, field_map, False)
+    assert errors == []
+    assert details[0]["nest_priority"] == 7
+    assert isinstance(details[0]["nest_priority"], int)
+
+
+def test_parse_cdm_rows_mapped_nest_priority_invalid() -> None:
+    field_map = {
+        1: "door_type",
+        2: "door_quantity",
+        3: "door_width",
+        4: "door_height",
+        5: "door_nest_priority",
+    }
+    rows = [["P003", "1", "500", "400", "high"]]
+    details, errors = cdm_db.parse_cdm_rows_mapped(rows, field_map, False)
+    assert details == []
+    assert errors == ["row 1: invalid value for door_nest_priority: high"]
+
+
 def test_parse_cdm_rows_mapped_header_skipped() -> None:
     field_map = {1: "door_type", 2: "door_quantity", 3: "door_width", 4: "door_height"}
     rows = [

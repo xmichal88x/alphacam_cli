@@ -657,6 +657,15 @@ def parse_cdm_rows_mapped(
                     invalid = f"row {n}: invalid value for {name}: {raw}"
                     break
                 detail["rotation_angle"] = angle
+            elif name in ("door_rotation_method", "door_nest_priority"):
+                if not raw:
+                    continue
+                try:
+                    parsed_int = int(raw)
+                except ValueError:
+                    invalid = f"row {n}: invalid value for {name}: {raw}"
+                    break
+                detail[_MAPPED_FIELD_TARGETS[name]] = parsed_int
             elif name.startswith("door_custom_field_"):
                 if raw:
                     detail["custom_fields"][name.removeprefix("door_custom_field_")] = raw
