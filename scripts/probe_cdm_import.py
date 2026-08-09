@@ -413,26 +413,45 @@ def _get_acam_pid() -> int | None:
 
 def _window_watcher(target_pid: int) -> None:
     user32 = ctypes.windll.user32
-    titles: list[str] = []
+    windows: list[tuple[int, str, str]] = []
+    children: list[tuple[int, str, str]] = []
+
+    def _child_cb(hwnd: int, lparam: int) -> bool:
+        cls_buf = ctypes.create_unicode_buffer(256)
+        user32.GetClassNameW(hwnd, cls_buf, 256)
+        text_buf = ctypes.create_unicode_buffer(51)
+        user32.GetWindowTextW(hwnd, text_buf, 51)
+        children.append((hwnd, cls_buf.value, text_buf.value))
+        return True
+
+    child_callback = ctypes.WINFUNCTYPE(ctypes.c_bool, wintypes.HWND, wintypes.LPARAM)(_child_cb)
 
     def _cb(hwnd: int, lparam: int) -> bool:
         pid = wintypes.DWORD()
         user32.GetWindowThreadProcessId(hwnd, ctypes.byref(pid))
         if pid.value != target_pid:
             return True
+        cls_buf = ctypes.create_unicode_buffer(256)
+        user32.GetClassNameW(hwnd, cls_buf, 256)
         length = user32.GetWindowTextLengthW(hwnd)
+        title = ""
         if length:
             buf = ctypes.create_unicode_buffer(length + 1)
             user32.GetWindowTextW(hwnd, buf, length + 1)
-            titles.append(buf.value)
+            title = buf.value
+        windows.append((hwnd, cls_buf.value, title))
+        if "Properties" in title:
+            children.clear()
+            user32.EnumChildWindows(hwnd, child_callback, 0)
+            logger.info("PROPS hwnd=%d children=%r", hwnd, list(children))
         return True
 
     callback = ctypes.WINFUNCTYPE(ctypes.c_bool, wintypes.HWND, wintypes.LPARAM)(_cb)
     while True:
         time.sleep(3)
-        titles.clear()
+        windows.clear()
         user32.EnumWindows(callback, 0)
-        logger.info("WINDOWS: n=%d titles=%r", len(titles), titles)
+        logger.info("WINDOWS: n=%d titles=%r", len(windows), windows)
 
 
 def _watch_acam_windows() -> bool:
