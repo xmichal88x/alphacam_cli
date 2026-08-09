@@ -413,10 +413,9 @@ def _get_acam_pid() -> int | None:
 
 def _window_watcher(target_pid: int) -> None:
     user32 = ctypes.windll.user32
+    titles: list[str] = []
 
     def _cb(hwnd: int, lparam: int) -> bool:
-        if not user32.IsWindowVisible(hwnd):
-            return True
         pid = wintypes.DWORD()
         user32.GetWindowThreadProcessId(hwnd, ctypes.byref(pid))
         if pid.value != target_pid:
@@ -425,13 +424,15 @@ def _window_watcher(target_pid: int) -> None:
         if length:
             buf = ctypes.create_unicode_buffer(length + 1)
             user32.GetWindowTextW(hwnd, buf, length + 1)
-            logger.info("WINDOW: %r", buf.value)
+            titles.append(buf.value)
         return True
 
     callback = ctypes.WINFUNCTYPE(ctypes.c_bool, wintypes.HWND, wintypes.LPARAM)(_cb)
     while True:
         time.sleep(3)
+        titles.clear()
         user32.EnumWindows(callback, 0)
+        logger.info("WINDOWS: n=%d titles=%r", len(titles), titles)
 
 
 def _watch_acam_windows() -> bool:
