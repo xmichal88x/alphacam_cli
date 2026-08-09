@@ -196,19 +196,12 @@ def test_import_cdm_csv_all_details_fail_deletes_job(
     job.JobName = "order"
     job.AddCDMOrderDetail.side_effect = RuntimeError("type does not exist")
     am.NewCDMJob.return_value = job
-    jobs = MagicMock()
-    jobs.Count = 1
-    jobs.Item.return_value = job
-    am.Jobs = jobs
+    cleanup = MagicMock(return_value=(True, ""))
+    monkeypatch.setattr("alphacam_cli.core.cdm_db.cleanup_created_job", cleanup)
     monkeypatch.setattr(
         "alphacam_cli.core.cdm_db.vdb5_job_defaults",
         lambda: {"config_name": "Fronty", "material_id": None},
     )
-    monkeypatch.setattr(
-        "alphacam_cli.core.cdm_db.find_cdm_job",
-        MagicMock(return_value=job),
-    )
-    monkeypatch.setattr("alphacam_cli.core.cdm_db.job_count", MagicMock(return_value=0))
     csv_file = tmp_path / "order.csv"
     csv_file.write_text("P003,1,500,500,1;2;3\nP004,1,600,400,1;2;3\n", encoding="utf-8")
     result = _app_with_am(am).import_cdm_csv(str(csv_file))
@@ -217,7 +210,7 @@ def test_import_cdm_csv_all_details_fail_deletes_job(
     assert result["errors"].count("job order: no valid order details, deleted") == 1
     assert any("door type not found: P003" in e for e in result["errors"])
     assert any("door type not found: P004" in e for e in result["errors"])
-    assert job.DeleteFromDB.call_count == 2
+    cleanup.assert_called_once_with(am, job, "order")
 
 
 def test_import_cdm_csv_all_details_fail_delete_via_lookup(
@@ -228,12 +221,8 @@ def test_import_cdm_csv_all_details_fail_delete_via_lookup(
     job.JobName = "order"
     job.AddCDMOrderDetail.side_effect = RuntimeError("type does not exist")
     am.NewCDMJob.return_value = job
-    found_job = MagicMock()
-    monkeypatch.setattr(
-        "alphacam_cli.core.cdm_db.find_cdm_job",
-        MagicMock(return_value=found_job),
-    )
-    monkeypatch.setattr("alphacam_cli.core.cdm_db.job_count", MagicMock(return_value=0))
+    cleanup = MagicMock(return_value=(True, ""))
+    monkeypatch.setattr("alphacam_cli.core.cdm_db.cleanup_created_job", cleanup)
     monkeypatch.setattr(
         "alphacam_cli.core.cdm_db.vdb5_job_defaults",
         lambda: {"config_name": "Fronty", "material_id": None},
@@ -244,8 +233,7 @@ def test_import_cdm_csv_all_details_fail_delete_via_lookup(
     assert result["success"] is False
     assert result["items"] == 0
     assert result["errors"].count("job order: no valid order details, deleted") == 1
-    job.DeleteFromDB.assert_called_once_with()
-    found_job.DeleteFromDB.assert_called_once_with()
+    cleanup.assert_called_once_with(am, job, "order")
 
 
 def test_import_cdm_csv_all_details_fail_cleanup_still_present(
@@ -256,12 +244,8 @@ def test_import_cdm_csv_all_details_fail_cleanup_still_present(
     job.JobName = "order"
     job.AddCDMOrderDetail.side_effect = RuntimeError("type does not exist")
     am.NewCDMJob.return_value = job
-    found_job = MagicMock()
-    monkeypatch.setattr(
-        "alphacam_cli.core.cdm_db.find_cdm_job",
-        MagicMock(return_value=found_job),
-    )
-    monkeypatch.setattr("alphacam_cli.core.cdm_db.job_count", MagicMock(return_value=1))
+    cleanup = MagicMock(return_value=(False, "failed"))
+    monkeypatch.setattr("alphacam_cli.core.cdm_db.cleanup_created_job", cleanup)
     monkeypatch.setattr(
         "alphacam_cli.core.cdm_db.vdb5_job_defaults",
         lambda: {"config_name": "Fronty", "material_id": None},
@@ -273,8 +257,30 @@ def test_import_cdm_csv_all_details_fail_cleanup_still_present(
     assert result["items"] == 0
     assert result["errors"].count("job order: no valid order details, cleanup failed") == 1
     assert not any("no valid order details, deleted" in e for e in result["errors"])
-    job.DeleteFromDB.assert_called_once_with()
-    found_job.DeleteFromDB.assert_called_once_with()
+    cleanup.assert_called_once_with(am, job, "order")
+
+
+def test_import_cdm_csv_all_details_fail_cleanup_unverified(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: pathlib.Path
+) -> None:
+    am = MagicMock()
+    job = MagicMock()
+    job.JobName = "order"
+    job.AddCDMOrderDetail.side_effect = RuntimeError("type does not exist")
+    am.NewCDMJob.return_value = job
+    cleanup = MagicMock(return_value=(False, "unverified"))
+    monkeypatch.setattr("alphacam_cli.core.cdm_db.cleanup_created_job", cleanup)
+    monkeypatch.setattr(
+        "alphacam_cli.core.cdm_db.vdb5_job_defaults",
+        lambda: {"config_name": "Fronty", "material_id": None},
+    )
+    csv_file = tmp_path / "order.csv"
+    csv_file.write_text("P003,1,500,500,1;2;3\n", encoding="utf-8")
+    result = _app_with_am(am).import_cdm_csv(str(csv_file))
+    assert result["success"] is False
+    assert result["items"] == 0
+    assert result["errors"].count("job order: no valid order details, cleanup unverified") == 1
+    cleanup.assert_called_once_with(am, job, "order")
 
 
 def test_import_cdm_csv_all_details_fail_keeps_existing_job(
@@ -309,8 +315,9 @@ def test_import_cdm_csv_cleanup_failure_reports_error(
     job = MagicMock()
     job.JobName = "order"
     job.AddCDMOrderDetail.side_effect = RuntimeError("type does not exist")
-    job.DeleteFromDB.side_effect = RuntimeError("db locked")
     am.NewCDMJob.return_value = job
+    cleanup = MagicMock(return_value=(False, "failed"))
+    monkeypatch.setattr("alphacam_cli.core.cdm_db.cleanup_created_job", cleanup)
     monkeypatch.setattr(
         "alphacam_cli.core.cdm_db.vdb5_job_defaults",
         lambda: {"config_name": "Fronty", "material_id": None},
@@ -321,5 +328,87 @@ def test_import_cdm_csv_cleanup_failure_reports_error(
     assert result["success"] is False
     assert result["items"] == 0
     assert any("cleanup failed" in e for e in result["errors"])
-    assert any("db locked" in e for e in result["errors"])
-    job.DeleteFromDB.assert_called_once_with()
+    cleanup.assert_called_once_with(am, job, "order")
+
+
+# --- Application.run_cdm ---
+
+
+def test_run_cdm_job_duplicate(monkeypatch: pytest.MonkeyPatch) -> None:
+    am = MagicMock()
+    monkeypatch.setattr(
+        "alphacam_cli.core.cdm_db.find_cdm_job",
+        MagicMock(return_value=MagicMock()),
+    )
+    app = _app_with_am(am)
+    with pytest.raises(RuntimeError, match="cdm: job already exists: JOB-001"):
+        app.run_cdm("JOB-001", "Typ Frontu 1")
+    am.NewCDMJob.assert_not_called()
+
+
+def test_run_cdm_add_detail_failure_cleans_up(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    am = MagicMock()
+    job = MagicMock()
+    job.AddCDMOrderDetail.side_effect = RuntimeError("FOREIGN KEY constraint failed")
+    am.NewCDMJob.return_value = job
+    monkeypatch.setattr("alphacam_cli.core.cdm_db.find_cdm_job", MagicMock(return_value=None))
+    monkeypatch.setattr(
+        "alphacam_cli.core.cdm_db.vdb5_job_defaults",
+        lambda: {"config_name": None, "material_id": None},
+    )
+    cleanup = MagicMock(return_value=(True, ""))
+    monkeypatch.setattr("alphacam_cli.core.cdm_db.cleanup_created_job", cleanup)
+    app = _app_with_am(am)
+    with pytest.raises(RuntimeError, match="cdm: door type not found: XYZ"):
+        app.run_cdm("JOB-001", "XYZ")
+    cleanup.assert_called_once_with(am, job, "JOB-001")
+
+
+def test_run_cdm_save_detail_failure_cleans_up(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    am = MagicMock()
+    job = MagicMock()
+    detail = MagicMock()
+    detail.SaveToDatabase.side_effect = RuntimeError("db locked")
+    job.AddCDMOrderDetail.return_value = detail
+    am.NewCDMJob.return_value = job
+    monkeypatch.setattr("alphacam_cli.core.cdm_db.find_cdm_job", MagicMock(return_value=None))
+    monkeypatch.setattr(
+        "alphacam_cli.core.cdm_db.vdb5_job_defaults",
+        lambda: {"config_name": None, "material_id": None},
+    )
+    cleanup = MagicMock(return_value=(True, ""))
+    monkeypatch.setattr("alphacam_cli.core.cdm_db.cleanup_created_job", cleanup)
+    app = _app_with_am(am)
+    with pytest.raises(RuntimeError, match="cdm: save order detail failed: db locked"):
+        app.run_cdm("JOB-001", "Typ Frontu 1")
+    cleanup.assert_called_once_with(am, job, "JOB-001")
+
+
+# --- m2: vdb5_job_defaults fetched at most once ---
+
+
+def test_import_cdm_csv_defaults_fetched_once(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: pathlib.Path
+) -> None:
+    am = MagicMock()
+    job = MagicMock()
+    detail = MagicMock()
+    am.NewCDMJob.return_value = job
+    job.AddCDMOrderDetail.return_value = detail
+    defaults = MagicMock(return_value={"config_name": "Fronty", "material_id": 4})
+    monkeypatch.setattr("alphacam_cli.core.cdm_db.vdb5_job_defaults", defaults)
+    monkeypatch.setattr(
+        "alphacam_cli.core.cdm_db.sheet_materials",
+        lambda: {"MDF18 - 2800 x 2070": 4},
+    )
+    csv_file = tmp_path / "order.csv"
+    csv_file.write_text("P003,1,500,500,1;18;0;0\n", encoding="utf-8")
+    result = _app_with_am(am).import_cdm_csv(str(csv_file))
+    assert result["success"] is True
+    assert result["material"] == "MDF18 - 2800 x 2070"
+    defaults.assert_called_once_with()
+    am.ConfigurationSettings.GetByName.assert_called_once_with("Fronty")

@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+import os
 import pathlib
+import sys
 import types
+from typing import Any
 from unittest.mock import MagicMock
 
 import pytest
@@ -135,6 +138,11 @@ def test_set_job_material_rows_updated(monkeypatch: pytest.MonkeyPatch) -> None:
 
 def test_set_job_material_no_rows(monkeypatch: pytest.MonkeyPatch) -> None:
     _mock_run(monkeypatch, stdout="rows: 0")
+    assert cdm_db.set_job_material("order", 4) is False
+
+
+def test_set_job_material_ignores_detail_rows(monkeypatch: pytest.MonkeyPatch) -> None:
+    _mock_run(monkeypatch, stdout="detail_rows: 1")
     assert cdm_db.set_job_material("order", 4) is False
 
 
@@ -274,3 +282,86 @@ def test_parse_cdm_rows_empty_rows_skipped() -> None:
     details, errors = cdm_db.parse_cdm_rows(rows, False)
     assert errors == []
     assert [d["row"] for d in details] == [2]
+
+
+# --- cleanup_created_job ---
+
+
+def _cleanup_env(
+    monkeypatch: pytest.MonkeyPatch,
+    job: MagicMock,
+    found: Any = None,
+    count: int | None = 0,
+) -> MagicMock:
+    monkeypatch.setattr("alphacam_cli.core.cdm_db.find_cdm_job", MagicMock(return_value=found))
+    monkeypatch.setattr("alphacam_cli.core.cdm_db.job_count", MagicMock(return_value=count))
+    return job
+
+
+def test_cleanup_created_job_deleted(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    job = MagicMock()
+    found = MagicMock()
+    _cleanup_env(monkeypatch, job, found=found, count=0)
+    deleted, reason = cdm_db.cleanup_created_job(MagicMock(), job, "order")
+    assert (deleted, reason) == (True, "")
+    job.DeleteFromDB.assert_called_once_with()
+    found.DeleteFromDB.assert_called_once_with()
+
+
+def test_cleanup_created_job_delete_via_lookup_only(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    job = MagicMock()
+    del job.DeleteFromDB
+    found = MagicMock()
+    _cleanup_env(monkeypatch, job, found=found, count=0)
+    deleted, reason = cdm_db.cleanup_created_job(MagicMock(), job, "order")
+    assert (deleted, reason) == (True, "")
+    found.DeleteFromDB.assert_called_once_with()
+
+
+def test_cleanup_created_job_still_present(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    job = MagicMock()
+    _cleanup_env(monkeypatch, job, found=None, count=1)
+    deleted, reason = cdm_db.cleanup_created_job(MagicMock(), job, "order")
+    assert (deleted, reason) == (False, "failed")
+
+
+def test_cleanup_created_job_unverified_count_none(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    job = MagicMock()
+    _cleanup_env(monkeypatch, job, found=None, count=None)
+    deleted, reason = cdm_db.cleanup_created_job(MagicMock(), job, "order")
+    assert (deleted, reason) == (False, "unverified")
+
+
+def test_cleanup_created_job_exception_logged(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    job = MagicMock()
+    job.DeleteFromDB.side_effect = RuntimeError("db locked")
+    monkeypatch.setattr("alphacam_cli.core.cdm_db.job_count", MagicMock(return_value=0))
+    calls: list[str] = []
+    deleted, reason = cdm_db.cleanup_created_job(MagicMock(), job, "order", log=calls.append)
+    assert (deleted, reason) == (False, "failed")
+    assert any("db locked" in msg for msg in calls)
+
+
+# --- _scripts_dir ---
+
+
+def test_scripts_dir_source_tree() -> None:
+    result = cdm_db._scripts_dir()
+    assert os.path.basename(result) == "scripts"
+    assert os.path.isdir(result)
+
+
+def test_scripts_dir_frozen(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(sys, "frozen", True, raising=False)
+    monkeypatch.setattr(sys, "_MEIPASS", r"C:\bundle", raising=False)
+    assert cdm_db._scripts_dir() == os.path.join(r"C:\bundle", "scripts")

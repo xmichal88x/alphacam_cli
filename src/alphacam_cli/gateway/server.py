@@ -725,16 +725,25 @@ class GatewayServer:
         type_name = str(params.get("type_name", "")).strip()
         if not type_name:
             raise COMError("cdm: type_name is required")
-        width = float(params.get("width", 400))
+        try:
+            width = float(params.get("width", 400))
+        except (TypeError, ValueError):
+            raise COMError("cdm: invalid width") from None
         if width <= 0:
             raise COMError("cdm: width must be positive")
-        length = float(params.get("length", 300))
+        try:
+            length = float(params.get("length", 300))
+        except (TypeError, ValueError):
+            raise COMError("cdm: invalid length") from None
         if length <= 0:
             raise COMError("cdm: length must be positive")
-        quantity = int(params.get("quantity", 1))
+        try:
+            quantity = int(params.get("quantity", 1))
+        except (TypeError, ValueError):
+            raise COMError("cdm: invalid quantity") from None
         if quantity <= 0:
             raise COMError("cdm: quantity must be positive")
-        bypass_nest = bool(params.get("bypass_nest", False))
+        bypass_nest = isinstance(params.get("bypass_nest"), bool) and params["bypass_nest"]
         material_name = str(params.get("material", "")).strip() or None
         try:
             am = self._cdm_automation_manager()
@@ -767,6 +776,14 @@ class GatewayServer:
         try:
             detail = job.AddCDMOrderDetail(type_name)
         except Exception as e:
+            deleted, reason = cdm_db.cleanup_created_job(
+                am,
+                job,
+                job_name,
+                log=lambda msg: self._logger.warning("cdm cleanup: %s", msg),
+            )
+            if not deleted:
+                self._logger.info("cdm cleanup: job '%s' not removed (%s)", job_name, reason)
             if type_name not in self._cdm_known_door_types(am):
                 raise COMError(f"cdm: door type not found: {type_name}") from e
             raise COMError(f"cdm: add order detail failed: {e}") from e
@@ -777,6 +794,14 @@ class GatewayServer:
             detail.ByPassNest = bypass_nest
             detail.SaveToDatabase()
         except Exception as e:
+            deleted, reason = cdm_db.cleanup_created_job(
+                am,
+                job,
+                job_name,
+                log=lambda msg: self._logger.warning("cdm cleanup: %s", msg),
+            )
+            if not deleted:
+                self._logger.info("cdm cleanup: job '%s' not removed (%s)", job_name, reason)
             raise COMError(f"cdm: save order detail failed: {e}") from e
         result: dict[str, Any] = {
             "success": True,
@@ -847,7 +872,7 @@ class GatewayServer:
         if job_param and name_param:
             raise COMError("cdm: --name and --job are mutually exclusive")
         separator = str(params.get("separator", ","))
-        has_header = bool(params.get("has_header", False))
+        has_header = isinstance(params.get("has_header"), bool) and params["has_header"]
         if not os.path.exists(csv_path):
             raise COMError(f"cdm: csv file not found: {csv_path}")
         try:
@@ -897,7 +922,7 @@ class GatewayServer:
             try:
                 job = cdm_db.find_cdm_job(am, job_param)
             except Exception as e:
-                raise COMError(f"cdm: import csv failed: {e}") from e
+                raise COMError(f"cdm: job lookup failed: {e}") from e
             if job is None:
                 raise COMError(f"cdm: job not found: {job_param}")
             job_name = job_param
@@ -953,21 +978,18 @@ class GatewayServer:
         elif material_name is None:
             errors.append(f"job {job_name}: no material set (required for processing)")
         if items == 0 and not job_param:
-            deleted = False
-            try:
-                if hasattr(job, "DeleteFromDB"):
-                    job.DeleteFromDB()
-                found = cdm_db.find_cdm_job(am, job_name)
-                if found is not None and hasattr(found, "DeleteFromDB"):
-                    found.DeleteFromDB()
-                count = cdm_db.job_count(job_name)
-                deleted = count == 0
-            except Exception as e:
-                self._logger.warning("cdm import: cleanup failed: %r", e)
+            deleted, reason = cdm_db.cleanup_created_job(
+                am,
+                job,
+                job_name,
+                log=lambda msg: self._logger.warning("cdm import: cleanup failed: %s", msg),
+            )
             if deleted:
                 errors.append(f"job {job_name}: no valid order details, deleted")
-            else:
+            elif reason == "failed":
                 errors.append(f"job {job_name}: no valid order details, cleanup failed")
+            else:
+                errors.append(f"job {job_name}: no valid order details, cleanup unverified")
         return {
             "success": items > 0,
             "job_name": job_name,

@@ -523,6 +523,7 @@ class Application:
         try:
             detail = job.AddCDMOrderDetail(type_name)
         except Exception as e:
+            cdm_db.cleanup_created_job(am, job, job_name)
             raise RuntimeError(f"cdm: door type not found: {type_name}") from e  # noqa: TRY003
         try:
             detail.Width = width
@@ -531,6 +532,7 @@ class Application:
             detail.ByPassNest = bypass_nest
             detail.SaveToDatabase()
         except Exception as e:
+            cdm_db.cleanup_created_job(am, job, job_name)
             raise RuntimeError(f"cdm: save order detail failed: {e}") from e  # noqa: TRY003
         result: dict[str, Any] = {
             "success": True,
@@ -656,7 +658,7 @@ class Application:
             try:
                 cdm_job = cdm_db.find_cdm_job(am, job)
             except Exception as e:
-                raise RuntimeError(f"cdm: import csv failed: {e}") from e  # noqa: TRY003
+                raise RuntimeError(f"cdm: job lookup failed: {e}") from e  # noqa: TRY003
             if cdm_job is None:
                 raise RuntimeError(f"cdm: job not found: {job}")  # noqa: TRY003
             job_name = job
@@ -716,22 +718,13 @@ class Application:
         elif material_name is None:
             errors.append(f"job {job_name}: no material set (required for processing)")
         if items == 0 and not job:
-            deleted = False
-            try:
-                if hasattr(cdm_job, "DeleteFromDB"):
-                    cdm_job.DeleteFromDB()
-                found = cdm_db.find_cdm_job(am, job_name)
-                if found is not None and hasattr(found, "DeleteFromDB"):
-                    found.DeleteFromDB()
-                count = cdm_db.job_count(job_name)
-                deleted = count == 0
-            except Exception as e:
-                errors.append(f"job {job_name}: no valid order details, cleanup failed: {e}")
+            deleted, reason = cdm_db.cleanup_created_job(am, cdm_job, job_name)
+            if deleted:
+                errors.append(f"job {job_name}: no valid order details, deleted")
+            elif reason == "failed":
+                errors.append(f"job {job_name}: no valid order details, cleanup failed")
             else:
-                if deleted:
-                    errors.append(f"job {job_name}: no valid order details, deleted")
-                else:
-                    errors.append(f"job {job_name}: no valid order details, cleanup failed")
+                errors.append(f"job {job_name}: no valid order details, cleanup unverified")
         return {
             "success": items > 0,
             "job_name": job_name,

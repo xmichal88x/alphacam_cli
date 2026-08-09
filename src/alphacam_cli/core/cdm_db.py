@@ -8,11 +8,26 @@ import os
 import re
 import subprocess
 import sys
+from collections.abc import Callable
 from typing import Any
 
 logger = logging.getLogger(__name__)
 
 DESIGN_DIMS_FIELDS = 50
+
+
+def _scripts_dir() -> str:
+    """Directory with helper scripts (sheet_materials.py + vdb5 *.ps1), PyInstaller-safe."""
+    if getattr(sys, "frozen", False):
+        base = getattr(sys, "_MEIPASS", os.path.dirname(os.path.abspath(__file__)))
+        return os.path.join(base, "scripts")
+    return os.path.join(
+        os.path.dirname(os.path.abspath(__file__)),
+        "..",
+        "..",
+        "..",
+        "scripts",
+    )
 
 
 def read_cdm_csv(path: str, separator: str) -> list[list[str]]:
@@ -85,14 +100,7 @@ def parse_cdm_rows(
 
 def sheet_materials() -> dict[str, int]:
     """Material name -> sheet/material ID from SQLite sheet database."""
-    script_path = os.path.join(
-        os.path.dirname(os.path.abspath(__file__)),
-        "..",
-        "..",
-        "..",
-        "scripts",
-        "sheet_materials.py",
-    )
+    script_path = os.path.join(_scripts_dir(), "sheet_materials.py")
     try:
         proc = subprocess.run(
             [sys.executable, script_path],
@@ -139,14 +147,7 @@ def sheet_materials() -> dict[str, int]:
 
 def vdb5_job_defaults() -> dict[str, Any]:
     """Read default config name and material id from the Automation Manager database."""
-    script_path = os.path.join(
-        os.path.dirname(os.path.abspath(__file__)),
-        "..",
-        "..",
-        "..",
-        "scripts",
-        "vdb5_job_defaults.ps1",
-    )
+    script_path = os.path.join(_scripts_dir(), "vdb5_job_defaults.ps1")
     try:
         proc = subprocess.run(
             ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", script_path],
@@ -181,14 +182,7 @@ def vdb5_job_defaults() -> dict[str, Any]:
 
 def set_job_material(job_name: str, material_id: int) -> bool:
     """Set AM_JobDetails.fkMaterialID for a job by name; True when rows updated."""
-    script_path = os.path.join(
-        os.path.dirname(os.path.abspath(__file__)),
-        "..",
-        "..",
-        "..",
-        "scripts",
-        "vdb5_set_job_material.ps1",
-    )
+    script_path = os.path.join(_scripts_dir(), "vdb5_set_job_material.ps1")
     try:
         proc = subprocess.run(
             [
@@ -216,20 +210,13 @@ def set_job_material(job_name: str, material_id: int) -> bool:
     if proc.returncode != 0:
         logger.warning("cdm material: vdb5 update failed: %s", proc.stdout.strip())
         return False
-    match = re.search(r"rows:\s*(\d+)", proc.stdout)
+    match = re.search(r"(?m)^rows:\s*(\d+)", proc.stdout)
     return bool(match and int(match.group(1)) > 0)
 
 
 def job_count(job_name: str) -> int | None:
     """Count AM_JobDetails rows for a job by name; None when the read fails."""
-    script_path = os.path.join(
-        os.path.dirname(os.path.abspath(__file__)),
-        "..",
-        "..",
-        "..",
-        "scripts",
-        "vdb5_job_count.ps1",
-    )
+    script_path = os.path.join(_scripts_dir(), "vdb5_job_count.ps1")
     try:
         proc = subprocess.run(
             [
@@ -273,14 +260,7 @@ def _door_type_name(row: dict[str, Any]) -> str:
 
 def vdb5_door_type_names() -> tuple[list[str], bool]:
     """Read door type names from the vdb5 database; (names, ok) or ([], False)."""
-    script_path = os.path.join(
-        os.path.dirname(os.path.abspath(__file__)),
-        "..",
-        "..",
-        "..",
-        "scripts",
-        "vdb5_door_types.ps1",
-    )
+    script_path = os.path.join(_scripts_dir(), "vdb5_door_types.ps1")
     try:
         proc = subprocess.run(
             ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", script_path],
@@ -353,3 +333,34 @@ def find_cdm_job(am: Any, name: str) -> Any | None:
         if str(jj.JobName) == name:
             return jj
     return None
+
+
+def cleanup_created_job(
+    am: Any,
+    job: Any,
+    job_name: str,
+    log: Callable[[str], None] | None = None,
+) -> tuple[bool, str]:
+    """Best-effort delete of a just-created CDM job (direct, then via collection lookup).
+
+    Returns ``(deleted, reason)`` where ``reason`` is ``""`` when the DB row is
+    gone (verified via VistaDB job_count), ``"failed"`` when an exception
+    occurred or the job is still present, and ``"unverified"`` when the
+    job_count read returned None (VistaDB unavailable).
+    """
+    try:
+        if hasattr(job, "DeleteFromDB"):
+            job.DeleteFromDB()
+        found = find_cdm_job(am, job_name)
+        if found is not None and hasattr(found, "DeleteFromDB"):
+            found.DeleteFromDB()
+        count = job_count(job_name)
+    except Exception as e:
+        if log is not None:
+            log(f"{e!r}")
+        return False, "failed"
+    if count == 0:
+        return True, ""
+    if count is None:
+        return False, "unverified"
+    return False, "failed"

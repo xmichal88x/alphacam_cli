@@ -1235,9 +1235,75 @@ def test_run_cdm_handler_door_type_not_found(
     job.AddCDMOrderDetail.side_effect = RuntimeError("FOREIGN KEY constraint failed")
     am.NewCDMJob.return_value = job
     am.Jobs.Count = 0
+    cleanup = MagicMock(return_value=(True, ""))
+    monkeypatch.setattr("alphacam_cli.core.cdm_db.cleanup_created_job", cleanup)
     gw = GatewayServer()
     with pytest.raises(COMError, match="cdm: door type not found: XYZ"):
         gw._handler_run_cdm({"job_name": "JOB-001", "type_name": "XYZ"})
+    args, kwargs = cleanup.call_args
+    assert args == (am, job, "JOB-001")
+    assert callable(kwargs.get("log"))
+
+
+def test_run_cdm_handler_save_detail_failed_cleans_up(
+    server_app: MagicMock, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _, _, am = _mock_cdm_com(monkeypatch)
+    job = MagicMock()
+    detail = MagicMock()
+    detail.SaveToDatabase.side_effect = RuntimeError("db locked")
+    am.NewCDMJob.return_value = job
+    job.AddCDMOrderDetail.return_value = detail
+    monkeypatch.setattr(
+        "alphacam_cli.core.cdm_db.vdb5_job_defaults",
+        lambda: {"config_name": None, "material_id": None},
+    )
+    cleanup = MagicMock(return_value=(False, "failed"))
+    monkeypatch.setattr("alphacam_cli.core.cdm_db.cleanup_created_job", cleanup)
+    gw = GatewayServer()
+    with pytest.raises(COMError, match="cdm: save order detail failed: db locked"):
+        gw._handler_run_cdm({"job_name": "JOB-001", "type_name": "Typ Frontu 1"})
+    args, kwargs = cleanup.call_args
+    assert args == (am, job, "JOB-001")
+    assert callable(kwargs.get("log"))
+
+
+def test_run_cdm_handler_bypass_nest_string_false(
+    server_app: MagicMock, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _, _, am = _mock_cdm_com(monkeypatch)
+    job = MagicMock()
+    detail = MagicMock()
+    am.NewCDMJob.return_value = job
+    job.AddCDMOrderDetail.return_value = detail
+    monkeypatch.setattr(
+        "alphacam_cli.core.cdm_db.vdb5_job_defaults",
+        lambda: {"config_name": None, "material_id": None},
+    )
+    gw = GatewayServer()
+    result = gw._handler_run_cdm(
+        {"job_name": "JOB-001", "type_name": "Typ Frontu 1", "bypass_nest": "false"}
+    )
+    assert result["success"] is True
+    assert detail.ByPassNest is False
+
+
+def test_run_cdm_handler_invalid_width(server_app: MagicMock) -> None:
+    gw = GatewayServer()
+    with pytest.raises(COMError, match="cdm: invalid width"):
+        gw._handler_run_cdm({"job_name": "JOB-001", "type_name": "X", "width": "abc"})
+
+
+def test_run_cdm_handler_invalid_length(server_app: MagicMock) -> None:
+    gw = GatewayServer()
+    with pytest.raises(COMError, match="cdm: invalid length"):
+        gw._handler_run_cdm({"job_name": "JOB-001", "type_name": "X", "length": "abc"})
+
+
+def test_run_cdm_handler_invalid_quantity(server_app: MagicMock) -> None:
+    gw = GatewayServer()
+    with pytest.raises(COMError, match="cdm: invalid quantity"):
+        gw._handler_run_cdm({"job_name": "JOB-001", "type_name": "X", "quantity": "abc"})
 
 
 def test_cdm_types_handler(server_app: MagicMock, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -1659,6 +1725,29 @@ def test_cdm_import_csv_handler_defaults_material(
     assert args[0][args[0].index("-MaterialID") + 1] == "4"
 
 
+def test_cdm_import_csv_handler_defaults_fetched_once(
+    server_app: MagicMock, monkeypatch: pytest.MonkeyPatch, tmp_path: pathlib.Path
+) -> None:
+    _, _, am = _mock_cdm_com(monkeypatch)
+    job = MagicMock()
+    detail = MagicMock()
+    am.NewCDMJob.return_value = job
+    job.AddCDMOrderDetail.return_value = detail
+    csv_file = tmp_path / "order.csv"
+    csv_file.write_text("P003,1,500,500,1;18;0;0\n", encoding="utf-8")
+    gw = GatewayServer()
+    defaults = MagicMock(return_value={"config_name": "Fronty", "material_id": 4})
+    monkeypatch.setattr("alphacam_cli.core.cdm_db.vdb5_job_defaults", defaults)
+    monkeypatch.setattr(
+        "alphacam_cli.core.cdm_db.sheet_materials", lambda: {"MDF18 - 2800 x 2070": 4}
+    )
+    result = gw._handler_cdm_import_csv({"csv": str(csv_file)})
+    assert result["success"] is True
+    assert result["material"] == "MDF18 - 2800 x 2070"
+    defaults.assert_called_once_with()
+    am.ConfigurationSettings.GetByName.assert_called_once_with("Fronty")
+
+
 def test_cdm_import_csv_handler_no_defaults(
     server_app: MagicMock, monkeypatch: pytest.MonkeyPatch, tmp_path: pathlib.Path
 ) -> None:
@@ -1843,15 +1932,8 @@ def test_cdm_import_csv_handler_all_details_fail_deletes_job(
     job.JobName = "order"
     job.AddCDMOrderDetail.side_effect = RuntimeError("type does not exist")
     am.NewCDMJob.return_value = job
-    jobs = MagicMock()
-    jobs.Count = 1
-    jobs.Item.return_value = job
-    am.Jobs = jobs
-    monkeypatch.setattr(
-        "alphacam_cli.core.cdm_db.find_cdm_job",
-        MagicMock(return_value=job),
-    )
-    monkeypatch.setattr("alphacam_cli.core.cdm_db.job_count", MagicMock(return_value=0))
+    cleanup = MagicMock(return_value=(True, ""))
+    monkeypatch.setattr("alphacam_cli.core.cdm_db.cleanup_created_job", cleanup)
     csv_file = tmp_path / "order.csv"
     csv_file.write_text("P003,1,500,500,1;2;3\nP004,1,600,400,1;2;3\n", encoding="utf-8")
     gw = GatewayServer()
@@ -1865,7 +1947,9 @@ def test_cdm_import_csv_handler_all_details_fail_deletes_job(
     assert result["errors"].count("job order: no valid order details, deleted") == 1
     assert any("door type not found: P003" in e for e in result["errors"])
     assert any("door type not found: P004" in e for e in result["errors"])
-    assert job.DeleteFromDB.call_count == 2
+    args, kwargs = cleanup.call_args
+    assert args == (am, job, "order")
+    assert callable(kwargs.get("log"))
     assert not any(
         record.levelname == "INFO" and "cdm import cleanup:" in record.getMessage()
         for record in caplog.records
@@ -1880,12 +1964,8 @@ def test_cdm_import_csv_handler_all_details_fail_delete_via_lookup(
     job.JobName = "order"
     job.AddCDMOrderDetail.side_effect = RuntimeError("type does not exist")
     am.NewCDMJob.return_value = job
-    found_job = MagicMock()
-    monkeypatch.setattr(
-        "alphacam_cli.core.cdm_db.find_cdm_job",
-        MagicMock(return_value=found_job),
-    )
-    monkeypatch.setattr("alphacam_cli.core.cdm_db.job_count", MagicMock(return_value=0))
+    cleanup = MagicMock(return_value=(True, ""))
+    monkeypatch.setattr("alphacam_cli.core.cdm_db.cleanup_created_job", cleanup)
     csv_file = tmp_path / "order.csv"
     csv_file.write_text("P003,1,500,500,1;2;3\n", encoding="utf-8")
     gw = GatewayServer()
@@ -1897,8 +1977,9 @@ def test_cdm_import_csv_handler_all_details_fail_delete_via_lookup(
     assert result["success"] is False
     assert result["items"] == 0
     assert result["errors"].count("job order: no valid order details, deleted") == 1
-    job.DeleteFromDB.assert_called_once_with()
-    found_job.DeleteFromDB.assert_called_once_with()
+    args, kwargs = cleanup.call_args
+    assert args == (am, job, "order")
+    assert callable(kwargs.get("log"))
 
 
 def test_cdm_import_csv_handler_all_details_fail_cleanup_still_present(
@@ -1909,12 +1990,8 @@ def test_cdm_import_csv_handler_all_details_fail_cleanup_still_present(
     job.JobName = "order"
     job.AddCDMOrderDetail.side_effect = RuntimeError("type does not exist")
     am.NewCDMJob.return_value = job
-    found_job = MagicMock()
-    monkeypatch.setattr(
-        "alphacam_cli.core.cdm_db.find_cdm_job",
-        MagicMock(return_value=found_job),
-    )
-    monkeypatch.setattr("alphacam_cli.core.cdm_db.job_count", MagicMock(return_value=1))
+    cleanup = MagicMock(return_value=(False, "failed"))
+    monkeypatch.setattr("alphacam_cli.core.cdm_db.cleanup_created_job", cleanup)
     csv_file = tmp_path / "order.csv"
     csv_file.write_text("P003,1,500,500,1;2;3\n", encoding="utf-8")
     gw = GatewayServer()
@@ -1927,8 +2004,35 @@ def test_cdm_import_csv_handler_all_details_fail_cleanup_still_present(
     assert result["items"] == 0
     assert result["errors"].count("job order: no valid order details, cleanup failed") == 1
     assert not any("no valid order details, deleted" in e for e in result["errors"])
-    job.DeleteFromDB.assert_called_once_with()
-    found_job.DeleteFromDB.assert_called_once_with()
+    args, kwargs = cleanup.call_args
+    assert args == (am, job, "order")
+    assert callable(kwargs.get("log"))
+
+
+def test_cdm_import_csv_handler_all_details_fail_cleanup_unverified(
+    server_app: MagicMock, monkeypatch: pytest.MonkeyPatch, tmp_path: pathlib.Path
+) -> None:
+    _, _, am = _mock_cdm_com(monkeypatch)
+    job = MagicMock()
+    job.JobName = "order"
+    job.AddCDMOrderDetail.side_effect = RuntimeError("type does not exist")
+    am.NewCDMJob.return_value = job
+    cleanup = MagicMock(return_value=(False, "unverified"))
+    monkeypatch.setattr("alphacam_cli.core.cdm_db.cleanup_created_job", cleanup)
+    csv_file = tmp_path / "order.csv"
+    csv_file.write_text("P003,1,500,500,1;2;3\n", encoding="utf-8")
+    gw = GatewayServer()
+    monkeypatch.setattr(
+        "alphacam_cli.core.cdm_db.vdb5_job_defaults",
+        lambda: {"config_name": "Fronty", "material_id": None},
+    )
+    result = gw._handler_cdm_import_csv({"csv": str(csv_file)})
+    assert result["success"] is False
+    assert result["items"] == 0
+    assert result["errors"].count("job order: no valid order details, cleanup unverified") == 1
+    args, kwargs = cleanup.call_args
+    assert args == (am, job, "order")
+    assert callable(kwargs.get("log"))
 
 
 def test_cdm_import_csv_handler_all_details_fail_keeps_existing_job(
