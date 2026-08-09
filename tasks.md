@@ -561,3 +561,24 @@ detail.Width=600; detail.Length=400; detail.Quantity=2; detail.SaveToDatabase()
 - [ ] README sekcja `cdm import` — NIEAKTUALNA (mówi "requires GUI (Session 2)") — poprawić na nową semantykę (auto-create, --job, 5 kolumn).
 - [ ] Kaizen: `_find_cdm_job(am, name)` helper — duplikacja lookupu między `_handler_cdm_import_csv` a `_handler_cdm_delete_job`.
 - [ ] Materiał — nadal bez settera API (v1 ignorowany, GUI też zostawia fkMaterialID=0).
+
+### ✅ CDM IMPORT — MATERIAŁ Z SQLITE (2026-08-09, E2E potwierdzone)
+
+**Materiał = ARKUSZ z bazy `C:\ALPHACAM\LICOMDAT\sheet_database_v2.db` (SQLite)** — to jest "zakładka Materiały" w Automation Manager GUI (NIE VistaDB AM_Materials — tam są stare arkusze "Material 2/3/4" nieużywane przez GUI):
+- tabele: `materials` (1=17mm, 2=MDF_18), `sheets` (2=MDF_18 2440x1220x18, 3=MDF 1500x840, 4=MDF18 2800x2070), `thicknesses`, `zones`
+- potwierdzenie: stare joby — CDM_OrderDetails fkMaterialID=2 (job 129/132) = arkusz MDF_18
+- **fkMaterialID w AM_JobDetails/CDM_OrderDetails = ID z SQLite** (sheets.id, dla MDF_18 = 2)
+
+**Implementacja (commity `6def4e3`..`4f3668d`):**
+- `scripts/sheet_materials.py` — odczyt SQLite (sheets+materials) → JSON (subprocess python)
+- `_sheet_materials()` w server.py/application.py — dict nazwa→ID (priorytet sheets)
+- `scripts/vdb5_set_job_material.ps1` — **dwukrokowy**: SELECT JobDetailID po nazwie → UPDATE [fkMaterialID] po ID (VistaDB: UPDATE WHERE JobName=... zwraca rows:0 — quirk; po ID działa; [fkMaterialID] escape — MATERIAL = keyword!)
+- E2E: `cdm import prod_mat.csv --name "Material E2E 003"` (kol 6 = MDF_18) → **job 170 fkMaterialID=2** — materiał ustawiony, bez ostrzeżeń
+- 474 passed, ruff 0, mypy 0
+
+**Pułapki odkryte:**
+- VistaDB: `SET fkMaterialID` → "Incorrect syntax near MATERIAL" — wymaga `[fkMaterialID]`
+- VistaDB: UPDATE WHERE string column (JobName) zwraca rows:0 (SELECT działa!) — update po JobDetailID
+- PowerShell: `param()` musi być pierwszą instrukcją
+- Testy ręczne skryptów ps1 przez SSH z parametrami ze spacjami są ZWODNICZE (cmd rozbija argumenty — '$JobName' = 'Material') — testować przez handler/subprocess, nie przez ssh z paramami
+- `CDM.mdb` (Access, C:\ALPHACAM\LICOMDAT\CDM\) — stara baza CDM: AD_MATERIALS ma tylko "17mm"; OLEDB providers nie zainstalowane — odczyt przez mdbtools na Linuxie
