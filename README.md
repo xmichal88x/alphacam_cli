@@ -831,6 +831,65 @@ Delete a CDM job from the database (headless, no dialogs).
 alphacam cdm delete "Job 2026-01"
 ```
 
+#### `order-details`
+
+List CDM order details from the database (by job name; without argument — all jobs). Fields: style, quantity, size, material, customer/order/item, comment, custom fields, rotation, nesting priority, drilling, small nest part, active flag.
+
+```bash
+alphacam cdm order-details list "Zamowienie X"
+alphacam cdm order-details list          # wszystkie joby
+```
+
+#### `doorpaths`
+
+List door machining paths from the database (34 in the production DB). Optional door type filter (TypeName, e.g. L_B_10mm). Tool parameters: tool, spindle, feeds, depths, lead-in/out, slopes, stock, in/out side.
+
+```bash
+alphacam cdm doorpaths list
+alphacam cdm doorpaths list L_B_10mm
+```
+
+#### `materials`
+
+List sheet materials (AM_Materials: id, name, width, length, thickness, grain restriction).
+
+```bash
+alphacam cdm materials list
+```
+
+#### `config`
+
+List configurations and show details (base + nesting + CDM sections).
+
+```bash
+alphacam cdm config list
+alphacam cdm config show "Fronty"
+```
+
+#### `setups` / `customers` / `machining-orders` / `doorstyles` / `multidrill` / `fittings` / `layers-mapping`
+
+Short descriptions:
+
+- `setups` — list production setups (AM_Setups).
+- `customers` — list CDM customers (AM_CustomerDetails).
+- `machining-orders` — list machining orders (AM_MachiningOrder).
+- `doorstyles` — list door styles (CDM_UserStyles).
+- `multidrill` — list multidrill patterns (AM_Multidrill).
+- `fittings` — list fittings (AM_Fittings).
+- `layers-mapping` — list layer mappings (AM_LayerMapping).
+
+```bash
+alphacam cdm setups list
+alphacam cdm customers list
+alphacam cdm machining-orders list
+alphacam cdm doorstyles list
+alphacam cdm multidrill list
+alphacam cdm fittings list
+alphacam cdm layers-mapping list
+```
+
+Wszystkie komendy read działają lokalnie i przez gateway (`--remote --host <ip>`); dane z bazy VistaDB (bez COM).
+
 ---
 
 ### `alphacam post list`
