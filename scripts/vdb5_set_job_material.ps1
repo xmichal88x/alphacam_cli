@@ -10,7 +10,7 @@ $conn.Open()
 try {
     $cmd = $conn.CreateCommand()
     $job = $JobName.Replace("'", "''")
-    $cmd.CommandText = "UPDATE AM_JobDetails SET fkMaterialID = $MaterialID WHERE JobName = '$job'"
+    $cmd.CommandText = "UPDATE AM_JobDetails SET [fkMaterialID] = $MaterialID WHERE JobName = '$job'"
     Write-Output ("rows: " + $cmd.ExecuteNonQuery())
 } finally {
     $conn.Close()
