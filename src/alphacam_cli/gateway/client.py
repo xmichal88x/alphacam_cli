@@ -338,7 +338,7 @@ class RemoteSession:
         csv: str,
         job_name: str | None = None,
         separator: str = ",",
-        has_header: bool = True,
+        has_header: bool = False,
     ) -> dict[str, Any]:
         params: dict[str, Any] = {"csv": csv, "separator": separator, "has_header": has_header}
         if job_name is not None:

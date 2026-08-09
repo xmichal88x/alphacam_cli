@@ -99,25 +99,31 @@ def list_jobs() -> None:
 @handle_com_errors
 def import_csv(
     csv: str = typer.Argument(..., help="CSV file path (Windows path on the server)"),
-    job_name: str | None = typer.Option(
-        None, "--job", help="Existing CDM job name (default: new job from CSV filename)"
-    ),
     separator: str = typer.Option(",", "--separator", help="CSV separator character"),
-    no_header: bool = typer.Option(False, "--no-header", help="CSV has no header row"),
+    header: bool = typer.Option(False, "--header", help="CSV has a header row"),
 ) -> None:
-    """Import a CSV door order into a CDM job (create or update, headless)."""
+    """Import a CSV door order into CDM job(s) (headless, no dialogs)."""
     require_platform()
     with alphacam_context(visible=get_visible()) as raw:
         ac = resolve_app(raw)
         result = ac.import_cdm_csv(
             csv=csv,
-            job_name=job_name,
             separator=separator,
-            has_header=not no_header,
+            has_header=header,
         )
-        status = "created" if result.get("created") else "updated"
-        console.print(f"[green]OK:[/green] CDM job {status}: {result['job_name']}")
-        console.print(f"     Imported: {result['csv']}")
+        if result.get("success"):
+            for job in result.get("jobs", []):
+                console.print(
+                    f"[green]OK:[/green] CDM job created: {job['job_name']} "
+                    f"({job['items']} item(s))"
+                )
+            console.print(f"     Imported: {csv}")
+            for err in result.get("errors", []):
+                console.print(f"[yellow]WARNING:[/yellow] {err}")
+        else:
+            for err in result.get("errors", []):
+                console.print(f"[red]ERROR:[/red] {err}")
+            raise typer.Exit(code=1)
 
 
 @app.command("delete")

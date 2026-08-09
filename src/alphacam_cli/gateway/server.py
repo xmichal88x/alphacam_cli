@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import contextlib
+import csv
 import glob as glob_module
+import io
 import json
 import logging
 import os
@@ -882,10 +884,105 @@ class GatewayServer:
         csv_path = str(params.get("csv", "")).strip()
         if not csv_path:
             raise COMError("cdm: csv path is required")
-        raise COMError(
-            "cdm: CSV import requires GUI (Session 2): ImportCSVToJob/CreateJobsFromCSVFile "
-            "show modal dialogs and hang in Session 0"
-        )
+        separator = str(params.get("separator", ","))
+        has_header = bool(params.get("has_header", False))
+        if not os.path.exists(csv_path):
+            raise COMError(f"cdm: csv file not found: {csv_path}")
+        try:
+            with open(csv_path, encoding="utf-8", errors="replace") as fh:
+                text = fh.read()
+        except UnicodeDecodeError:
+            with open(csv_path, encoding="cp1250", errors="replace") as fh:
+                text = fh.read()
+        try:
+            am = self._cdm_automation_manager()
+        except Exception as e:
+            raise COMError(f"cdm: automation manager unavailable: {e}") from e
+        default_job_name = os.path.splitext(os.path.basename(csv_path))[0]
+        errors: list[str] = []
+        jobs: dict[str, dict[str, Any]] = {}
+        current_job_name: str | None = None
+        total_items = 0
+        rows = csv.reader(io.StringIO(text), delimiter=separator)
+        for n, row in enumerate(rows, start=1):
+            if has_header and n == 1:
+                continue
+            if not any(str(cell).strip() for cell in row):
+                continue
+            if len(row) < 5:
+                errors.append(f"row {n}: expected at least 5 columns, got {len(row)}")
+                continue
+            style = str(row[0]).strip()
+            if not style:
+                errors.append(f"row {n}: style is required")
+                continue
+            try:
+                quantity = int(str(row[1]).strip())
+            except ValueError:
+                errors.append(f"row {n}: invalid quantity: {row[1]!r}")
+                continue
+            try:
+                width = float(str(row[2]).strip())
+            except ValueError:
+                errors.append(f"row {n}: invalid width: {row[2]!r}")
+                continue
+            try:
+                length = float(str(row[3]).strip())
+            except ValueError:
+                errors.append(f"row {n}: invalid length: {row[3]!r}")
+                continue
+            design_dims = str(row[4]).strip() if len(row) > 4 else ""
+            material = str(row[5]).strip() if len(row) > 5 else ""
+            row_job_name = str(row[6]).strip() if len(row) > 6 else ""
+            config_name = str(row[7]).strip() if len(row) > 7 else ""
+            if material:
+                errors.append(f"row {n}: material column ignored (v1): {material}")
+            job_name = row_job_name if row_job_name else (current_job_name or default_job_name)
+            entry = jobs.get(job_name)
+            if entry is None:
+                try:
+                    job = am.NewCDMJob()
+                except Exception as e:
+                    errors.append(f"row {n}: create job failed: {e}")
+                    continue
+                job.JobName = job_name
+                if config_name:
+                    try:
+                        job.ConfigurationSetting = am.ConfigurationSettings.GetByName(config_name)
+                    except Exception:
+                        errors.append(f"row {n}: config not found: {config_name}")
+                try:
+                    job.SaveToDatabase()
+                except Exception as e:
+                    errors.append(f"row {n}: create job failed: {e}")
+                    continue
+                entry = {"job_name": job_name, "job": job, "items": 0}
+                jobs[job_name] = entry
+                current_job_name = job_name
+            try:
+                detail = entry["job"].AddCDMOrderDetail(style)
+            except Exception:
+                errors.append(f"row {n}: door type not found: {style}")
+                continue
+            detail.Width = width
+            detail.Length = length
+            detail.Quantity = quantity
+            if design_dims:
+                detail.UserVariableString = design_dims
+            try:
+                detail.SaveToDatabase()
+            except Exception as e:
+                errors.append(f"row {n}: save order detail failed: {e}")
+                continue
+            entry["items"] += 1
+            total_items += 1
+        jobs_out = [{"job_name": name, "items": entry["items"]} for name, entry in jobs.items()]
+        return {
+            "success": total_items > 0,
+            "jobs": jobs_out,
+            "errors": errors,
+            "total_items": total_items,
+        }
 
     def _handler_cdm_delete_job(self, params: dict[str, Any]) -> dict[str, Any]:
         job_name = str(params.get("job_name", "")).strip()

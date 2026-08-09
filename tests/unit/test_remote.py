@@ -344,7 +344,7 @@ def test_remote_import_cdm_csv() -> None:
     assert result["job_name"] == "JOB-001"
     assert result["created"] is False
     session.import_cdm_csv.assert_called_once_with(
-        csv=r"C:\temp\order.csv", job_name="JOB-001", separator=",", has_header=True
+        csv=r"C:\temp\order.csv", job_name="JOB-001", separator=",", has_header=False
     )
 
 
@@ -369,5 +369,5 @@ def test_remote_import_cdm_csv_defaults() -> None:
     result = app.import_cdm_csv("x.csv")
     assert result["created"] is True
     session.import_cdm_csv.assert_called_once_with(
-        csv="x.csv", job_name=None, separator=",", has_header=True
+        csv="x.csv", job_name=None, separator=",", has_header=False
     )

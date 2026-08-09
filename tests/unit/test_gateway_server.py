@@ -1420,10 +1420,131 @@ def test_cdm_import_csv_handler_missing_csv(server_app: MagicMock) -> None:
         gw._handler_cdm_import_csv({})
 
 
-def test_cdm_import_csv_handler_requires_gui(server_app: MagicMock) -> None:
+def test_cdm_import_csv_handler_single_job(
+    server_app: MagicMock, monkeypatch: pytest.MonkeyPatch, tmp_path: pathlib.Path
+) -> None:
+    _, _, am = _mock_cdm_com(monkeypatch)
+    job = MagicMock()
+    detail = MagicMock()
+    am.NewCDMJob.return_value = job
+    job.AddCDMOrderDetail.return_value = detail
+    csv_file = tmp_path / "order.csv"
+    csv_file.write_text("P003,1,500,500,1;18;0;0", encoding="utf-8")
     gw = GatewayServer()
-    with pytest.raises(COMError, match="requires GUI"):
-        gw._handler_cdm_import_csv({"csv": r"C:\temp\order.csv"})
+    result = gw._handler_cdm_import_csv({"csv": str(csv_file)})
+    assert result == {
+        "success": True,
+        "jobs": [{"job_name": "order", "items": 1}],
+        "errors": [],
+        "total_items": 1,
+    }
+    assert job.JobName == "order"
+    job.SaveToDatabase.assert_called_once_with()
+    job.AddCDMOrderDetail.assert_called_once_with("P003")
+    assert detail.Width == 500.0
+    assert detail.Length == 500.0
+    assert detail.Quantity == 1
+    assert detail.UserVariableString == "1;18;0;0"
+    detail.SaveToDatabase.assert_called_once_with()
+
+
+def test_cdm_import_csv_handler_multi_row_jobs(
+    server_app: MagicMock, monkeypatch: pytest.MonkeyPatch, tmp_path: pathlib.Path
+) -> None:
+    _, _, am = _mock_cdm_com(monkeypatch)
+    job = MagicMock()
+    am.NewCDMJob.return_value = job
+    csv_file = tmp_path / "order.csv"
+    csv_file.write_text(
+        "P003,1,500,500,1;18;0;0,,JOB-A,\nP004,2,600,400,,,JOB-A,\nP005,1,300,300,,,JOB-B,Fronty\n",
+        encoding="utf-8",
+    )
+    gw = GatewayServer()
+    result = gw._handler_cdm_import_csv({"csv": str(csv_file)})
+    assert result["success"] is True
+    assert result["jobs"] == [
+        {"job_name": "JOB-A", "items": 2},
+        {"job_name": "JOB-B", "items": 1},
+    ]
+    assert result["total_items"] == 3
+    assert result["errors"] == []
+    assert am.NewCDMJob.call_count == 2
+    job.AddCDMOrderDetail.assert_any_call("P003")
+    job.AddCDMOrderDetail.assert_any_call("P004")
+    job.AddCDMOrderDetail.assert_any_call("P005")
+
+
+def test_cdm_import_csv_handler_config(
+    server_app: MagicMock, monkeypatch: pytest.MonkeyPatch, tmp_path: pathlib.Path
+) -> None:
+    _, _, am = _mock_cdm_com(monkeypatch)
+    job = MagicMock()
+    am.NewCDMJob.return_value = job
+    csv_file = tmp_path / "order.csv"
+    csv_file.write_text("P003,1,500,500,,,JOB-1,Fronty\n", encoding="utf-8")
+    gw = GatewayServer()
+    result = gw._handler_cdm_import_csv({"csv": str(csv_file)})
+    assert result["success"] is True
+    am.ConfigurationSettings.GetByName.assert_called_once_with("Fronty")
+    assert job.ConfigurationSetting == am.ConfigurationSettings.GetByName.return_value
+
+
+def test_cdm_import_csv_handler_bad_type(
+    server_app: MagicMock, monkeypatch: pytest.MonkeyPatch, tmp_path: pathlib.Path
+) -> None:
+    _, _, am = _mock_cdm_com(monkeypatch)
+    job = MagicMock()
+    job.AddCDMOrderDetail.side_effect = RuntimeError("type does not exist")
+    am.NewCDMJob.return_value = job
+    csv_file = tmp_path / "order.csv"
+    csv_file.write_text("XYZ,1,500,500,1;2;3\n", encoding="utf-8")
+    gw = GatewayServer()
+    result = gw._handler_cdm_import_csv({"csv": str(csv_file)})
+    assert result["success"] is False
+    assert result["total_items"] == 0
+    assert any("door type not found: XYZ" in e for e in result["errors"])
+
+
+def test_cdm_import_csv_handler_file_not_found(server_app: MagicMock) -> None:
+    gw = GatewayServer()
+    with pytest.raises(COMError, match="cdm: csv file not found"):
+        gw._handler_cdm_import_csv({"csv": r"C:\temp\nonexistent.csv"})
+
+
+def test_cdm_import_csv_handler_header(
+    server_app: MagicMock, monkeypatch: pytest.MonkeyPatch, tmp_path: pathlib.Path
+) -> None:
+    _, _, am = _mock_cdm_com(monkeypatch)
+    job = MagicMock()
+    am.NewCDMJob.return_value = job
+    csv_file = tmp_path / "order.csv"
+    csv_file.write_text(
+        "Style,Quantity,Width,Length,DesignDimensions\nP003,1,500,500,1;18;0;0\n",
+        encoding="utf-8",
+    )
+    gw = GatewayServer()
+    result = gw._handler_cdm_import_csv({"csv": str(csv_file), "has_header": True})
+    assert result["success"] is True
+    assert result["jobs"] == [{"job_name": "order", "items": 1}]
+    job.AddCDMOrderDetail.assert_called_once_with("P003")
+
+
+def test_cdm_import_csv_handler_short_row(
+    server_app: MagicMock, monkeypatch: pytest.MonkeyPatch, tmp_path: pathlib.Path
+) -> None:
+    _, _, am = _mock_cdm_com(monkeypatch)
+    job = MagicMock()
+    am.NewCDMJob.return_value = job
+    csv_file = tmp_path / "order.csv"
+    csv_file.write_text(
+        "P003,1\nP004,2,600,400,1;2;3;4;5;6;7,MDF,JOB-A,Fronty\n",
+        encoding="utf-8",
+    )
+    gw = GatewayServer()
+    result = gw._handler_cdm_import_csv({"csv": str(csv_file)})
+    assert result["success"] is True
+    assert result["total_items"] == 1
+    assert any("expected at least 5 columns" in e for e in result["errors"])
 
 
 def test_cdm_delete_job_handler(server_app: MagicMock, monkeypatch: pytest.MonkeyPatch) -> None:
