@@ -1014,7 +1014,20 @@ class GatewayServer:
                     csv_path = str(params.get("csv", ""))
                     if csv_path:
                         _am_log("cdm_import_csv_before", True, csv_path)
-                        ok = job.ImportCSVToJob(csv_path, None)
+                        try:
+                            imps = am.ImportSettings
+                            out["cdm_import_settings_count"] = f"OK: {imps.Count}"
+                        except Exception as e:
+                            out["cdm_import_settings_count"] = f"FAIL: {e!r}"
+                            imps = None
+                        imp_setting = None
+                        if imps is not None and imps.Count > 0:
+                            try:
+                                imp_setting = imps.Item(1)
+                                out["cdm_import_settings_1"] = f"OK: {imp_setting!r}"
+                            except Exception as e:
+                                out["cdm_import_settings_1"] = f"FAIL: {e!r}"
+                        ok = job.ImportCSVToJob(csv_path, imp_setting)
                         _am_log("cdm_import_csv", True, f"ok={ok}")
                         out["cdm_import_csv"] = f"OK: {ok}"
                 except Exception as e:
