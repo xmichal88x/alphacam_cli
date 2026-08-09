@@ -1120,11 +1120,11 @@ pip install pywin32
 
 ### Unit tests (Linux & Windows)
 
-372+ unit tests covering CLI, COM manager, drawing, tool, application, machining, nesting, events, config, and remote gateway modules.
+734+ unit tests covering CLI, COM manager, drawing, tool, application, machining, nesting, events, config, and remote gateway modules.
 
 ```bash
 pip install -e ".[dev]"
-pytest tests/unit/ -v           # 372 tests, 3 skipped
+pytest tests/unit/ -v           # 734 tests, 3 skipped
 pytest tests/unit/ --cov        # with coverage report
 ```
 
