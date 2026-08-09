@@ -7,6 +7,18 @@ signal (the process was killed mid-call).
 
 Usage (machine):
     python C:/temp/probe_cdm_import.py --csv C:/temp/test.csv --settings-id 1 --method both
+    python C:/temp/probe_cdm_import.py --csv C:/temp/test.csv --settings-name NAME --method both
+    python C:/temp/probe_cdm_import.py --method build-settings --settings-id 3 \
+        --fields "256,259,257,258,264,512,513,524"
+
+The ImportSettings collection may be selected by index (--settings-id, default 1)
+or by exact name (--settings-name; mutually exclusive). The output always includes
+a settings_list section (index/name/selected/id) for diagnostics.
+
+--method build-settings edits an existing ImportSettings via the COM API
+(NewImportSettingField + FieldsOrder.Add + SaveToDatabase), no GUI. --fields is a
+comma-separated list of field types appended after the existing FieldsOrder;
+new columns continue from FieldsOrder.Count + 1. No import/bulk runs after a build.
 
 Via schtasks (Session 0, SYSTEM), one command (^ = line continuation):
     schtasks /create /tn cdm_probe /tr "python C:/temp/probe_cdm_import.py --csv C:/temp/t.csv" ^
@@ -95,7 +107,45 @@ def dump_setting(s: Any) -> dict[str, Any]:
     return data
 
 
-def probe_settings(am: Any, settings_id: int, out: dict[str, Any]) -> Any:
+def dump_settings_list(am: Any, out: dict[str, Any]) -> None:
+    try:
+        count = int(am.ImportSettings.Count)
+    except Exception as e:
+        out["settings_list"] = f"FAIL(Count): {e!r}"
+        logger.exception("settings_list Count FAIL")
+        return
+    settings_list: list[dict[str, Any]] = []
+    for i in range(1, count + 1):
+        entry: dict[str, Any] = {"index": i}
+        try:
+            s = am.ImportSettings.Item(i)
+        except Exception as e:
+            entry["item"] = f"FAIL: {e!r}"
+            logger.exception("settings_list Item(%d) FAIL", i)
+            settings_list.append(entry)
+            continue
+        try:
+            entry["name"] = str(s.Name)
+        except Exception as e:
+            entry["name"] = f"FAIL: {e!r}"
+            logger.exception("settings_list Name(%d) FAIL", i)
+        try:
+            entry["selected"] = bool(s.Selected)
+        except Exception as e:
+            entry["selected"] = f"FAIL: {e!r}"
+            logger.exception("settings_list Selected(%d) FAIL", i)
+        try:
+            entry["id"] = int(s.ImportSettingID)
+        except Exception as e:
+            entry["id"] = f"FAIL: {e!r}"
+            logger.exception("settings_list ImportSettingID(%d) FAIL", i)
+        settings_list.append(entry)
+    out["settings_list"] = settings_list
+
+
+def probe_settings(
+    am: Any, settings_id: int, settings_name: str | None, out: dict[str, Any]
+) -> Any:
     out["settings"] = {}
     try:
         count = int(am.ImportSettings.Count)
@@ -104,6 +154,26 @@ def probe_settings(am: Any, settings_id: int, out: dict[str, Any]) -> Any:
     except Exception as e:
         out["settings"]["count"] = f"FAIL: {e!r}"
         logger.exception("ImportSettings.Count FAIL")
+        return None
+    dump_settings_list(am, out)
+    if settings_name is not None:
+        for i in range(1, count + 1):
+            try:
+                s = am.ImportSettings.Item(i)
+            except Exception as e:
+                logger.warning("ImportSettings.Item(%d) FAIL during name scan: %r", i, e)
+                continue
+            try:
+                name = str(s.Name)
+            except Exception as e:
+                logger.warning("ImportSettings.Name(%d) FAIL during name scan: %r", i, e)
+                continue
+            if name == settings_name:
+                out["settings"]["item"] = dump_setting(s)
+                logger.info("ImportSettings name=%r matched at index %d", settings_name, i)
+                return s
+        out["error"] = f"settings name not found: {settings_name}"
+        logger.error("settings name not found: %s", settings_name)
         return None
     if settings_id > count:
         out["settings"]["error"] = f"settings_id {settings_id} out of range (Count={count})"
@@ -118,6 +188,80 @@ def probe_settings(am: Any, settings_id: int, out: dict[str, Any]) -> Any:
     out["settings"]["item"] = dump_setting(s)
     logger.info("ImportSettings.Item(%d) OK", settings_id)
     return s
+
+
+def probe_build_settings(s: Any, field_types: list[int], out: dict[str, Any]) -> None:
+    entry: dict[str, Any] = {}
+    out["build_settings"] = entry
+    try:
+        s.UpdateFromDB()
+        entry["update_from_db"] = True
+        logger.info("UpdateFromDB OK")
+    except Exception as e:
+        entry["update_from_db"] = f"FAIL: {e!r}"
+        logger.exception("UpdateFromDB FAIL")
+
+    existing_count = 0
+    try:
+        existing_count = int(s.FieldsOrder.Count)
+        entry["existing_fields_count"] = existing_count
+        logger.info("FieldsOrder.Count=%d before build", existing_count)
+    except Exception as e:
+        entry["existing_fields_count"] = f"FAIL: {e!r}"
+        logger.exception("FieldsOrder.Count before build FAIL")
+
+    added: list[dict[str, Any]] = []
+    for idx, typ in enumerate(field_types, start=1):
+        col = existing_count + idx
+        step: dict[str, Any] = {"type": typ, "column_number": col}
+        try:
+            field = s.NewImportSettingField()
+            step["new_field"] = "OK"
+        except Exception as e:
+            step["new_field"] = f"FAIL: {e!r}"
+            added.append(step)
+            logger.exception("NewImportSettingField FAIL (type=%d)", typ)
+            continue
+        try:
+            field.Type = typ
+            step["type_set"] = "OK"
+        except Exception as e:
+            step["type_set"] = f"FAIL: {e!r}"
+            logger.exception("field.Type=%d FAIL", typ)
+        try:
+            field.ColumnNumber = col
+            step["column_set"] = "OK"
+        except Exception as e:
+            step["column_set"] = f"FAIL: {e!r}"
+            logger.exception("field.ColumnNumber=%d FAIL", col)
+        try:
+            s.FieldsOrder.Add(field)
+            step["add"] = "OK"
+            logger.info("field added type=%d column=%d", typ, col)
+        except Exception as e:
+            step["add"] = f"FAIL: {e!r}"
+            logger.exception("FieldsOrder.Add FAIL (type=%d)", typ)
+        added.append(step)
+    entry["added"] = added
+
+    try:
+        s.SaveToDatabase(True)
+        entry["save_to_db"] = True
+        logger.info("SaveToDatabase(True) OK")
+    except Exception as e:
+        entry["save_to_db"] = f"FAIL: {e!r}"
+        logger.exception("SaveToDatabase(True) FAIL")
+    try:
+        entry["fields_order_count_after"] = int(s.FieldsOrder.Count)
+        logger.info("FieldsOrder.Count=%d after build", entry["fields_order_count_after"])
+    except Exception as e:
+        entry["fields_order_count_after"] = f"FAIL: {e!r}"
+        logger.exception("FieldsOrder.Count after build FAIL")
+    try:
+        entry["name"] = str(s.Name)
+    except Exception as e:
+        entry["name"] = f"FAIL: {e!r}"
+        logger.exception("Name FAIL")
 
 
 def probe_import(am: Any, s: Any, csv: str, job_name: str, out: dict[str, Any]) -> None:
@@ -219,18 +363,34 @@ def probe_bulk(am: Any, s: Any, csv: str, out: dict[str, Any]) -> None:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Probe AlphaCAM CDM CSV import in Session 0")
-    parser.add_argument("--csv", required=True, help="path to the CSV file on the machine")
     parser.add_argument(
+        "--csv",
+        default=None,
+        help="path to the CSV file on the machine (not needed for build-settings)",
+    )
+    settings_group = parser.add_mutually_exclusive_group()
+    settings_group.add_argument(
         "--settings-id",
         type=int,
         default=1,
         help="ImportSettings index 1..N to use (default: 1)",
     )
+    settings_group.add_argument(
+        "--settings-name",
+        default=None,
+        help="ImportSettings exact name to use (mutually exclusive with --settings-id)",
+    )
     parser.add_argument(
         "--method",
-        choices=("import", "bulk", "both"),
+        choices=("import", "bulk", "both", "build-settings"),
         default="both",
         help="which call to probe (default: both)",
+    )
+    parser.add_argument(
+        "--fields",
+        default=None,
+        help="comma-separated field types for --method build-settings "
+        '(e.g. "256,259,257,258,264,512,513,524"); required for build-settings',
     )
     parser.add_argument(
         "--job-name",
@@ -245,6 +405,12 @@ def main() -> None:
     )
     args = parser.parse_args()
 
+    if args.method == "build-settings":
+        if not args.fields:
+            parser.error("--fields is required for --method build-settings")
+    elif args.csv is None:
+        parser.error(f"--csv is required for --method {args.method}")
+
     logging.basicConfig(
         filename=LOG_PATH,
         filemode="a",
@@ -258,14 +424,18 @@ def main() -> None:
         "variant": "probe_cdm_import",
         "csv": args.csv,
         "settings_id": args.settings_id,
+        "settings_name": args.settings_name,
         "method": args.method,
         "job_name": job_name,
+        "fields": args.fields,
     }
     logger.info(
-        "start variant=probe_cdm_import csv=%s settings_id=%d method=%s",
+        "start variant=probe_cdm_import csv=%s settings_id=%d settings_name=%s method=%s fields=%s",
         args.csv,
         args.settings_id,
+        args.settings_name,
         args.method,
+        args.fields,
     )
     dump(out)
 
@@ -340,15 +510,24 @@ def main() -> None:
             out["cdm_authorised"] = f"FAIL: {e!r}"
             logger.exception("IsCDMAuthorised FAIL")
         dump(out)
-        s = probe_settings(am, args.settings_id, out)
+        s = probe_settings(am, args.settings_id, args.settings_name, out)
         dump(out)
         if s is not None:
-            if args.method in ("import", "both"):
-                probe_import(am, s, args.csv, job_name, out)
-                dump(out)
-            if args.method in ("bulk", "both"):
-                probe_bulk(am, s, args.csv, out)
-                dump(out)
+            if args.method == "build-settings":
+                try:
+                    field_types = [int(x) for x in args.fields.split(",") if x.strip()]
+                    probe_build_settings(s, field_types, out)
+                    dump(out)
+                except ValueError as e:
+                    out["build_settings"] = {"fields_parse": f"FAIL: {e!r}"}
+                    logger.exception("--fields parse FAIL: %s", args.fields)
+            else:
+                if args.method in ("import", "both"):
+                    probe_import(am, s, args.csv, job_name, out)
+                    dump(out)
+                if args.method in ("bulk", "both"):
+                    probe_bulk(am, s, args.csv, out)
+                    dump(out)
 
     dump(out)
     logger.info("finished")
