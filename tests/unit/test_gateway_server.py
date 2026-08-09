@@ -2641,6 +2641,20 @@ def test_cdm_configs_handler(monkeypatch: pytest.MonkeyPatch) -> None:
     assert result["show"] == "all"
 
 
+def test_handler_cdm_configs_show_empty_string(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: list[Any] = []
+
+    def fake_configs(show: str | None) -> list[dict[str, Any]]:
+        calls.append(show)
+        return [{"config_name": "Fronty"}]
+
+    monkeypatch.setattr("alphacam_cli.core.cdm_db.configs", fake_configs)
+    gw = GatewayServer()
+    result = gw._handler_cdm_configs({"show": ""})
+    assert calls == [""]
+    assert result == {"configs": [{"config_name": "Fronty"}], "show": ""}
+
+
 def test_cdm_lookups_handler(monkeypatch: pytest.MonkeyPatch) -> None:
     lookups = {"edge_types": [{"id": 1, "label": "Prosty"}]}
     monkeypatch.setattr("alphacam_cli.core.cdm_db.lookups", lambda: lookups)

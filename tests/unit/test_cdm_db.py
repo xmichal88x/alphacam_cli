@@ -1226,6 +1226,18 @@ def test_configs_cdm_duplicate_merge(monkeypatch: pytest.MonkeyPatch) -> None:
     assert cdm["preview_material_thickness"] == 19.0
 
 
+def test_configs_orphan_cdm_rows_ignored(monkeypatch: pytest.MonkeyPatch) -> None:
+    orphan = _CDM_ROW_A.replace(
+        '"fk_configuration_setting_id": 41', '"fk_configuration_setting_id": 999'
+    )
+    stdout = f'{{"configs": [{_CONFIG_41}], "cdm": [{orphan}]}}'
+    _mock_run(monkeypatch, stdout=stdout)
+    configs = cdm_db.configs()
+    assert len(configs) == 1
+    assert configs[0]["id"] == 41
+    assert configs[0]["cdm"] == {}
+
+
 # --- lookups ---
 
 _SETUP_ROW_1 = (
