@@ -132,8 +132,8 @@ def test_set_job_material_rows_updated(monkeypatch: pytest.MonkeyPatch) -> None:
     run = _mock_run(monkeypatch, stdout="rows: 1\ndetail_rows: 1")
     assert cdm_db.set_job_material("order", 4) is True
     args, _ = run.call_args
-    assert args[0][args[0].index("-JobName") + 1] == "order"
-    assert args[0][args[0].index("-MaterialID") + 1] == "4"
+    assert "-JobName:order" in args[0]
+    assert "-MaterialID:4" in args[0]
 
 
 def test_set_job_material_no_rows(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -155,13 +155,11 @@ def test_set_has_drilling_rows_updated(monkeypatch: pytest.MonkeyPatch) -> None:
     run = _mock_run(monkeypatch, stdout="rows: 2")
     assert cdm_db.set_has_drilling("order", [True, False]) is True
     args, _ = run.call_args
-    assert args[0][args[0].index("-JobName") + 1] == "order"
-    assert args[0][args[0].index("-Values") + 1] == "1;0"
-    assert args[0][args[0].index("-JobName") : args[0].index("-Values") + 2] == [
-        "-JobName",
-        "order",
-        "-Values",
-        "1;0",
+    assert "-JobName:order" in args[0]
+    assert "-Values:1;0" in args[0]
+    assert args[0][args[0].index("-JobName:order") : args[0].index("-Values:1;0") + 1] == [
+        "-JobName:order",
+        "-Values:1;0",
     ]
 
 
@@ -184,7 +182,7 @@ def test_job_count_parses(monkeypatch: pytest.MonkeyPatch) -> None:
     run = _mock_run(monkeypatch, stdout="count: 5")
     assert cdm_db.job_count("order") == 5
     args, _ = run.call_args
-    assert args[0][args[0].index("-JobName") + 1] == "order"
+    assert "-JobName:order" in args[0]
 
 
 def test_job_count_zero(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -907,8 +905,7 @@ def test_order_details_passes_job_name(monkeypatch: pytest.MonkeyPatch) -> None:
     run = _mock_run(monkeypatch, stdout="[]")
     assert cdm_db.order_details("Zamowienie X") == []
     args, _ = run.call_args
-    assert "-JobName" in args[0]
-    assert args[0][args[0].index("-JobName") + 1] == "Zamowienie X"
+    assert "-JobName:Zamowienie X" in args[0]
     assert args[0][args[0].index("-File") + 1].endswith("vdb5_order_details.ps1")
 
 
@@ -917,6 +914,14 @@ def test_order_details_no_job_name(monkeypatch: pytest.MonkeyPatch) -> None:
     assert cdm_db.order_details() == []
     args, _ = run.call_args
     assert "-JobName" not in args[0]
+
+
+def test_order_details_job_name_with_dash(monkeypatch: pytest.MonkeyPatch) -> None:
+    run = _mock_run(monkeypatch, stdout="[]")
+    assert cdm_db.order_details("-foo") == []
+    args, _ = run.call_args
+    assert "-JobName:-foo" in args[0]
+    assert "-foo" not in args[0]
 
 
 def test_order_details_fallback(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -1013,8 +1018,7 @@ def test_door_paths_passes_type_name(monkeypatch: pytest.MonkeyPatch) -> None:
     run = _mock_run(monkeypatch, stdout="[]")
     assert cdm_db.door_paths("L_B_10mm") == []
     args, _ = run.call_args
-    assert "-TypeName" in args[0]
-    assert args[0][args[0].index("-TypeName") + 1] == "L_B_10mm"
+    assert "-TypeName:L_B_10mm" in args[0]
     assert args[0][args[0].index("-File") + 1].endswith("vdb5_door_paths.ps1")
 
 
@@ -1023,6 +1027,14 @@ def test_door_paths_no_type_name(monkeypatch: pytest.MonkeyPatch) -> None:
     assert cdm_db.door_paths() == []
     args, _ = run.call_args
     assert "-TypeName" not in args[0]
+
+
+def test_door_paths_type_name_with_dash(monkeypatch: pytest.MonkeyPatch) -> None:
+    run = _mock_run(monkeypatch, stdout="[]")
+    assert cdm_db.door_paths("-foo") == []
+    args, _ = run.call_args
+    assert "-TypeName:-foo" in args[0]
+    assert "-foo" not in args[0]
 
 
 def test_door_paths_fallback(monkeypatch: pytest.MonkeyPatch) -> None:

@@ -192,10 +192,8 @@ def set_job_material(job_name: str, material_id: int) -> bool:
                 "Bypass",
                 "-File",
                 script_path,
-                "-JobName",
-                job_name,
-                "-MaterialID",
-                str(material_id),
+                f"-JobName:{job_name}",
+                f"-MaterialID:{material_id}",
             ],
             capture_output=True,
             text=True,
@@ -226,10 +224,8 @@ def set_has_drilling(job_name: str, values: list[bool]) -> bool:
                 "Bypass",
                 "-File",
                 script_path,
-                "-JobName",
-                job_name,
-                "-Values",
-                ";".join("1" if v else "0" for v in values),
+                f"-JobName:{job_name}",
+                f"-Values:{';'.join('1' if v else '0' for v in values)}",
             ],
             capture_output=True,
             text=True,
@@ -260,8 +256,7 @@ def job_count(job_name: str) -> int | None:
                 "Bypass",
                 "-File",
                 script_path,
-                "-JobName",
-                job_name,
+                f"-JobName:{job_name}",
             ],
             capture_output=True,
             text=True,
@@ -555,7 +550,7 @@ def order_details(job_name: str | None = None) -> list[dict[str, Any]]:
     script_path = os.path.join(_scripts_dir(), "vdb5_order_details.ps1")
     cmd = ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", script_path]
     if job_name:
-        cmd += ["-JobName", job_name]
+        cmd += [f"-JobName:{job_name}"]
     try:
         proc = subprocess.run(
             cmd,
@@ -584,7 +579,7 @@ def door_paths(type_name: str | None = None) -> list[dict[str, Any]]:
     script_path = os.path.join(_scripts_dir(), "vdb5_door_paths.ps1")
     cmd = ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", script_path]
     if type_name:
-        cmd += ["-TypeName", type_name]
+        cmd += [f"-TypeName:{type_name}"]
     try:
         proc = subprocess.run(
             cmd,

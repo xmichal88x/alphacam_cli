@@ -1694,8 +1694,8 @@ def test_cdm_import_csv_handler_default_config(
     assert job.ConfigurationSetting == am.ConfigurationSettings.GetByName.return_value
     assert run.call_count == 1
     args, _ = run.call_args
-    assert args[0][args[0].index("-JobName") + 1] == "order"
-    assert args[0][args[0].index("-MaterialID") + 1] == "4"
+    assert "-JobName:order" in args[0]
+    assert "-MaterialID:4" in args[0]
 
 
 def test_cdm_import_csv_handler_defaults_material(
@@ -1722,8 +1722,8 @@ def test_cdm_import_csv_handler_defaults_material(
     am.ConfigurationSettings.GetByName.assert_called_once_with("Fronty")
     assert run.call_count == 1
     args, _ = run.call_args
-    assert args[0][args[0].index("-JobName") + 1] == "order"
-    assert args[0][args[0].index("-MaterialID") + 1] == "4"
+    assert "-JobName:order" in args[0]
+    assert "-MaterialID:4" in args[0]
 
 
 def test_cdm_import_csv_handler_defaults_fetched_once(
@@ -2200,10 +2200,8 @@ def test_cdm_import_csv_handler_material_from_csv(
     assert result["errors"] == []
     assert run.call_count == 1
     args, _ = run.call_args
-    assert "-JobName" in args[0]
-    assert args[0][args[0].index("-JobName") + 1] == "order"
-    assert "-MaterialID" in args[0]
-    assert args[0][args[0].index("-MaterialID") + 1] == "2"
+    assert "-JobName:order" in args[0]
+    assert "-MaterialID:2" in args[0]
 
 
 def test_cdm_import_csv_handler_material_cli_overrides(
@@ -2232,8 +2230,8 @@ def test_cdm_import_csv_handler_material_cli_overrides(
     assert result["material"] == "Material 3 - 2440 x 1220"
     assert result["errors"] == []
     args, _ = run.call_args
-    assert args[0][args[0].index("-JobName") + 1] == "order"
-    assert args[0][args[0].index("-MaterialID") + 1] == "5"
+    assert "-JobName:order" in args[0]
+    assert "-MaterialID:5" in args[0]
 
 
 def test_cdm_import_csv_handler_material_not_found(
