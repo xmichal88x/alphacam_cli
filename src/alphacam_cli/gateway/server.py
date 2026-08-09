@@ -102,6 +102,9 @@ def _resolve_cdm_import_setting(import_setting: str | int | None) -> dict[str, A
     )
     if setting is None:
         raise COMError(f"cdm: import settings not found: {import_setting}")
+    if not bool(setting.get("is_cdm_import")):
+        name = setting.get("name") or import_setting
+        raise COMError(f"cdm: import settings '{name}' is not a CDM import setting")
     return setting
 
 
@@ -979,7 +982,7 @@ class GatewayServer:
             )
         if import_setting is not None:
             sep_param = params.get("separator")
-            separator = str(sep_param) if sep_param is not None else None
+            separator = str(sep_param or "") or None
             return self._import_cdm_csv_mapped(
                 csv_path=csv_path,
                 job_param=job_param,
@@ -1270,7 +1273,7 @@ class GatewayServer:
         if job_param and name_param:
             raise COMError("cdm: --name and --job are mutually exclusive")
         sep_param = params.get("separator")
-        separator = str(sep_param) if sep_param is not None else None
+        separator = str(sep_param or "") or None
         has_header = isinstance(params.get("has_header"), bool) and params["has_header"]
         import_setting = params.get("import_setting")
         if not os.path.exists(csv_path):

@@ -776,9 +776,7 @@ class Application:
         import_setting: str | int,
     ) -> dict[str, Any]:
         setting = _resolve_import_setting(import_setting)
-        eff_separator = (
-            separator if separator is not None else str(setting.get("delimiter_char") or ",")
-        )
+        eff_separator = separator or str(setting.get("delimiter_char") or ",")
         try:
             rows = cdm_db.read_cdm_csv(csv, eff_separator)
         except Exception as e:
@@ -928,9 +926,7 @@ class Application:
             raise RuntimeError(f"cdm: csv file not found: {csv}")  # noqa: TRY003
         if import_setting is not None:
             setting = _resolve_import_setting(import_setting)
-            eff_separator = (
-                separator if separator is not None else str(setting.get("delimiter_char") or ",")
-            )
+            eff_separator = separator or str(setting.get("delimiter_char") or ",")
             try:
                 rows = cdm_db.read_cdm_csv(csv, eff_separator)
             except Exception as e:
@@ -1102,6 +1098,11 @@ def _resolve_import_setting(import_setting: str | int | None) -> dict[str, Any]:
     )
     if setting is None:
         raise RuntimeError(f"cdm: import settings not found: {import_setting}")  # noqa: TRY003
+    if not bool(setting.get("is_cdm_import")):
+        name = setting.get("name") or import_setting
+        raise RuntimeError(  # noqa: TRY003
+            f"cdm: import settings '{name}' is not a CDM import setting"
+        )
     return setting
 
 

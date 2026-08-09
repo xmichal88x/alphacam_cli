@@ -37,6 +37,7 @@ def _setting_with(fields: list[tuple[int, int]]) -> dict[str, object]:
         "delimiter_char": ",",
         "sub_delimiter_char": ";",
         "ignore_header": False,
+        "is_cdm_import": True,
         "fields": [{"column_number": col, "parameter_type": ptype} for col, ptype in fields],
     }
 
@@ -414,6 +415,40 @@ def test_import_cdm_csv_mapped_setters(
     assert detail.UserVariableString == ";".join(["1", "2", "3"] + ["0"] * 47)
     set_job_material.assert_called_once_with("Zamowienie X", 5)
     detail.SaveToDatabase.assert_called_once_with()
+
+
+def test_import_cdm_csv_mapped_not_cdm_setting(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: pathlib.Path
+) -> None:
+    am = MagicMock()
+    setting = _setting_with(_SHOP_FIELDS)
+    setting["is_cdm_import"] = False
+    monkeypatch.setattr("alphacam_cli.core.cdm_db.import_settings", lambda: [setting])
+    csv_file = tmp_path / "order.csv"
+    csv_file.write_text("PS_03,1,500,400,1;2;3\n", encoding="utf-8")
+    with pytest.raises(RuntimeError, match="is not a CDM import setting"):
+        _app_with_am(am).import_cdm_csv(str(csv_file), import_setting=3)
+    am.NewCDMJob.assert_not_called()
+
+
+def test_import_cdm_csv_mapped_empty_separator_uses_setting(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: pathlib.Path
+) -> None:
+    am = MagicMock()
+    job = MagicMock()
+    detail = MagicMock()
+    am.NewCDMJob.return_value = job
+    job.AddCDMOrderDetail.return_value = detail
+    _mock_cdm_db(monkeypatch, _setting_with(_SHOP_FIELDS), materials={"MDF_18": 5})
+    csv_file = tmp_path / "order.csv"
+    csv_file.write_text(
+        "PS_03,1,500,400,1;2;3,MDF_18,Zamowienie X,Fronty,Jan Kowalski,CF1,CF2,CF3\n",
+        encoding="utf-8",
+    )
+    result = _app_with_am(am).import_cdm_csv(str(csv_file), import_setting=3, separator="")
+    assert result["success"] is True
+    assert result["items"] == 1
+    assert result["errors"] == []
 
 
 def test_import_cdm_csv_mapped_material_from_column_6(

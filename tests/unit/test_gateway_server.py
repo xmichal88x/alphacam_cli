@@ -2341,6 +2341,7 @@ def _fake_import_setting() -> dict[str, Any]:
         "create_job": True,
         "selected": False,
         "ignore_header": False,
+        "is_cdm_import": True,
         "fields": [
             {"column_number": 1, "parameter_type": 256},
             {"column_number": 2, "parameter_type": 259},
@@ -2401,6 +2402,19 @@ def test_cdm_import_csv_handler_mapped_setting(
     detail.SaveToDatabase.assert_called_once_with()
 
 
+def test_cdm_import_csv_handler_mapped_not_cdm_setting(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: pathlib.Path
+) -> None:
+    setting = _fake_import_setting()
+    setting["is_cdm_import"] = False
+    monkeypatch.setattr("alphacam_cli.core.cdm_db.import_settings", lambda: [setting])
+    csv_file = tmp_path / "order.csv"
+    csv_file.write_text(_MAPPED_CSV_ROW + "\n", encoding="utf-8")
+    gw = GatewayServer()
+    with pytest.raises(COMError, match="is not a CDM import setting"):
+        gw._handler_cdm_import_csv({"csv": str(csv_file), "import_setting": 3})
+
+
 def test_cdm_import_csv_handler_sets_has_drilling(
     server_app: MagicMock, monkeypatch: pytest.MonkeyPatch, tmp_path: pathlib.Path
 ) -> None:
@@ -2417,6 +2431,7 @@ def test_cdm_import_csv_handler_sets_has_drilling(
         "create_job": True,
         "selected": False,
         "ignore_header": False,
+        "is_cdm_import": True,
         "fields": [
             {"column_number": 1, "parameter_type": 256},
             {"column_number": 2, "parameter_type": 259},
