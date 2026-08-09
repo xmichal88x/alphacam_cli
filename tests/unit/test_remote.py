@@ -4,6 +4,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from alphacam_cli.gateway.client import RemoteSession
 from alphacam_cli.gateway.remote import (
     RemoteApplication,
     _basename,
@@ -550,3 +551,33 @@ def test_remote_cdm_import_settings() -> None:
     result = app.cdm_import_settings()
     assert result["settings"][0]["name"] == "Fronty CSV"
     session.cdm_import_settings.assert_called_once_with()
+
+
+def test_remote_session_import_cdm_csv_digit_string_setting() -> None:
+    client = RemoteSession()
+    client._call = MagicMock(return_value={"success": True})
+    client.import_cdm_csv(r"C:\temp\order.csv", import_setting="3")
+    client._call.assert_called_once_with(
+        "cdm_import_csv",
+        {"csv": r"C:\temp\order.csv", "has_header": False, "import_setting": 3},
+    )
+
+
+def test_remote_session_import_cdm_csv_name_setting_unchanged() -> None:
+    client = RemoteSession()
+    client._call = MagicMock(return_value={"success": True})
+    client.import_cdm_csv(r"C:\temp\order.csv", import_setting="sklep CSV")
+    client._call.assert_called_once_with(
+        "cdm_import_csv",
+        {"csv": r"C:\temp\order.csv", "has_header": False, "import_setting": "sklep CSV"},
+    )
+
+
+def test_remote_session_import_cdm_preview_digit_string_setting() -> None:
+    client = RemoteSession()
+    client._call = MagicMock(return_value={"success": True})
+    client.import_cdm_preview(r"C:\temp\order.csv", import_setting="7")
+    client._call.assert_called_once_with(
+        "cdm_import_preview",
+        {"csv": r"C:\temp\order.csv", "has_header": False, "import_setting": 7},
+    )

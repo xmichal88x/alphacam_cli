@@ -358,7 +358,9 @@ class RemoteSession:
         if material is not None:
             params["material"] = material
         if import_setting is not None:
-            params["import_setting"] = import_setting
+            params["import_setting"] = (
+                int(import_setting) if str(import_setting).isdigit() else import_setting
+            )
         if preview:
             params["preview"] = True
         return self._call("cdm_import_csv", params)  # type: ignore[no-any-return]
@@ -376,7 +378,9 @@ class RemoteSession:
     ) -> dict[str, Any]:
         params: dict[str, Any] = {"csv": csv, "has_header": has_header}
         if import_setting is not None:
-            params["import_setting"] = import_setting
+            params["import_setting"] = (
+                int(import_setting) if str(import_setting).isdigit() else import_setting
+            )
         if separator is not None:
             params["separator"] = separator
         if job is not None:
