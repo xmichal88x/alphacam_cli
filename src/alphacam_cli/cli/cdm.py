@@ -206,8 +206,8 @@ def import_settings_list() -> None:
         t.add_column("Selected")
         t.add_column("CreateJob")
         t.add_column("Delimiter")
-        t.add_column("Kolumny")
-        t.add_column("Count", justify="right")
+        t.add_column("Pola")
+        t.add_column("Liczba pól", justify="right")
         for setting in settings:
             t.add_row(
                 str(setting.get("id", "")),
