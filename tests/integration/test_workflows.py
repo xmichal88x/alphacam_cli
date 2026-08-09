@@ -4,6 +4,7 @@ import csv
 import os
 import sys
 import tempfile
+import time
 
 import pytest
 
@@ -14,6 +15,18 @@ def _test_dir() -> str:
     """Return writable temp dir, configurable via ALPHACAM_TEST_DIR.
     Uses C:\temp as fallback if system temp is problematic."""
     return os.environ.get("ALPHACAM_TEST_DIR") or "C:\\temp"
+
+
+def _remove_with_retry(path: str, attempts: int = 20, delay: float = 0.5) -> None:
+    """Remove a file, retrying while Acam.exe still holds the handle."""
+    for _ in range(attempts):
+        try:
+            os.remove(path)
+        except OSError:
+            time.sleep(delay)
+        else:
+            return
+    raise RuntimeError(f"Cannot remove {path}: file handle still held")  # noqa: TRY003
 
 
 @pytest.mark.skipif(sys.platform != "win32", reason="Requires Windows + AlphaCAM")
@@ -115,7 +128,7 @@ class TestProductionWorkflows:
             assert len(content.strip()) > 0, "NC file is empty"
         finally:
             if os.path.exists(nc_path):
-                os.remove(nc_path)
+                _remove_with_retry(nc_path)
 
     def test_batch_processing(self) -> None:
         """Process multiple .amd files in batch mode."""
@@ -173,6 +186,16 @@ class TestProductionWorkflows:
                 drw = self.ac.create_temp_drawing()
                 assert drw is not None
                 drw.create_rectangle(0, 0, w, h)
+                drw.select_all_geometries()
+                md = self.ac.create_mill_data()
+                md.safe_rapid_level = 10
+                md.rapid_down_to = 2
+                md.material_top = 0
+                md.final_depth = -5
+                md.spindle_speed = 12000
+                md.down_feed = 2000
+                md.cut_feed = 3000
+                md.rough_finish()
                 path = os.path.join(tmpdir, fname)
                 drw.save_as(path)
 
@@ -195,6 +218,7 @@ class TestProductionWorkflows:
             anl_path = os.path.join(tmpdir, "test_nest.anl")
             nest_list = nesting.new_nest_list(anl_path)
             assert nest_list is not None
+            nest_list.total_time = 10
 
             # Add parts from CSV
             with open(csv_path, newline="") as f:
