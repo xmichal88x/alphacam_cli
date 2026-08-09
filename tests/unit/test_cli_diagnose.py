@@ -97,7 +97,7 @@ def test_diagnose_win32com_import_error(monkeypatch: pytest.MonkeyPatch) -> None
     monkeypatch.setitem(sys.modules, "win32com.client", None)
     importlib.reload(diagnose_module)
     try:
-        assert getattr(diagnose_module, "win32com") is None  # type: ignore[attr-defined]
+        assert diagnose_module.win32com is None  # type: ignore[attr-defined]
     finally:
         if original is not None:
             sys.modules["win32com"] = original
