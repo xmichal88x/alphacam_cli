@@ -327,38 +327,44 @@ order_details_app = typer.Typer(help="CDM order details")
 @order_details_app.command("list")
 @handle_com_errors
 def order_details_list(
-    job_name: str = typer.Argument(..., help="CDM job name"),
+    job_name: str | None = typer.Argument(None, help="CDM job name (default: all jobs)"),
 ) -> None:
-    """List CDM order details for a job."""
+    """List CDM order details (all jobs when no job name given)."""
     require_platform()
     with alphacam_context(visible=get_visible()) as raw:
         ac = resolve_app(raw)
         result = ac.cdm_order_details(job_name=job_name)
         rows = result.get("order_details", [])
         if not rows:
-            console.print(f"[yellow]No CDM order details found for job {job_name}[/yellow]")
+            if job_name:
+                console.print(f"[yellow]No CDM order details found for job {job_name}[/yellow]")
+            else:
+                console.print("[yellow]No CDM order details found[/yellow]")
             return
-        t = Table(title=f"CDM Order Details: {job_name}")
+        title = f"CDM Order Details: {job_name}" if job_name else "CDM Order Details"
+        t = Table(title=title)
         t.add_column("No", style="cyan", justify="right")
+        if job_name is None:
+            t.add_column("Job")
         t.add_column("Style", style="green")
-        t.add_column("Qty", justify="right")
+        t.add_column("Ilość", justify="right")
         t.add_column("W x L", justify="right")
         t.add_column("Material")
         t.add_column("Klient")
-        t.add_column("Nr zam")
+        t.add_column("Nr zamówienia")
         t.add_column("Item")
         t.add_column("Komentarz")
         t.add_column("Custom")
-        t.add_column("Rotation", justify="right")
-        t.add_column("NestPri", justify="right")
-        t.add_column("Drilling")
-        t.add_column("SmallNest")
-        t.add_column("Active")
+        t.add_column("Obrót", justify="right")
+        t.add_column("Priorytet", justify="right")
+        t.add_column("Wiercenie")
+        t.add_column("Mały element")
+        t.add_column("Aktywny")
         for n, item in enumerate(rows, start=1):
             custom = "; ".join(
                 f"{key}={value}" for key, value in sorted((item.get("custom_fields") or {}).items())
             )
-            t.add_row(
+            cols = [
                 str(n),
                 str(item.get("style_name", "") or ""),
                 str(item.get("quantity", "") or ""),
@@ -374,7 +380,10 @@ def order_details_list(
                 _yes_no(item.get("has_drilling")),
                 _yes_no(item.get("small_nest_part")),
                 _yes_no(item.get("active_in_process")),
-            )
+            ]
+            if job_name is None:
+                cols.insert(1, str(item.get("job_name", "") or ""))
+            t.add_row(*cols)
         console.print(t)
 
 
@@ -462,7 +471,7 @@ def materials_list() -> None:
         t.add_column("Width", justify="right")
         t.add_column("Length", justify="right")
         t.add_column("Thickness", justify="right")
-        t.add_column("Grain", justify="right")
+        t.add_column("Ziarno", justify="right")
         for item in rows:
             t.add_row(
                 str(item.get("id", "") or ""),
@@ -742,7 +751,7 @@ def multidrill_list() -> None:
         t = Table(title="CDM Multidrill Heads")
         t.add_column("ID", style="cyan", justify="right")
         t.add_column("Name", style="green")
-        t.add_column("Selected")
+        t.add_column("Wybrany")
         t.add_column("Feed", justify="right")
         t.add_column("Spindle", justify="right")
         t.add_column("Rapid", justify="right")
@@ -810,7 +819,7 @@ def layers_mapping_list() -> None:
         t.add_column("Layer")
         t.add_column("Style")
         t.add_column("Order", justify="right")
-        t.add_column("Feature")
+        t.add_column("Cecha")
         t.add_column("SideClosed", justify="right")
         t.add_column("DirClosed", justify="right")
         t.add_column("Start", justify="right")

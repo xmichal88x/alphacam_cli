@@ -805,6 +805,82 @@ def test_cdm_order_details_list_empty() -> None:
     assert "No CDM order details found for job JOB-001" in result.stderr
 
 
+def test_cdm_order_details_list_without_job() -> None:
+    from tests.unit.test_cli import _mock_com
+
+    with (
+        _mock_com(),
+        _wide_console(),
+        patch(
+            "alphacam_cli.core.application.Application.cdm_order_details",
+            return_value={
+                "order_details": [
+                    {
+                        "style_name": "Typ Frontu 1",
+                        "quantity": 2,
+                        "width": 500.0,
+                        "length": 300.0,
+                        "material_id": 3,
+                        "csv_customer_name": "Klient A",
+                        "csv_order_number": "Z-001",
+                        "csv_item_number": "I-1",
+                        "production_comment": "uwaga",
+                        "custom_fields": {"1": "x"},
+                        "rotation_method": 1,
+                        "nesting_priority": 2,
+                        "has_drilling": True,
+                        "small_nest_part": False,
+                        "active_in_process": True,
+                        "job_name": "JOB-001",
+                    },
+                    {
+                        "style_name": "Typ Frontu 2",
+                        "quantity": 1,
+                        "width": 400.0,
+                        "length": 200.0,
+                        "material_id": 4,
+                        "csv_customer_name": "Klient B",
+                        "csv_order_number": "Z-002",
+                        "csv_item_number": "I-2",
+                        "production_comment": "",
+                        "custom_fields": {},
+                        "rotation_method": 0,
+                        "nesting_priority": 1,
+                        "has_drilling": False,
+                        "small_nest_part": True,
+                        "active_in_process": False,
+                        "job_name": "JOB-002",
+                    },
+                ],
+                "job_name": None,
+            },
+        ) as mock_details,
+    ):
+        result = runner.invoke(app, ["cdm", "order-details", "list"])
+    assert result.exit_code == 0
+    assert "Typ Frontu 1" in result.stderr
+    assert "Typ Frontu 2" in result.stderr
+    assert "JOB-001" in result.stderr
+    assert "JOB-002" in result.stderr
+    mock_details.assert_called_once_with(job_name=None)
+
+
+def test_cdm_order_details_list_no_job_all() -> None:
+    from tests.unit.test_cli import _mock_com
+
+    with (
+        _mock_com(),
+        patch(
+            "alphacam_cli.core.application.Application.cdm_order_details",
+            return_value={"order_details": [], "job_name": None},
+        ),
+    ):
+        result = runner.invoke(app, ["cdm", "order-details", "list"])
+    assert result.exit_code == 0
+    assert "No CDM order details found" in result.stderr
+    assert "for job" not in result.stderr
+
+
 def test_cdm_door_paths_list_command() -> None:
     from tests.unit.test_cli import _mock_com
 
