@@ -1039,3 +1039,57 @@ def test_door_paths_value_wrap(monkeypatch: pytest.MonkeyPatch) -> None:
     paths = cdm_db.door_paths()
     assert len(paths) == 1
     assert paths[0]["path_name"] == "Ryfle Ball 10mm"
+
+
+# --- materials ---
+
+_MATERIAL_ROWS = (
+    '[{"id": 1, "name": "Not Selected", "width": 0.0, "length": 0.0,'
+    ' "thickness": 0.0, "grain_restriction": 0},'
+    ' {"id": 2, "name": "Material 2 - 2070 x 2800", "width": 2070.0,'
+    ' "length": 2800.0, "thickness": 19.0, "grain_restriction": 1},'
+    ' {"id": 3, "name": "Material 3 - 2440 x 1220", "width": 2440.0,'
+    ' "length": 1220.0, "thickness": 19.0, "grain_restriction": 0},'
+    ' {"id": 4, "name": "Material 4 - Imperial 96 x 48", "width": 96.0,'
+    ' "length": 48.0, "thickness": 0.75, "grain_restriction": 0}]'
+)
+
+
+def test_materials_parses(monkeypatch: pytest.MonkeyPatch) -> None:
+    _mock_run(monkeypatch, stdout=_MATERIAL_ROWS)
+    materials = cdm_db.materials()
+    assert len(materials) == 4
+    first = materials[0]
+    assert first["id"] == 1
+    assert first["name"] == "Not Selected"
+    assert first["width"] == 0.0
+    assert first["length"] == 0.0
+    assert first["thickness"] == 0.0
+    assert first["grain_restriction"] == 0
+    second = materials[1]
+    assert second["name"] == "Material 2 - 2070 x 2800"
+    assert second["width"] == 2070.0
+    assert second["length"] == 2800.0
+    assert second["thickness"] == 19.0
+    assert second["grain_restriction"] == 1
+    assert materials[2]["width"] == 2440.0
+    assert materials[2]["length"] == 1220.0
+    assert materials[3]["width"] == 96.0
+    assert materials[3]["length"] == 48.0
+    assert materials[3]["thickness"] == 0.75
+
+
+def test_materials_fallback(monkeypatch: pytest.MonkeyPatch) -> None:
+    _mock_run(monkeypatch).side_effect = FileNotFoundError("powershell")
+    assert cdm_db.materials() == []
+    _mock_run(monkeypatch, stdout="", returncode=1)
+    assert cdm_db.materials() == []
+    _mock_run(monkeypatch, stdout="not json")
+    assert cdm_db.materials() == []
+
+
+def test_materials_value_wrap(monkeypatch: pytest.MonkeyPatch) -> None:
+    _mock_run(monkeypatch, stdout=f'{{"value": {_MATERIAL_ROWS}}}')
+    materials = cdm_db.materials()
+    assert len(materials) == 4
+    assert materials[0]["name"] == "Not Selected"

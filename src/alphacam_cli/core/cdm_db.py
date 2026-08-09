@@ -608,6 +608,32 @@ def door_paths(type_name: str | None = None) -> list[dict[str, Any]]:
     return [item for item in data if isinstance(item, dict)]
 
 
+def materials() -> list[dict[str, Any]]:
+    """Read AM_Materials rows (ids, names, sheet sizes) from the vdb5 database."""
+    script_path = os.path.join(_scripts_dir(), "vdb5_materials.ps1")
+    try:
+        proc = subprocess.run(
+            ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", script_path],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=20,
+            check=False,
+        )
+        if proc.returncode != 0 or not proc.stdout.strip():
+            return []
+        data = json.loads(proc.stdout)
+    except Exception as e:
+        logger.warning("cdm materials: vdb5 read failed: %r", e)
+        return []
+    if isinstance(data, dict) and "value" in data:
+        data = data["value"]
+    if not isinstance(data, list):
+        return []
+    return [item for item in data if isinstance(item, dict)]
+
+
 def find_import_setting(settings: list[dict[str, Any]], key: str | int) -> dict[str, Any] | None:
     """Find an import setting by id (int) or name (str, casefold); None when absent."""
     if isinstance(key, int):
