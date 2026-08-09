@@ -151,6 +151,29 @@ def test_set_job_material_subprocess_failure(monkeypatch: pytest.MonkeyPatch) ->
     assert cdm_db.set_job_material("order", 4) is False
 
 
+def test_set_has_drilling_rows_updated(monkeypatch: pytest.MonkeyPatch) -> None:
+    run = _mock_run(monkeypatch, stdout="rows: 2")
+    assert cdm_db.set_has_drilling("order", [True, False]) is True
+    args, _ = run.call_args
+    assert args[0][args[0].index("-JobName") + 1] == "order"
+    assert args[0][args[0].index("-Values") + 1] == "1;0"
+
+
+def test_set_has_drilling_no_rows(monkeypatch: pytest.MonkeyPatch) -> None:
+    _mock_run(monkeypatch, stdout="rows: 0")
+    assert cdm_db.set_has_drilling("order", [True]) is False
+
+
+def test_set_has_drilling_nonzero_returncode(monkeypatch: pytest.MonkeyPatch) -> None:
+    _mock_run(monkeypatch, stdout="", returncode=1)
+    assert cdm_db.set_has_drilling("order", [True]) is False
+
+
+def test_set_has_drilling_subprocess_failure(monkeypatch: pytest.MonkeyPatch) -> None:
+    _mock_run(monkeypatch).side_effect = FileNotFoundError("powershell")
+    assert cdm_db.set_has_drilling("order", [True]) is False
+
+
 def test_job_count_parses(monkeypatch: pytest.MonkeyPatch) -> None:
     run = _mock_run(monkeypatch, stdout="count: 5")
     assert cdm_db.job_count("order") == 5

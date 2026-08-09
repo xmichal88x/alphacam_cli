@@ -214,6 +214,40 @@ def set_job_material(job_name: str, material_id: int) -> bool:
     return bool(match and int(match.group(1)) > 0)
 
 
+def set_has_drilling(job_name: str, values: list[bool]) -> bool:
+    """Set CDM_OrderDetails.HasDrilling per detail for a job; True when rows updated."""
+    script_path = os.path.join(_scripts_dir(), "vdb5_set_has_drilling.ps1")
+    try:
+        proc = subprocess.run(
+            [
+                "powershell",
+                "-NoProfile",
+                "-ExecutionPolicy",
+                "Bypass",
+                "-File",
+                script_path,
+                "-JobName",
+                job_name,
+                "-Values",
+                ";".join("1" if v else "0" for v in values),
+            ],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=20,
+            check=False,
+        )
+    except Exception as e:
+        logger.warning("cdm drilling: vdb5 update failed: %r", e)
+        return False
+    if proc.returncode != 0:
+        logger.warning("cdm drilling: vdb5 update failed: %s", proc.stdout.strip())
+        return False
+    match = re.search(r"(?m)^rows:\s*(\d+)", proc.stdout)
+    return bool(match and int(match.group(1)) > 0)
+
+
 def job_count(job_name: str) -> int | None:
     """Count AM_JobDetails rows for a job by name; None when the read fails."""
     script_path = os.path.join(_scripts_dir(), "vdb5_job_count.ps1")

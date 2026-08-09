@@ -88,7 +88,6 @@ _FIELD_SETTERS: dict[str, str] = {
     "door_rotation_method": "RotationMethod",
     "door_rotation_angle": "RotationAngle",
     "door_nest_priority": "NestingPriority",
-    "door_drilling": "HasDrilling",
     "door_small_nest": "SmallNestPart",
 }
 _FIELD_SETTERS.update({f"door_custom_field_{n}": f"CustomField{n}" for n in range(1, 26)})
@@ -1198,6 +1197,7 @@ class GatewayServer:
             except Exception as e:
                 raise COMError(f"cdm: create job failed: {e}") from e
         items = 0
+        ok_details: list[dict[str, Any]] = []
         for d in details:
             try:
                 detail = job.AddCDMOrderDetail(d["style"])
@@ -1224,11 +1224,16 @@ class GatewayServer:
                 errors.append(f"row {d['row']}: save order detail failed: {e}")
                 continue
             items += 1
+            ok_details.append(d)
         if material_id is not None:
             if not cdm_db.set_job_material(job_name, material_id):
                 errors.append(f"job {job_name}: failed to set material")
         elif material_name is None:
             errors.append(f"job {job_name}: no material set (required for processing)")
+        if "door_drilling" in field_map.values() and ok_details:
+            values = [bool(d.get("has_drilling") or False) for d in ok_details]
+            if not cdm_db.set_has_drilling(job_name, values):
+                errors.append(f"job {job_name}: failed to set has_drilling")
         if items == 0 and not job_param:
             deleted, reason = cdm_db.cleanup_created_job(
                 am,

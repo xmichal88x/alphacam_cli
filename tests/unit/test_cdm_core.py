@@ -442,6 +442,56 @@ def test_import_cdm_csv_mapped_material_from_column_6(
     am.ConfigurationSettings.GetByName.assert_called_once_with("Fronty")
 
 
+def test_import_cdm_csv_mapped_sets_has_drilling(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: pathlib.Path
+) -> None:
+    am = MagicMock()
+    job = MagicMock()
+    detail = MagicMock()
+    am.NewCDMJob.return_value = job
+    job.AddCDMOrderDetail.return_value = detail
+    _mock_cdm_db(
+        monkeypatch,
+        _setting_with([(1, 256), (2, 259), (3, 257), (4, 258), (5, 264), (6, 298)]),
+        materials={"MDF_18": 5},
+        defaults={"config_name": "Fronty", "material_id": 5},
+    )
+    set_has_drilling = MagicMock(return_value=True)
+    monkeypatch.setattr("alphacam_cli.core.cdm_db.set_has_drilling", set_has_drilling)
+    csv_file = tmp_path / "order.csv"
+    csv_file.write_text("PS_03,1,500,400,1;2;3,1\nPS_04,1,600,400,1;2;3,0\n", encoding="utf-8")
+    result = _app_with_am(am).import_cdm_csv(str(csv_file), import_setting=3)
+    assert result["success"] is True
+    assert result["items"] == 2
+    assert result["errors"] == []
+    set_has_drilling.assert_called_once_with("order", [True, False])
+
+
+def test_import_cdm_csv_mapped_no_drilling_column(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: pathlib.Path
+) -> None:
+    am = MagicMock()
+    job = MagicMock()
+    detail = MagicMock()
+    am.NewCDMJob.return_value = job
+    job.AddCDMOrderDetail.return_value = detail
+    _mock_cdm_db(
+        monkeypatch,
+        _setting_with([(1, 256), (2, 259), (3, 257), (4, 258), (5, 264)]),
+        materials={"MDF_18": 5},
+        defaults={"config_name": "Fronty", "material_id": 5},
+    )
+    set_has_drilling = MagicMock(return_value=True)
+    monkeypatch.setattr("alphacam_cli.core.cdm_db.set_has_drilling", set_has_drilling)
+    csv_file = tmp_path / "order.csv"
+    csv_file.write_text("PS_03,1,500,400,1;2;3\n", encoding="utf-8")
+    result = _app_with_am(am).import_cdm_csv(str(csv_file), import_setting=3)
+    assert result["success"] is True
+    assert result["items"] == 1
+    assert result["errors"] == []
+    set_has_drilling.assert_not_called()
+
+
 def test_import_cdm_csv_import_setting_not_found(
     monkeypatch: pytest.MonkeyPatch, tmp_path: pathlib.Path
 ) -> None:

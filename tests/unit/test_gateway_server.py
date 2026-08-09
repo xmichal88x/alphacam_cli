@@ -2401,6 +2401,51 @@ def test_cdm_import_csv_handler_mapped_setting(
     detail.SaveToDatabase.assert_called_once_with()
 
 
+def test_cdm_import_csv_handler_sets_has_drilling(
+    server_app: MagicMock, monkeypatch: pytest.MonkeyPatch, tmp_path: pathlib.Path
+) -> None:
+    _, _, am = _mock_cdm_com(monkeypatch)
+    job = MagicMock()
+    detail = MagicMock()
+    am.NewCDMJob.return_value = job
+    job.AddCDMOrderDetail.return_value = detail
+    setting = {
+        "id": 3,
+        "name": "Fronty CSV",
+        "delimiter_char": ",",
+        "sub_delimiter_char": ";",
+        "create_job": True,
+        "selected": False,
+        "ignore_header": False,
+        "fields": [
+            {"column_number": 1, "parameter_type": 256},
+            {"column_number": 2, "parameter_type": 259},
+            {"column_number": 3, "parameter_type": 257},
+            {"column_number": 4, "parameter_type": 258},
+            {"column_number": 5, "parameter_type": 264},
+            {"column_number": 6, "parameter_type": 298},
+        ],
+    }
+    monkeypatch.setattr("alphacam_cli.core.cdm_db.import_settings", lambda: [setting])
+    monkeypatch.setattr("alphacam_cli.core.cdm_db.sheet_materials", lambda: {"MDF_18": 2})
+    monkeypatch.setattr("alphacam_cli.core.cdm_db.set_job_material", lambda job_name, mid: True)
+    monkeypatch.setattr(
+        "alphacam_cli.core.cdm_db.vdb5_job_defaults",
+        lambda: {"config_name": "Fronty", "material_id": 2},
+    )
+    set_has_drilling = MagicMock(return_value=True)
+    monkeypatch.setattr("alphacam_cli.core.cdm_db.set_has_drilling", set_has_drilling)
+    csv_file = tmp_path / "order.csv"
+    csv_file.write_text("P003,1,500,500,1;2;3,1\nP004,1,600,400,1;2;3,0\n", encoding="utf-8")
+    gw = GatewayServer()
+    result = gw._handler_cdm_import_csv({"csv": str(csv_file), "import_setting": 3})
+    assert result["success"] is True
+    assert result["items"] == 2
+    assert result["errors"] == []
+    assert set_has_drilling.call_count == 1
+    assert set_has_drilling.call_args.args == ("order", [True, False])
+
+
 def test_cdm_import_csv_handler_preview(
     server_app: MagicMock, monkeypatch: pytest.MonkeyPatch, tmp_path: pathlib.Path
 ) -> None:
