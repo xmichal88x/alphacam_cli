@@ -541,3 +541,23 @@ detail.Width=600; detail.Length=400; detail.Quantity=2; detail.SaveToDatabase()
 **Joby w bazie po sesji:** 8 (6 produkcyjnych + Nowe Zadanie 7/8 z testów GUI + Nowy_projekt — job usera z importu GUI, zostawiony).
 
 **Commity:** `cbe9e61` (własny importer — 460 tests) → `e18fe1d` (dopełnienie do 50 — 462 tests). README: sekcja cdm import zaktualizowana? — do sprawdzenia przy okazji (opis importu w README mówi o requires GUI — NIEAKTUALNY, poprawić w następnej sesji).
+
+### ✅ CDM IMPORT — SEMANTYKA PRODUKCYJNA (2026-08-09, E2E potwierdzone)
+
+**Ustalenia z użytkownikiem (krytyczna analiza flow):**
+- Produkcyjne CSV = TYLKO parametry drzwi (5 kolumn: Style,Qty,Width,Height,DesignDims). Bez pól zadania.
+- Zadania tworzą się AUTOMATYCZNIE gdy jest potrzeba (przychodzi CSV → utwórz zadanie, wrzuć pozycje).
+- "sklep CSV" = import Z tworzeniem zadania; "Ustawienia Importu CSV 5" (ID7) = SAM import do istniejącego zadania (CreateJob=False; GUI: ImportCSVToJob → dialog → w Session 0 wisi).
+
+**Finalna semantyka `cdm import CSV [--name N] [--config K] [--job J] [--separator] [--header]`:**
+- 5 kolumn parametrycznych; kolumny 6+ ignorowane cicho; wiersz <5 kolumn → error
+- `--job J` → import do istniejącego zadania (lookup; brak → "job not found"; NIE tworzy)
+- bez `--job` → AUTO-CREATE: `--name` lub basename pliku (≤60), `--config` opcjonalny (`GetByName`; brak → twardy błąd "config not found"); AM default config = Fronty (41)
+- `--name`+`--job` → "mutually exclusive"; wszystkie wiersze → JEDNO zadanie
+- E2E (baza zweryfikowana 1:1 z GUI): `prod` (basename, 2 items), `Zadanie 132` (--name+--config, 2 items), `Nowy_projekt` (--job, +2 items → 3 pozycje); UserVariableString dopełnione do 50; StyleName=PS_03/fkTypeID=68
+- 468 passed, ruff 0, mypy 0 (commit `dc0436f`)
+
+**TASKS.md aktualizacja:**
+- [ ] README sekcja `cdm import` — NIEAKTUALNA (mówi "requires GUI (Session 2)") — poprawić na nową semantykę (auto-create, --job, 5 kolumn).
+- [ ] Kaizen: `_find_cdm_job(am, name)` helper — duplikacja lookupu między `_handler_cdm_import_csv` a `_handler_cdm_delete_job`.
+- [ ] Materiał — nadal bez settera API (v1 ignorowany, GUI też zostawia fkMaterialID=0).
