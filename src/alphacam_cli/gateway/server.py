@@ -833,8 +833,8 @@ class GatewayServer:
                         name = str(details.Item(di).TypeName)
                     except Exception:
                         continue
-                    if name and name not in seen:
-                        seen.add(name)
+                    if name and name.casefold() not in seen:
+                        seen.add(name.casefold())
                         com_names.append(name)
         except Exception as e:
             raise COMError(f"cdm: read door types failed: {e}") from e
@@ -845,12 +845,13 @@ class GatewayServer:
             return {
                 "types": [{"id": i, "name": name} for i, name in enumerate(com_names, 1)],
                 "note": "vdb5 read failed; types from jobs only",
+                "source": "com",
             }
         merged: list[str] = []
         merged_seen: set[str] = set()
         for name in [*vdb5_names, *com_names]:
-            if name and name not in merged_seen:
-                merged_seen.add(name)
+            if name and name.casefold() not in merged_seen:
+                merged_seen.add(name.casefold())
                 merged.append(name)
         if not merged:
             return {"types": [], "note": "no CDM door types found"}

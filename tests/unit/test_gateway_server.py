@@ -1029,8 +1029,10 @@ def _mock_cdm_com(monkeypatch: pytest.MonkeyPatch) -> tuple[MagicMock, MagicMock
     return ai, addins, am
 
 
-def _mock_vdb5_run(monkeypatch: pytest.MonkeyPatch, stdout: str = "[]") -> MagicMock:
-    run = MagicMock(return_value=types.SimpleNamespace(stdout=stdout, returncode=0))
+def _mock_vdb5_run(
+    monkeypatch: pytest.MonkeyPatch, stdout: str = "[]", returncode: int = 0
+) -> MagicMock:
+    run = MagicMock(return_value=types.SimpleNamespace(stdout=stdout, returncode=returncode))
     monkeypatch.setattr("subprocess.run", run)
     return run
 
@@ -1247,6 +1249,106 @@ def test_cdm_types_handler_vdb5_fallback(
     assert result == {
         "types": [{"id": 1, "name": "Typ Frontu 47"}],
         "note": "vdb5 read failed; types from jobs only",
+        "source": "com",
+    }
+
+
+def test_cdm_types_handler_vdb5_returncode_nonzero(
+    server_app: MagicMock, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _, _, am = _mock_cdm_com(monkeypatch)
+    _mock_vdb5_run(monkeypatch, stdout="[]", returncode=1)
+    d1 = MagicMock()
+    d1.TypeName = "Typ Frontu 47"
+    details = MagicMock()
+    details.Count = 1
+    details.Item.return_value = d1
+    job1 = MagicMock()
+    job1.CDMOrderDetails = details
+    jobs = MagicMock()
+    jobs.Count = 1
+    jobs.Item.return_value = job1
+    am.Jobs = jobs
+    gw = GatewayServer()
+    result = gw._handler_cdm_types({})
+    assert result == {
+        "types": [{"id": 1, "name": "Typ Frontu 47"}],
+        "note": "vdb5 read failed; types from jobs only",
+        "source": "com",
+    }
+
+
+def test_cdm_types_handler_vdb5_empty_stdout(
+    server_app: MagicMock, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _, _, am = _mock_cdm_com(monkeypatch)
+    _mock_vdb5_run(monkeypatch, stdout="")
+    d1 = MagicMock()
+    d1.TypeName = "Typ Frontu 47"
+    details = MagicMock()
+    details.Count = 1
+    details.Item.return_value = d1
+    job1 = MagicMock()
+    job1.CDMOrderDetails = details
+    jobs = MagicMock()
+    jobs.Count = 1
+    jobs.Item.return_value = job1
+    am.Jobs = jobs
+    gw = GatewayServer()
+    result = gw._handler_cdm_types({})
+    assert result == {
+        "types": [{"id": 1, "name": "Typ Frontu 47"}],
+        "note": "vdb5 read failed; types from jobs only",
+        "source": "com",
+    }
+
+
+def test_cdm_types_handler_vdb5_non_list_rows(
+    server_app: MagicMock, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _, _, am = _mock_cdm_com(monkeypatch)
+    _mock_vdb5_run(monkeypatch, stdout="not json array")
+    d1 = MagicMock()
+    d1.TypeName = "Typ Frontu 47"
+    details = MagicMock()
+    details.Count = 1
+    details.Item.return_value = d1
+    job1 = MagicMock()
+    job1.CDMOrderDetails = details
+    jobs = MagicMock()
+    jobs.Count = 1
+    jobs.Item.return_value = job1
+    am.Jobs = jobs
+    gw = GatewayServer()
+    result = gw._handler_cdm_types({})
+    assert result == {
+        "types": [{"id": 1, "name": "Typ Frontu 47"}],
+        "note": "vdb5 read failed; types from jobs only",
+        "source": "com",
+    }
+
+
+def test_cdm_types_handler_vdb5_row_not_dict(
+    server_app: MagicMock, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _, _, am = _mock_cdm_com(monkeypatch)
+    _mock_vdb5_run(monkeypatch, stdout="[42]")
+    d1 = MagicMock()
+    d1.TypeName = "Typ Frontu 47"
+    details = MagicMock()
+    details.Count = 1
+    details.Item.return_value = d1
+    job1 = MagicMock()
+    job1.CDMOrderDetails = details
+    jobs = MagicMock()
+    jobs.Count = 1
+    jobs.Item.return_value = job1
+    am.Jobs = jobs
+    gw = GatewayServer()
+    result = gw._handler_cdm_types({})
+    assert result == {
+        "types": [{"id": 1, "name": "Typ Frontu 47"}],
+        "source": "vdb5+com",
     }
 
 
