@@ -2508,6 +2508,32 @@ def test_cdm_import_preview_handler(
     assert am.NewCDMJob.call_count == 0
 
 
+def test_cdm_import_preview_handler_no_setting(
+    server_app: MagicMock, monkeypatch: pytest.MonkeyPatch, tmp_path: pathlib.Path
+) -> None:
+    _, _, am = _mock_cdm_com(monkeypatch)
+    csv_file = tmp_path / "order.csv"
+    csv_file.write_text("P003,1,500,500,1;2;3\n", encoding="utf-8")
+    monkeypatch.setattr(
+        "alphacam_cli.core.cdm_db.vdb5_job_defaults",
+        lambda: {"config_name": None, "material_id": None},
+    )
+    gw = GatewayServer()
+    result = gw._handler_cdm_import_preview({"csv": str(csv_file)})
+    assert result["success"] is True
+    assert result["setting"] is None
+    assert result["field_map"] == []
+    assert "job" in result
+    assert result["job"] is None
+    assert result["job_name"] == "order"
+    assert result["config"] is None
+    assert result["material"] is None
+    assert result["items"] == 1
+    assert result["rows"][0]["style"] == "P003"
+    assert result["errors"] == []
+    assert am.NewCDMJob.call_count == 0
+
+
 def test_cdm_import_settings_handler(
     server_app: MagicMock, monkeypatch: pytest.MonkeyPatch
 ) -> None:

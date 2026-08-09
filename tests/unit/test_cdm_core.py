@@ -560,6 +560,30 @@ def test_import_cdm_preview_no_com(monkeypatch: pytest.MonkeyPatch, tmp_path: pa
     am.assert_not_called()
 
 
+def test_import_cdm_preview_no_setting_legacy(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: pathlib.Path
+) -> None:
+    am = MagicMock()
+    monkeypatch.setattr(
+        "alphacam_cli.core.cdm_db.vdb5_job_defaults",
+        lambda: {"config_name": None, "material_id": None},
+    )
+    csv_file = tmp_path / "order.csv"
+    csv_file.write_text("P003,1,500,500,1;2;3\n", encoding="utf-8")
+    result = _app_with_am(am).import_cdm_preview(str(csv_file))
+    assert result["success"] is True
+    assert result["setting"] is None
+    assert result["field_map"] == []
+    assert result["job"] is None
+    assert result["job_name"] == "order"
+    assert result["config"] is None
+    assert result["material"] is None
+    assert result["items"] == 1
+    assert result["rows"][0]["style"] == "P003"
+    assert result["errors"] == []
+    am.assert_not_called()
+
+
 def test_import_cdm_preview_missing_file() -> None:
     app = Application(MagicMock())
     with pytest.raises(RuntimeError, match="cdm: csv file not found: "):

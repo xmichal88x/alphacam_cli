@@ -645,6 +645,44 @@ def test_cdm_import_command_preview_no_items() -> None:
     assert "No items to import" in result.stderr
 
 
+def test_cdm_import_command_preview_no_setting() -> None:
+    from tests.unit.test_cli import _mock_com
+
+    with (
+        _mock_com(),
+        patch(
+            "alphacam_cli.core.application.Application.import_cdm_preview",
+            return_value={
+                "success": True,
+                "setting": None,
+                "field_map": [],
+                "job_name": "order",
+                "config": None,
+                "material": None,
+                "items": 1,
+                "rows": [
+                    {"row": 1, "style": "P003", "quantity": 1, "width": 500.0, "length": 500.0}
+                ],
+                "errors": [],
+                "job": None,
+            },
+        ) as mock_preview,
+    ):
+        result = runner.invoke(app, ["cdm", "import", r"C:\temp\order.csv", "--preview"])
+    assert result.exit_code == 0
+    assert "PREVIEW" in result.stderr
+    mock_preview.assert_called_once_with(
+        csv=r"C:\temp\order.csv",
+        import_setting=None,
+        separator=None,
+        has_header=False,
+        job=None,
+        name=None,
+        config=None,
+        material=None,
+    )
+
+
 def test_cdm_import_settings_list_command() -> None:
     from tests.unit.test_cli import _mock_com
 

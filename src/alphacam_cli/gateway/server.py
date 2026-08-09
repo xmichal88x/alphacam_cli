@@ -1272,18 +1272,27 @@ class GatewayServer:
         import_setting = params.get("import_setting")
         if not os.path.exists(csv_path):
             raise COMError(f"cdm: csv file not found: {csv_path}")
-        setting = _resolve_cdm_import_setting(import_setting)
-        eff_separator = (
-            separator if separator is not None else str(setting.get("delimiter_char") or ",")
-        )
-        try:
-            rows = cdm_db.read_cdm_csv(csv_path, eff_separator)
-        except Exception as e:
-            raise COMError(f"cdm: import csv failed: {e}") from e
-        field_map = cdm_db.field_map_from_setting(setting)
-        details, errors = cdm_db.parse_cdm_rows_mapped(
-            rows, field_map, has_header or bool(setting.get("ignore_header", False))
-        )
+        if import_setting is not None:
+            setting = _resolve_cdm_import_setting(import_setting)
+            eff_separator = (
+                separator if separator is not None else str(setting.get("delimiter_char") or ",")
+            )
+            try:
+                rows = cdm_db.read_cdm_csv(csv_path, eff_separator)
+            except Exception as e:
+                raise COMError(f"cdm: import csv failed: {e}") from e
+            field_map = cdm_db.field_map_from_setting(setting)
+            details, errors = cdm_db.parse_cdm_rows_mapped(
+                rows, field_map, has_header or bool(setting.get("ignore_header", False))
+            )
+        else:
+            setting = None
+            field_map = {}
+            try:
+                rows = cdm_db.read_cdm_csv(csv_path, separator or ",")
+            except Exception as e:
+                raise COMError(f"cdm: import csv failed: {e}") from e
+            details, errors = cdm_db.parse_cdm_rows(rows, has_header)
         defaults = cdm_db.vdb5_job_defaults()
         material_name = _cdm_material_name(details, material_param)
         if material_name is None and defaults.get("material_id") is not None:
@@ -1300,14 +1309,18 @@ class GatewayServer:
             config_name = str(defaults.get("config_name") or "").strip() or None
         return {
             "success": bool(details),
-            "setting": {
-                "id": setting.get("id"),
-                "name": setting.get("name"),
-                "delimiter_char": setting.get("delimiter_char"),
-                "sub_delimiter_char": setting.get("sub_delimiter_char"),
-                "create_job": setting.get("create_job"),
-                "selected": setting.get("selected"),
-            },
+            "setting": (
+                {
+                    "id": setting.get("id"),
+                    "name": setting.get("name"),
+                    "delimiter_char": setting.get("delimiter_char"),
+                    "sub_delimiter_char": setting.get("sub_delimiter_char"),
+                    "create_job": setting.get("create_job"),
+                    "selected": setting.get("selected"),
+                }
+                if setting is not None
+                else None
+            ),
             "field_map": cdm_db.field_map_descriptions(field_map),
             "job_name": (
                 job_param if job_param is not None else _cdm_job_name(details, name_param, csv_path)
@@ -1317,6 +1330,7 @@ class GatewayServer:
             "items": len(details),
             "rows": details,
             "errors": errors,
+            "job": job_param,
         }
 
     def _handler_cdm_import_settings(self, params: dict[str, Any]) -> dict[str, Any]:
