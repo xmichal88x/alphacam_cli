@@ -497,10 +497,11 @@ class Application:
         am = self.get_automation_manager_addin()
         if cdm_db.find_cdm_job(am, job_name) is not None:
             raise RuntimeError(f"cdm: job already exists: {job_name}")  # noqa: TRY003
+        materials = cdm_db.sheet_materials()
         material_name = (material or "").strip() or None
         material_id: int | None = None
         if material_name is not None:
-            material_id = cdm_db.sheet_materials().get(material_name)
+            material_id = materials.get(material_name)
             if material_id is None:
                 raise RuntimeError(f"cdm: material not found: {material_name}")  # noqa: TRY003
         else:
@@ -508,7 +509,7 @@ class Application:
         material_label: str | None = material_name
         if material_label is None and material_id is not None:
             material_label = next(
-                (n for n, mid in cdm_db.sheet_materials().items() if mid == material_id),
+                (n for n, mid in materials.items() if mid == material_id),
                 None,
             )
         try:
@@ -659,9 +660,10 @@ class Application:
                     material_name = str(row[5]).strip()
                     break
         defaults: dict[str, Any] | None = None
+        materials = cdm_db.sheet_materials()
         material_id: int | None = None
         if material_name:
-            material_id = cdm_db.sheet_materials().get(material_name)
+            material_id = materials.get(material_name)
             if material_id is None:
                 raise RuntimeError(  # noqa: TRY003
                     f"cdm: material not found: {material_name}"
@@ -672,7 +674,7 @@ class Application:
         material_label: str | None = material_name
         if material_label is None and material_id is not None:
             material_label = next(
-                (n for n, mid in cdm_db.sheet_materials().items() if mid == material_id),
+                (n for n, mid in materials.items() if mid == material_id),
                 None,
             )
         if not details:
@@ -787,9 +789,10 @@ class Application:
         )
         material_name = _cdm_material_name(details, material)
         defaults: dict[str, Any] | None = None
+        materials = cdm_db.sheet_materials()
         material_id: int | None = None
         if material_name:
-            material_id = cdm_db.sheet_materials().get(material_name)
+            material_id = materials.get(material_name)
             if material_id is None:
                 raise RuntimeError(f"cdm: material not found: {material_name}")  # noqa: TRY003
         else:
@@ -798,7 +801,7 @@ class Application:
         material_label: str | None = material_name
         if material_label is None and material_id is not None:
             material_label = next(
-                (n for n, mid in cdm_db.sheet_materials().items() if mid == material_id),
+                (n for n, mid in materials.items() if mid == material_id),
                 None,
             )
         setting_name = str(setting.get("name") or "")
@@ -1092,6 +1095,8 @@ _DETAIL_VALUE_KEYS: dict[str, str] = dict(cdm_db.MAPPED_FIELD_TARGETS)
 
 
 def _resolve_import_setting(import_setting: str | int | None) -> dict[str, Any]:
+    if isinstance(import_setting, str) and import_setting.isdigit():
+        import_setting = int(import_setting)
     settings = cdm_db.import_settings()
     setting = (
         cdm_db.find_import_setting(settings, import_setting) if import_setting is not None else None

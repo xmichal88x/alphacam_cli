@@ -247,6 +247,8 @@ def _print_import_preview(result: dict[str, Any]) -> None:
             )
         console.print(t)
     console.print(f"Job: {result.get('job_name', '')}")
+    if result.get("job"):
+        console.print("[dim](job existence not verified - dry run)[/dim]")
     console.print(f"Config: {result.get('config') or '-'}")
     console.print(f"Material: {result.get('material') or '-'}")
     console.print(f"Items: {result.get('items', 0)}")

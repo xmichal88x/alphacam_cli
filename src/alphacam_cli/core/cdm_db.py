@@ -621,14 +621,16 @@ def parse_cdm_rows_mapped(
     details: list[dict[str, Any]] = []
     errors: list[str] = []
     missing_required = [name for name in REQUIRED_IMPORT_FIELDS if name not in field_map.values()]
+    if missing_required:
+        errors.append(
+            "import settings map is missing required field(s): " + ", ".join(missing_required)
+        )
     for n, row in enumerate(rows, start=1):
         if has_header and n == 1:
             continue
         if not any(str(cell).strip() for cell in row):
             continue
         if missing_required:
-            for name in missing_required:
-                errors.append(f"row {n}: import settings map is missing required field {name}")
             continue
         detail: dict[str, Any] = {key: None for key in _MAPPED_DETAIL_KEYS}
         detail["row"] = n
@@ -637,13 +639,13 @@ def parse_cdm_rows_mapped(
         for column in sorted(field_map):
             if column < 1:
                 continue
+            name = field_map[column]
+            if name.startswith("unknown_"):
+                continue
             if column - 1 >= len(row):
                 invalid = f"row {n}: expected at least {column} columns, got {len(row)}"
                 break
             raw = str(row[column - 1]).strip()
-            name = field_map[column]
-            if name.startswith("unknown_"):
-                continue
             if name == "door_type":
                 if not raw:
                     invalid = f"row {n}: style is required"

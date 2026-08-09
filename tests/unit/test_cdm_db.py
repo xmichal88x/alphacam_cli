@@ -644,7 +644,7 @@ def test_parse_cdm_rows_mapped_missing_required_field() -> None:
     rows = [["P003", "1", "300"]]
     details, errors = cdm_db.parse_cdm_rows_mapped(rows, field_map, False)
     assert details == []
-    assert errors == ["row 1: import settings map is missing required field door_width"]
+    assert errors == ["import settings map is missing required field(s): door_width"]
 
 
 def test_parse_cdm_rows_mapped_missing_door_type() -> None:
@@ -652,7 +652,7 @@ def test_parse_cdm_rows_mapped_missing_door_type() -> None:
     rows = [["1", "400", "300"]]
     details, errors = cdm_db.parse_cdm_rows_mapped(rows, field_map, False)
     assert details == []
-    assert errors == ["row 1: import settings map is missing required field door_type"]
+    assert errors == ["import settings map is missing required field(s): door_type"]
 
 
 def test_parse_cdm_rows_mapped_bool_and_numbers() -> None:
@@ -705,6 +705,25 @@ def test_parse_cdm_rows_mapped_unknown_field_ignored() -> None:
     assert len(details) == 1
     detail = details[0]
     assert "unknown_273" not in detail
+    assert detail["style"] == "P003"
+    assert detail["quantity"] == 1
+    assert detail["width"] == 400.0
+    assert detail["length"] == 300.0
+
+
+def test_parse_cdm_rows_mapped_unknown_column_beyond_row_length() -> None:
+    field_map = {
+        1: "door_type",
+        2: "door_quantity",
+        3: "door_width",
+        4: "door_height",
+        15: "unknown_400",
+    }
+    rows = [["P003", "1", "400", "300", "x"]]
+    details, errors = cdm_db.parse_cdm_rows_mapped(rows, field_map, False)
+    assert errors == []
+    assert len(details) == 1
+    detail = details[0]
     assert detail["style"] == "P003"
     assert detail["quantity"] == 1
     assert detail["width"] == 400.0
