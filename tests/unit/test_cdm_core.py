@@ -204,6 +204,10 @@ def test_import_cdm_csv_all_details_fail_deletes_job(
         "alphacam_cli.core.cdm_db.vdb5_job_defaults",
         lambda: {"config_name": "Fronty", "material_id": None},
     )
+    monkeypatch.setattr(
+        "alphacam_cli.core.cdm_db.find_cdm_job",
+        MagicMock(side_effect=[None]),
+    )
     csv_file = tmp_path / "order.csv"
     csv_file.write_text("P003,1,500,500,1;2;3\nP004,1,600,400,1;2;3\n", encoding="utf-8")
     result = _app_with_am(am).import_cdm_csv(str(csv_file))
@@ -213,6 +217,61 @@ def test_import_cdm_csv_all_details_fail_deletes_job(
     assert any("door type not found: P003" in e for e in result["errors"])
     assert any("door type not found: P004" in e for e in result["errors"])
     job.DeleteFromDB.assert_called_once_with()
+
+
+def test_import_cdm_csv_all_details_fail_delete_via_lookup(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: pathlib.Path
+) -> None:
+    am = MagicMock()
+    job = MagicMock()
+    job.JobName = "order"
+    job.AddCDMOrderDetail.side_effect = RuntimeError("type does not exist")
+    am.NewCDMJob.return_value = job
+    found_job = MagicMock()
+    monkeypatch.setattr(
+        "alphacam_cli.core.cdm_db.find_cdm_job",
+        MagicMock(side_effect=[job, found_job, None]),
+    )
+    monkeypatch.setattr(
+        "alphacam_cli.core.cdm_db.vdb5_job_defaults",
+        lambda: {"config_name": "Fronty", "material_id": None},
+    )
+    csv_file = tmp_path / "order.csv"
+    csv_file.write_text("P003,1,500,500,1;2;3\n", encoding="utf-8")
+    result = _app_with_am(am).import_cdm_csv(str(csv_file))
+    assert result["success"] is False
+    assert result["items"] == 0
+    assert result["errors"].count("job order: no valid order details, deleted") == 1
+    job.DeleteFromDB.assert_called_once_with()
+    found_job.DeleteFromDB.assert_called_once_with()
+
+
+def test_import_cdm_csv_all_details_fail_cleanup_still_present(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: pathlib.Path
+) -> None:
+    am = MagicMock()
+    job = MagicMock()
+    job.JobName = "order"
+    job.AddCDMOrderDetail.side_effect = RuntimeError("type does not exist")
+    am.NewCDMJob.return_value = job
+    found_job = MagicMock()
+    monkeypatch.setattr(
+        "alphacam_cli.core.cdm_db.find_cdm_job",
+        MagicMock(side_effect=[job, found_job, found_job]),
+    )
+    monkeypatch.setattr(
+        "alphacam_cli.core.cdm_db.vdb5_job_defaults",
+        lambda: {"config_name": "Fronty", "material_id": None},
+    )
+    csv_file = tmp_path / "order.csv"
+    csv_file.write_text("P003,1,500,500,1;2;3\n", encoding="utf-8")
+    result = _app_with_am(am).import_cdm_csv(str(csv_file))
+    assert result["success"] is False
+    assert result["items"] == 0
+    assert result["errors"].count("job order: no valid order details, cleanup failed") == 1
+    assert not any("no valid order details, deleted" in e for e in result["errors"])
+    job.DeleteFromDB.assert_called_once_with()
+    found_job.DeleteFromDB.assert_called_once_with()
 
 
 def test_import_cdm_csv_all_details_fail_keeps_existing_job(

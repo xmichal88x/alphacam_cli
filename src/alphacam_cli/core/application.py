@@ -716,15 +716,23 @@ class Application:
         elif material_name is None:
             errors.append(f"job {job_name}: no material set (required for processing)")
         if items == 0 and not job:
-            if hasattr(cdm_job, "DeleteFromDB"):
-                try:
+            deleted = False
+            try:
+                if hasattr(cdm_job, "DeleteFromDB"):
                     cdm_job.DeleteFromDB()
-                except Exception as e:
-                    errors.append(f"job {job_name}: no valid order details, cleanup failed: {e}")
-                else:
-                    errors.append(f"job {job_name}: no valid order details, deleted")
+                    deleted = cdm_db.find_cdm_job(am, job_name) is None
+                if not deleted:
+                    found = cdm_db.find_cdm_job(am, job_name)
+                    if found is not None and hasattr(found, "DeleteFromDB"):
+                        found.DeleteFromDB()
+                    deleted = cdm_db.find_cdm_job(am, job_name) is None
+            except Exception as e:
+                errors.append(f"job {job_name}: no valid order details, cleanup failed: {e}")
             else:
-                errors.append(f"job {job_name}: no valid order details, cleanup failed")
+                if deleted:
+                    errors.append(f"job {job_name}: no valid order details, deleted")
+                else:
+                    errors.append(f"job {job_name}: no valid order details, cleanup failed")
         return {
             "success": items > 0,
             "job_name": job_name,
