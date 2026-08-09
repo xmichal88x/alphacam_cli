@@ -350,6 +350,30 @@ def test_remote_import_cdm_csv() -> None:
         config=None,
         separator=",",
         has_header=False,
+        material=None,
+    )
+
+
+def test_remote_import_cdm_csv_material() -> None:
+    session = MagicMock()
+    session.import_cdm_csv.return_value = {
+        "success": True,
+        "job_name": "order",
+        "items": 1,
+        "material": "MDF_18",
+        "errors": [],
+    }
+    app = RemoteApplication(session)
+    result = app.import_cdm_csv(r"C:\temp\order.csv", material="MDF_18")
+    assert result["material"] == "MDF_18"
+    session.import_cdm_csv.assert_called_once_with(
+        csv=r"C:\temp\order.csv",
+        job=None,
+        name=None,
+        config=None,
+        separator=",",
+        has_header=False,
+        material="MDF_18",
     )
 
 
@@ -380,6 +404,7 @@ def test_remote_import_cdm_csv_defaults() -> None:
         config=None,
         separator=",",
         has_header=False,
+        material=None,
     )
 
 
@@ -401,4 +426,5 @@ def test_remote_import_cdm_csv_name_config() -> None:
         config="Fronty",
         separator=",",
         has_header=False,
+        material=None,
     )

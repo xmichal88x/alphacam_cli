@@ -108,6 +108,9 @@ def import_csv(
     job: str | None = typer.Option(None, "--job", help="Import into an existing CDM job by name"),
     separator: str = typer.Option(",", "--separator", help="CSV separator character"),
     header: bool = typer.Option(False, "--header", help="CSV has a header row"),
+    material: str | None = typer.Option(
+        None, "--material", help="Material name (AM_Materials) for the job; overrides CSV column 6"
+    ),
 ) -> None:
     """Import a CSV door order into a single CDM job (headless, no dialogs)."""
     require_platform()
@@ -120,6 +123,7 @@ def import_csv(
             config=config,
             separator=separator,
             has_header=header,
+            material=material,
         )
         if not result.get("success"):
             for err in result.get("errors", []):
@@ -130,6 +134,8 @@ def import_csv(
             f"[green]OK:[/green] CDM job {verb}: {result['job_name']} ({result['items']} item(s))"
         )
         console.print(f"     Imported: {csv}")
+        if result.get("material"):
+            console.print(f"     Material: {result['material']}")
         for err in result.get("errors", []):
             console.print(f"[yellow]WARNING:[/yellow] {err}")
 

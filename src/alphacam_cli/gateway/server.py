@@ -10,8 +10,10 @@ import json
 import logging
 import os
 import queue
+import re
 import socket
 import subprocess
+import sys
 import threading
 from collections.abc import Callable
 from typing import Any, cast
@@ -880,6 +882,99 @@ class GatewayServer:
             raise COMError(f"cdm: list jobs failed: {e}") from e
         return {"jobs": jobs_out}
 
+    def _sheet_materials(self) -> dict[str, int]:
+        """Material name -> sheet/material ID from SQLite sheet database."""
+        script_path = os.path.join(
+            os.path.dirname(os.path.abspath(__file__)),
+            "..",
+            "..",
+            "..",
+            "scripts",
+            "sheet_materials.py",
+        )
+        try:
+            proc = subprocess.run(
+                [sys.executable, script_path],
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+                timeout=20,
+                check=False,
+            )
+            if proc.returncode != 0 or not proc.stdout.strip():
+                return {}
+            data = json.loads(proc.stdout)
+        except Exception as e:
+            self._logger.warning("cdm materials: sheet db read failed: %r", e)
+            return {}
+        if isinstance(data, dict) and "value" in data:
+            data = data["value"]
+        if not isinstance(data, dict):
+            return {}
+        materials: dict[str, int] = {}
+        for key in ("sheets", "materials"):
+            rows = data.get(key)
+            if not isinstance(rows, list):
+                continue
+            for row in rows:
+                if not isinstance(row, dict):
+                    continue
+                name = row.get("name")
+                mid = row.get("id")
+                if not isinstance(name, str) or not name.strip():
+                    continue
+                if mid is None:
+                    continue
+                try:
+                    mid_int = int(mid)
+                except (TypeError, ValueError):
+                    continue
+                name_key = name.strip()
+                if name_key not in materials:
+                    materials[name_key] = mid_int
+        return materials
+
+    def _vdb5_set_job_material(self, job_name: str, material_id: int) -> bool:
+        """Set AM_JobDetails.fkMaterialID for a job by name; True when rows updated."""
+        script_path = os.path.join(
+            os.path.dirname(os.path.abspath(__file__)),
+            "..",
+            "..",
+            "..",
+            "scripts",
+            "vdb5_set_job_material.ps1",
+        )
+        try:
+            proc = subprocess.run(
+                [
+                    "powershell",
+                    "-NoProfile",
+                    "-ExecutionPolicy",
+                    "Bypass",
+                    "-File",
+                    script_path,
+                    "-JobName",
+                    job_name,
+                    "-MaterialID",
+                    str(material_id),
+                ],
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+                timeout=20,
+                check=False,
+            )
+        except Exception as e:
+            self._logger.warning("cdm material: vdb5 update failed: %r", e)
+            return False
+        if proc.returncode != 0:
+            self._logger.warning("cdm material: vdb5 update failed: %s", proc.stdout.strip())
+            return False
+        match = re.search(r"rows:\s*(\d+)", proc.stdout)
+        return bool(match and int(match.group(1)) > 0)
+
     def _handler_cdm_import_csv(self, params: dict[str, Any]) -> dict[str, Any]:
         csv_path = str(params.get("csv", "")).strip()
         if not csv_path:
@@ -887,6 +982,7 @@ class GatewayServer:
         job_param = str(params.get("job", "")).strip() or None
         name_param = str(params.get("name", "")).strip() or None
         config_param = str(params.get("config", "")).strip() or None
+        material_param = str(params.get("material", "")).strip() or None
         if job_param and name_param:
             raise COMError("cdm: --name and --job are mutually exclusive")
         separator = str(params.get("separator", ","))
@@ -899,6 +995,24 @@ class GatewayServer:
         except UnicodeDecodeError:
             with open(csv_path, encoding="cp1250", errors="replace") as fh:
                 text = fh.read()
+        rows = list(csv.reader(io.StringIO(text), delimiter=separator))
+        material_name = material_param
+        if material_name is None:
+            for n, row in enumerate(rows, start=1):
+                if has_header and n == 1:
+                    continue
+                if not any(str(cell).strip() for cell in row):
+                    continue
+                if len(row) > 5 and str(row[5]).strip():
+                    material_name = str(row[5]).strip()
+                    break
+        materials: dict[str, int] = {}
+        material_id: int | None = None
+        if material_name:
+            materials = self._sheet_materials()
+            material_id = materials.get(material_name)
+            if material_id is None:
+                raise COMError(f"cdm: material not found: {material_name}")
         try:
             am = self._cdm_automation_manager()
         except Exception as e:
@@ -938,8 +1052,13 @@ class GatewayServer:
             except Exception as e:
                 raise COMError(f"cdm: create job failed: {e}") from e
         errors: list[str] = []
+        if (
+            material_name
+            and material_id is not None
+            and not self._vdb5_set_job_material(job_name, material_id)
+        ):
+            errors.append(f"job {job_name}: failed to set material")
         items = 0
-        rows = csv.reader(io.StringIO(text), delimiter=separator)
         for n, row in enumerate(rows, start=1):
             if has_header and n == 1:
                 continue
@@ -987,10 +1106,13 @@ class GatewayServer:
                 errors.append(f"row {n}: save order detail failed: {e}")
                 continue
             items += 1
+        if material_name is None:
+            errors.append(f"job {job_name}: no material set (required for processing)")
         return {
             "success": items > 0,
             "job_name": job_name,
             "items": items,
+            "material": material_name,
             "errors": errors,
         }
 

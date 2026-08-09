@@ -2,7 +2,11 @@ from __future__ import annotations
 
 import glob
 import io
+import json
 import os
+import re
+import subprocess
+import sys
 from csv import reader
 from typing import TYPE_CHECKING, Any, ClassVar
 
@@ -563,12 +567,15 @@ class Application:
         config: str | None = None,
         separator: str = ",",
         has_header: bool = False,
+        material: str | None = None,
     ) -> dict[str, Any]:
         """Import a CSV door order into a single CDM job (headless, no dialogs).
 
-        CSV columns: Style,Quantity,Width,Height,DesignDimensions. Extra columns are
-        ignored silently. With --job the rows are added to an existing job; otherwise
-        a new job is created (name from --name or the CSV basename, max 60 chars).
+        CSV columns: Style,Quantity,Width,Height,DesignDimensions,Material. The
+        Material column (6th) or the ``material`` argument sets the job's material
+        via AM_JobDetails.fkMaterialID; columns beyond 6 are ignored silently. With
+        --job the rows are added to an existing job; otherwise a new job is created
+        (name from --name or the CSV basename, max 60 chars).
         """
         if job and name:
             raise RuntimeError("cdm: --name and --job are mutually exclusive")  # noqa: TRY003
@@ -582,6 +589,26 @@ class Application:
         except UnicodeDecodeError:
             with open(csv, encoding="cp1250", errors="replace") as fh:
                 text = fh.read()
+        rows = list(reader(io.StringIO(text), delimiter=separator))
+        material_name = (material or "").strip() or None
+        if material_name is None:
+            for n, row in enumerate(rows, start=1):
+                if has_header and n == 1:
+                    continue
+                if not any(str(cell).strip() for cell in row):
+                    continue
+                if len(row) > 5 and str(row[5]).strip():
+                    material_name = str(row[5]).strip()
+                    break
+        materials: dict[str, int] = {}
+        material_id: int | None = None
+        if material_name:
+            materials = self._sheet_materials()
+            material_id = materials.get(material_name)
+            if material_id is None:
+                raise RuntimeError(  # noqa: TRY003
+                    f"cdm: material not found: {material_name}"
+                )
         am = self.get_automation_manager_addin()
         cdm_job: Any = None
         if job:
@@ -618,8 +645,13 @@ class Application:
             except Exception as e:
                 raise RuntimeError(f"cdm: create job failed: {e}") from e  # noqa: TRY003
         errors: list[str] = []
+        if (
+            material_name
+            and material_id is not None
+            and not self._set_job_material(job_name, material_id)
+        ):
+            errors.append(f"job {job_name}: failed to set material")
         items = 0
-        rows = reader(io.StringIO(text), delimiter=separator)
         for n, row in enumerate(rows, start=1):
             if has_header and n == 1:
                 continue
@@ -667,12 +699,105 @@ class Application:
                 errors.append(f"row {n}: save order detail failed: {e}")
                 continue
             items += 1
+        if material_name is None:
+            errors.append(f"job {job_name}: no material set (required for processing)")
         return {
             "success": items > 0,
             "job_name": job_name,
             "items": items,
+            "material": material_name,
             "errors": errors,
         }
+
+    def _sheet_materials(self) -> dict[str, int]:
+        """Material name -> sheet/material ID from SQLite sheet database."""
+        script_path = os.path.join(
+            os.path.dirname(os.path.abspath(__file__)),
+            "..",
+            "..",
+            "..",
+            "scripts",
+            "sheet_materials.py",
+        )
+        try:
+            proc = subprocess.run(
+                [sys.executable, script_path],
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+                timeout=20,
+                check=False,
+            )
+            if proc.returncode != 0 or not proc.stdout.strip():
+                return {}
+            data = json.loads(proc.stdout)
+        except Exception:
+            return {}
+        if isinstance(data, dict) and "value" in data:
+            data = data["value"]
+        if not isinstance(data, dict):
+            return {}
+        materials: dict[str, int] = {}
+        for key in ("sheets", "materials"):
+            rows = data.get(key)
+            if not isinstance(rows, list):
+                continue
+            for row in rows:
+                if not isinstance(row, dict):
+                    continue
+                name = row.get("name")
+                mid = row.get("id")
+                if not isinstance(name, str) or not name.strip():
+                    continue
+                if mid is None:
+                    continue
+                try:
+                    mid_int = int(mid)
+                except (TypeError, ValueError):
+                    continue
+                name_key = name.strip()
+                if name_key not in materials:
+                    materials[name_key] = mid_int
+        return materials
+
+    def _set_job_material(self, job_name: str, material_id: int) -> bool:
+        """Set AM_JobDetails.fkMaterialID for a job by name; True when rows updated."""
+        script_path = os.path.join(
+            os.path.dirname(os.path.abspath(__file__)),
+            "..",
+            "..",
+            "..",
+            "scripts",
+            "vdb5_set_job_material.ps1",
+        )
+        try:
+            proc = subprocess.run(
+                [
+                    "powershell",
+                    "-NoProfile",
+                    "-ExecutionPolicy",
+                    "Bypass",
+                    "-File",
+                    script_path,
+                    "-JobName",
+                    job_name,
+                    "-MaterialID",
+                    str(material_id),
+                ],
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+                timeout=20,
+                check=False,
+            )
+        except Exception:
+            return False
+        if proc.returncode != 0:
+            return False
+        match = re.search(r"rows:\s*(\d+)", proc.stdout)
+        return bool(match and int(match.group(1)) > 0)
 
     def delete_cdm_job(self, job_name: str) -> dict[str, Any]:
         """Delete a CDM job from the database (headless, no dialogs)."""

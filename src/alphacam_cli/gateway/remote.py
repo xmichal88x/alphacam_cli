@@ -296,6 +296,7 @@ class RemoteApplication:
         config: str | None = None,
         separator: str = ",",
         has_header: bool = False,
+        material: str | None = None,
     ) -> dict[str, Any]:
         return self._session.import_cdm_csv(  # type: ignore[no-any-return]
             csv=csv,
@@ -304,6 +305,7 @@ class RemoteApplication:
             config=config,
             separator=separator,
             has_header=has_header,
+            material=material,
         )
 
     def delete_cdm_job(self, job_name: str) -> dict[str, Any]:

@@ -341,6 +341,7 @@ class RemoteSession:
         config: str | None = None,
         separator: str = ",",
         has_header: bool = False,
+        material: str | None = None,
     ) -> dict[str, Any]:
         params: dict[str, Any] = {"csv": csv, "separator": separator, "has_header": has_header}
         if job is not None:
@@ -349,6 +350,8 @@ class RemoteSession:
             params["name"] = name
         if config is not None:
             params["config"] = config
+        if material is not None:
+            params["material"] = material
         return self._call("cdm_import_csv", params)  # type: ignore[no-any-return]
 
     def delete_cdm_job(self, job_name: str) -> dict[str, Any]:
