@@ -1298,6 +1298,17 @@ class GatewayServer:
             details, errors = cdm_db.parse_cdm_rows(rows, has_header)
         defaults = cdm_db.vdb5_job_defaults()
         material_name = _cdm_material_name(details, material_param)
+        if (
+            material_name is None and import_setting is None
+        ):  # legacy: scan column 6 like the import path
+            for n, row in enumerate(rows, start=1):
+                if has_header and n == 1:
+                    continue
+                if not any(str(cell).strip() for cell in row):
+                    continue
+                if len(row) > 5 and str(row[5]).strip():
+                    material_name = str(row[5]).strip()
+                    break
         if material_name is None and defaults.get("material_id") is not None:
             material_name = next(
                 (

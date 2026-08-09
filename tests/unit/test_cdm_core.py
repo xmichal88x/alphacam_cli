@@ -614,6 +614,44 @@ def test_import_cdm_preview_no_setting_legacy(
     am.assert_not_called()
 
 
+def test_import_cdm_preview_legacy_material_scan(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: pathlib.Path
+) -> None:
+    am = MagicMock()
+    monkeypatch.setattr("alphacam_cli.core.cdm_db.sheet_materials", lambda: {"MDF_18": 2})
+    monkeypatch.setattr(
+        "alphacam_cli.core.cdm_db.vdb5_job_defaults",
+        lambda: {"config_name": None, "material_id": None},
+    )
+    csv_file = tmp_path / "order.csv"
+    csv_file.write_text("P003,1,500,500,1;2;3,MDF_18\n", encoding="utf-8")
+    result = _app_with_am(am).import_cdm_preview(str(csv_file))
+    assert result["success"] is True
+    assert result["setting"] is None
+    assert result["material"] == "MDF_18"
+    assert result["items"] == 1
+    assert result["errors"] == []
+    am.assert_not_called()
+
+
+def test_import_cdm_preview_with_job_uses_job_name(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: pathlib.Path
+) -> None:
+    am = MagicMock()
+    monkeypatch.setattr(
+        "alphacam_cli.core.cdm_db.vdb5_job_defaults",
+        lambda: {"config_name": None, "material_id": None},
+    )
+    csv_file = tmp_path / "order.csv"
+    csv_file.write_text("P003,1,500,500,1;2;3\n", encoding="utf-8")
+    result = _app_with_am(am).import_cdm_preview(str(csv_file), job="EXISTING")
+    assert result["success"] is True
+    assert result["job_name"] == "EXISTING"
+    assert result["job"] == "EXISTING"
+    assert result["errors"] == []
+    am.assert_not_called()
+
+
 def test_import_cdm_preview_missing_file() -> None:
     app = Application(MagicMock())
     with pytest.raises(RuntimeError, match="cdm: csv file not found: "):
