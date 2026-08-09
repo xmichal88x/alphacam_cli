@@ -380,3 +380,76 @@ nd.DoNest()
 **E2E (Session 0, żywy AlphaCAM 2025 Router):** run_nest z `gap=5, edge_gap=10, lead_gap=1.5` → success, **3 geometrie / 24 toolpaths**; `gap=7.5, edge_gap=12.0, lead_gap=2.0` → success.
 
 **Inne properties INestData (dostępne w API, NIEeksponowane w CLI):** SheetHGap, SheetVGap (odstępy między arkuszami), Resolution, Direction, Subroutines, ToolPaths.
+
+---
+
+## ✅ CDM (CABINET DOOR MANUFACTURING) DZIAŁA W SESSION 0 (2026-08-09)
+
+**Przełom:** CDM (AlphaDOOR/AlphaCAM CDM — dodatek do produkcji drzwi meblowych) uruchomiony headless przez gateway RPC w Session 0. Nowa komenda: `cdm create JOB TYPE --width --length --quantity`, `cdm jobs`, `cdm types`.
+
+### KLUCZOWE ODKRYCIE — GetAutomationManagerAddIn() WISI, GetAutomationManagerAddInGUI() DZIAŁA
+
+| Metoda | Konstruktor | Zachowanie w Session 0 |
+|---|---|---|
+| `addins.GetAutomationManagerAddIn()` | `CTOR()` — tworzy kolekcje + `get_AutomationManagerDB()` → **ConnectToDatabase → modalny dialog** (VistaDB/SQL connection) | ❌ **WISI na zawsze** |
+| `addins.GetAutomationManagerAddInGUI()` | `CTOR(bool)` — TYLKO kolekcje, bez DB connect | ✅ **DZIAŁA** (IsCDMAuthorised=True, Jobs, NewCDMJob, AddCDMOrderDetail, SaveToDatabase) |
+
+Analiza IL AcamAddIns.dll: GetAutomationManagerAddIn robi `newobj .ctor()` (bezargumentowy, 140B — pełna inicjalizacja z DB), GUI robi `ldc.i4.1; newobj .ctor(bool)` (106B — tylko kolekcje).
+
+### Fixy systemowe (laptop-monika, Session 0 = LocalSystem)
+
+1. **`C:\Windows\System32\config\systemprofile\AppData\Local\Hexagon\Alphacam\AMSettings.acamcore`** (profil SYSTEM!) — skopiowany od użytkownika + rozszerzony:
+   ```xml
+   <ExtraSettingsList>
+     <string>ShowCDM|1</string>
+     <string>UseSQLServer|0</string>
+     <string>UseCVMaterialsLibrary|0</string>
+     <string>UseWorkplan|0</string>
+     <string>ShowPartProcessing|0</string>
+   </ExtraSettingsList>
+   ```
+   ⚠️ Bez ShowCDM=1 w profilu SYSTEM AutomationManager nie wie o CDM. Odpowiednik reg copy HKCU→HKU\.DEFAULT (nesting).
+2. **Rejestr** HKCU + HKU\.DEFAULT `Software\VB and VBA Program Settings\LICOM AlphaDOOR\Options`: `Units=1` (DWORD), `SearchResolution=1`, `ShowPartProcessing=0` (bez tego CDM pyta o "Default Working Unit" — modalny dialog wisi w Session 0!)
+3. **`regsvr32 CDM.dll`** (C:\ALPHACAM\LICOMDAT\CDM Data) — rejestruje ProgID-y `CDM2016R2.CVBAProject/DoorTypeData/MainFrontEnd/SplashScreen` (32-bit VB6, WOW6432Node). Acam.exe jest x64 → CDM.dll (VB6 32-bit) NIE ładuje się jako addin — CDM dostępny TYLKO przez Automation Manager (.NET).
+4. **CLSID `{CC979E90-AA63-4F1A-90F8-78B93F4E2E0A}` (Alphacam.AddIns.AutomationManager)** — nie był zarejestrowany (w przeciwieństwie do NcOutputManager/AutoStyles) — rejestracja ręczna nie rozwiązała wiszenia (newobj .NET, nie COM CoCreate).
+
+### Działająca sekwencja (Session 0, przez gateway)
+
+```python
+import pythoncom, win32com.client as w32
+clsid = pythoncom.MakeIID("{39BFE38A-D3E4-43EA-89D0-584C776B97A9}")   # AddInsInterface
+ai = w32.Dispatch(pythoncom.CoCreateInstance(clsid, None, pythoncom.CLSCTX_ALL, pythoncom.IID_IDispatch))
+addins = ai.GetAddInsInterface(app)                                    # app = surowy dispatch AlphaCAM
+am = addins.GetAutomationManagerAddInGUI()                             # ⚠️ NIE GetAutomationManagerAddIn!
+# ✅ IsCDMAuthorised()=True, am.Jobs.Count, am.NewCDMJob()
+job = am.NewCDMJob(); job.JobName = "X"; job.SaveToDatabase()
+detail = job.AddCDMOrderDetail("Typ Frontu 1")                          # TypeName z tabeli CDM_DoorTypes
+detail.Width=600; detail.Length=400; detail.Quantity=2; detail.SaveToDatabase()
+```
+
+**TypeName (z bazy VistaDB `C:\ALPHACAM\LICOMDAT\Automation Manager Data\AutomationManager.vdb5`, tabela CDM_DoorTypes):** "Typ Frontu 1".."Typ Frontu 47", "L_B_10mm", "L_B_32mm", "L_C_10mm", "M_01", "22" itd.
+
+### Ograniczenia Session 0 (NIE działają headless — modalne okna WPF/WinForms)
+
+- ❌ `job.Process()` — WISI (okno przetwarzania WPF). Wymaga GUI (Session 2).
+- ❌ `job.ImportCSVToJob(path, None)` — WISI (dialog wyboru ImportSettings).
+- ❌ `am.ImportCDMDatabase()` — błąd UserInteractive ("Wyświetlenie modalnego okna... nieprawidłowe gdy aplikacja nie pracuje w trybie UserInteractive").
+- ✅ Działa: NewCDMJob, JobName, SaveToDatabase, AddCDMOrderDetail, settery Width/Length/Quantity/ByPassNest, Jobs/CDMOrderDetails iteracja, IsCDMAuthorised, ConfigurationSettings.
+
+### Nowa komenda CLI (2026-08-09)
+
+| Komenda | Opis | Status |
+|---|---|---|
+| `cdm create JOB TYPE --width --length --quantity` | Tworzy job CDM + pozycję drzwi w bazie | ✅ E2E Session 0 |
+| `cdm jobs` | Lista jobów CDM z bazy | ✅ E2E Session 0 |
+| `cdm types` | Typy drzwi (z jobów; headless ograniczone) | ⚠️ tylko z istniejących jobów |
+| `cdm create --process` | Procesowanie — informuje że wymaga GUI | ⚠️ |
+
+**RPC:** `run_cdm` (job_name, type_name, width, length, quantity, bypass_nest), `cdm_jobs`, `cdm_types`. Klient: `RemoteSession.run_cdm()/cdm_jobs()/cdm_types()`, `RemoteApplication.*` (local mode: `Application.get_automation_manager_addin()`).
+
+**E2E (Session 0, żywy AlphaCAM 2025 Router):** `cdm create PROD_TEST_002 "Typ Frontu 3" --width 800 --length 500 --quantity 3` → OK; `cdm jobs` → 18 jobów (2 nowe). Testy: **428 passed**.
+
+**Uwagi:**
+- Joby testowe CDM_PROBE_* / PROD_TEST_* zostały w bazie (do usunięcia w GUI Automation Manager).
+- Wiszące probe `cdm_probe`/`am_probe` w server.py — do usunięcia przy refactorze (handler `_handler_cdm_probe` z logami do C:\temp).
+- Restart usługi po zmianach: taskkill Acam.exe → sc stop/start AlphaCAMGateway (inaczej stary proces z zablokowanym STA wisi).
