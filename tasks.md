@@ -520,3 +520,24 @@ detail.Width=600; detail.Length=400; detail.Quantity=2; detail.SaveToDatabase()
 - probe_cdm_import.py: `--method build-settings --fields "512,513,524"` edytuje FieldsOrder przez API (job* fail z UserInteractive) — narzędzie zostaje w scripts/.
 
 **Sprzątnięte:** konfiguracja ID8 (baza), CSV-e i skrypty ps1 z C:\temp; task schtasks "cdm_probe" + run_probe.cmd zostają (narzędzie diagnostyczne). Joby "Nowe Zadanie 7/8" (z testów GUI usera) zostały.
+
+### ✅ CDM IMPORT HEADLESS — WŁASNY IMPORTER DZIAŁA (2026-08-09, E2E potwierdzone)
+
+**Rozwiązanie problemu dialogów:** zamiast `ImportCSVToJob`/`CreateJobsFromCSVFile` (zawsze dialog — wisi w Session 0) — **własny parser CSV + API NewCDMJob + AddCDMOrderDetail** (to samo co `cdm create`, działa headless).
+
+**`cdm import CSV [--separator ,] [--header]`** — format "sklep CSV" (8 kolumn, bez nagłówka):
+`Style,Qty,Width,Height,DesignDims[,Materiał,JobName,ConfigName]`
+- DesignDims (`1;18;0;0;30;45;40;90;50;3;0`) → `detail.UserVariableString` **dopełniany zerami do 50** (GUI robi identycznie — potwierdzone w bazie: UserDescriptionString i UserVariableString zawsze 50 pozycji)
+- grupowanie wierszy po JobName (kol 7); pusty → basename pliku; nowa nazwa → nowy job
+- ConfigName (kol 8, np. "Fronty") → `job.ConfigurationSetting = am.ConfigurationSettings.GetByName(...)`
+- Materiał (kol 6) — **ignorowany v1** (brak settera API; GUI też nie ustawia gdy brak materiału — fkMaterialID=0); WARNING per wiersz
+- błędy per wiersz (zły styl, za krótki wiersz) → WARNING, reszta importuje się; 0 items → success=False
+- E2E: `P003,1,500,500,1;18;0;0;30;45;40;90;50;3;0,MDF_18,ImportE2E 001,Fronty` → 2 joby/3 items; w bazie IDENTYCZNIE jak GUI: StyleName=PS_03, fkTypeID=68, UserVariableString 1:1
+
+**Session 0 — okna bez desktopu:** Session 0 ma własny niewidzialny pulpit; procesy (Acam jako SYSTEM) tworzą okna normalnie (62 okna: główne "ALPHACAM [Router]", panele "Properties" = ListBox/PbrsHost — to stałe panele, NIE dialogi; "wiszacy" dialog = modalny czekający na klik, którego nikt nie wykona).
+
+**Recepta na wiszące wywołania w probe:** `--watch-windows` (EnumWindows/EnumChildWindows po PID Acam — tytuły okien do logu; Session 0 okna niewidoczne — bez filtra IsWindowVisible).
+
+**Joby w bazie po sesji:** 8 (6 produkcyjnych + Nowe Zadanie 7/8 z testów GUI + Nowy_projekt — job usera z importu GUI, zostawiony).
+
+**Commity:** `cbe9e61` (własny importer — 460 tests) → `e18fe1d` (dopełnienie do 50 — 462 tests). README: sekcja cdm import zaktualizowana? — do sprawdzenia przy okazji (opis importu w README mówi o requires GUI — NIEAKTUALNY, poprawić w następnej sesji).
