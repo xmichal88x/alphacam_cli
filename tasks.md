@@ -599,3 +599,24 @@ detail.Width=600; detail.Length=400; detail.Quantity=2; detail.SaveToDatabase()
 - `--job` (istniejące zadanie): config niezmieniany (zachowuje swoją); materiał ustawiany jeśli podany/defaults
 
 **Flow produkcyjny finalny:** `alphacam cdm import zamowienie.csv --name "Zamowienie X"` → zadanie z defaultami (Fronty + MDF18) + pozycje z CSV (materiał z CSV kol 6 nadpisuje default; --material/--config nadpisują wszystko).
+
+### ✅ CDM HARDENING + REFACTOR (2026-08-09, E2E na laptop-monika, commity a318b66..a4efa76)
+
+**Wspólny moduł `core/cdm_db.py` (dedup core↔gateway):** `sheet_materials`, `vdb5_job_defaults`, `set_job_material`, `vdb5_door_type_names`, `merge_door_types`, `find_cdm_job`, `read_cdm_csv`, `parse_cdm_rows`, `job_count`, `cleanup_created_job`, `_scripts_dir` (frozen). Server i core używają tych samych funkcji — usunięto ~280 linii duplikacji.
+
+**Bugfixy potwierdzone E2E:**
+- **CSV**: utf-8-sig (BOM z Excela — wcześniej `\ufeffStyle` → fałszywy "door type not found") → cp1250 fallback (stary `errors="replace"`+UnicodeDecodeError był MARTWY); separator musi być 1-znakowy (czytelny błąd); walidacja qty/width/length > 0; parse WSZYSTKICH wierszy PRZED utworzeniem joba
+- **Pusty job po imporcie**: gdy 0 pozycji się udało → job usuwany + weryfikacja przez VistaDB (`job_count`). **Pułapka COM:** DeleteFromDB na świeżym obiekcie z NewCDMJob = CICHY NO-OP; na obiekcie z kolekcji am.Jobs działa (ale tylko po no-op z pkt 1 — sekwencja direct→lookup); kolekcja am.Jobs STĘCHŁA po usunięciu (zwraca usunięty obiekt) → weryfikacja tylko przez DB
+- **`cdm create`**: walidacja wejścia, duplikat nazwy → "job already exists", `--material` (default z vdb5), materiał rozwiązywany PRZED NewCDMJob; usunięta martwa flaga `--process`; błąd typu drzwi → job czyszczony (M1 review)
+- **`cdm types`**: core/local zrównany z serwerem (merge vdb5+com, casefold dedupe)
+- `except Exception: pass` w `_cdm_known_door_types` → logger.warning
+- alphacam.spec: `datas=[('scripts','scripts')]` + hiddenimports (cdm + wszystkie subkomendy) — PyInstaller
+
+**E2E na żywym AlphaCAM 2025 (Session 0, gateway RPC):** types (26+ typów, vdb5+com) ✅; create z `--material MDF_18` → mat=2 w AM_JobDetails ✅; duplikat/width=0/qty=-1/zły materiał → czytelne błędy exit 1, bez sierot ✅; import normalny (materiał z kol 6) / BOM / cp1250+`;` / `;;` błąd / `--job` update / partial warnings ✅; all-bad → exit 1 + "deleted" + count=0 w DB ✅; create z błędnym typem → brak sieroty (count=0) ✅; delete ✅. 544→564 passed, ruff 0, mypy 0.
+
+**Review (code-reviewer, 0 critical):** M1 run_cdm sierota → fixed; M3 PyInstaller → fixed (spec + _scripts_dir); M2 duplikacja core↔server ~280 linii → w TASKS.md (refactor do wspólnych helperów _run_cdm_with/_import_csv_with); m1-m6 → fixed. P1 (błędy core w remote opakowane "Unexpected COM error" zamiast cdm: ...) → w TASKS.md. P2 (_handler_probe_nest martwy) → w TASKS.md.
+
+**Pułapki:**
+- `am.Jobs` po DeleteFromDB zwraca usunięty obiekt (stęchła kolekcja) — NIGDY nie weryfikuj usunięcia przez COM, tylko przez VistaDB
+- subprocess powershell przez ssh z parametrami zawierającymi spacje — testować przez handler, nie ręcznie
+- Windows cmd: `&` w ssh urywa resztę komendy (Input redirection error) — rozdzielać kroki
