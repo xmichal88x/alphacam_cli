@@ -714,6 +714,51 @@ def test_cdm_import_settings_list(monkeypatch: pytest.MonkeyPatch) -> None:
     assert result["settings"][1]["fields_count"] == 2
 
 
+def test_cdm_order_details_application(monkeypatch: pytest.MonkeyPatch) -> None:
+    rows = [{"job_name": "X", "door_type": "P1"}]
+    monkeypatch.setattr("alphacam_cli.core.cdm_db.order_details", lambda job_name: rows)
+    result = Application(MagicMock()).cdm_order_details(job_name="X")
+    assert result["order_details"] == rows
+    assert result["job_name"] == "X"
+
+
+def test_cdm_order_details_application_no_job(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr("alphacam_cli.core.cdm_db.order_details", lambda job_name: [])
+    result = Application(MagicMock()).cdm_order_details()
+    assert result["order_details"] == []
+    assert result["job_name"] is None
+
+
+def test_cdm_door_paths_application(monkeypatch: pytest.MonkeyPatch) -> None:
+    rows = [{"type_name": "T1", "path": "dir"}]
+    monkeypatch.setattr("alphacam_cli.core.cdm_db.door_paths", lambda type_name: rows)
+    result = Application(MagicMock()).cdm_door_paths(type_name="T1")
+    assert result["door_paths"] == rows
+    assert result["type_name"] == "T1"
+
+
+def test_cdm_materials_application(monkeypatch: pytest.MonkeyPatch) -> None:
+    rows = [{"id": 1, "name": "MDF_18"}]
+    monkeypatch.setattr("alphacam_cli.core.cdm_db.materials", lambda: rows)
+    result = Application(MagicMock()).cdm_materials()
+    assert result["materials"] == rows
+
+
+def test_cdm_configs_application(monkeypatch: pytest.MonkeyPatch) -> None:
+    rows = [{"config_name": "Fronty"}]
+    monkeypatch.setattr("alphacam_cli.core.cdm_db.configs", lambda show: rows)
+    result = Application(MagicMock()).cdm_configs(show="all")
+    assert result["configs"] == rows
+    assert result["show"] == "all"
+
+
+def test_cdm_lookups_application(monkeypatch: pytest.MonkeyPatch) -> None:
+    lookups = {"edge_types": [{"id": 1, "label": "Prosty"}]}
+    monkeypatch.setattr("alphacam_cli.core.cdm_db.lookups", lambda: lookups)
+    result = Application(MagicMock()).cdm_lookups()
+    assert result["lookups"] == lookups
+
+
 def test_import_cdm_csv_preview_flag_delegates(
     monkeypatch: pytest.MonkeyPatch, tmp_path: pathlib.Path
 ) -> None:

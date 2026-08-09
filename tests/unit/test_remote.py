@@ -581,3 +581,41 @@ def test_remote_session_import_cdm_preview_digit_string_setting() -> None:
         "cdm_import_preview",
         {"csv": r"C:\temp\order.csv", "has_header": False, "import_setting": 7},
     )
+
+
+def test_remote_session_cdm_order_details_with_job() -> None:
+    client = RemoteSession()
+    client._call = MagicMock(return_value={"order_details": [], "job_name": "X"})
+    client.cdm_order_details(job_name="X")
+    client._call.assert_called_once_with("cdm_order_details", {"job_name": "X"})
+
+
+def test_remote_session_cdm_order_details_no_job() -> None:
+    client = RemoteSession()
+    client._call = MagicMock(return_value={"order_details": [], "job_name": None})
+    client.cdm_order_details()
+    client._call.assert_called_once_with("cdm_order_details", {})
+
+
+def test_remote_session_cdm_door_paths_with_type() -> None:
+    client = RemoteSession()
+    client._call = MagicMock(return_value={"door_paths": [], "type_name": "T1"})
+    client.cdm_door_paths(type_name="T1")
+    client._call.assert_called_once_with("cdm_door_paths", {"type_name": "T1"})
+
+
+def test_remote_session_cdm_configs_with_show() -> None:
+    client = RemoteSession()
+    client._call = MagicMock(return_value={"configs": [], "show": "all"})
+    client.cdm_configs(show="all")
+    client._call.assert_called_once_with("cdm_configs", {"show": "all"})
+
+
+def test_remote_session_cdm_materials_lookups_no_params() -> None:
+    client = RemoteSession()
+    client._call = MagicMock(return_value={"materials": [], "lookups": {}})
+    client.cdm_materials()
+    client._call.assert_called_once_with("cdm_materials")
+    client._call.reset_mock()
+    client.cdm_lookups()
+    client._call.assert_called_once_with("cdm_lookups")

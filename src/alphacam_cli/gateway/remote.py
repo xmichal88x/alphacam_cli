@@ -339,6 +339,21 @@ class RemoteApplication:
     def cdm_import_settings(self) -> dict[str, Any]:
         return self._session.cdm_import_settings()  # type: ignore[no-any-return]
 
+    def cdm_order_details(self, job_name: str | None = None) -> dict[str, Any]:
+        return self._session.cdm_order_details(job_name=job_name)  # type: ignore[no-any-return]
+
+    def cdm_door_paths(self, type_name: str | None = None) -> dict[str, Any]:
+        return self._session.cdm_door_paths(type_name=type_name)  # type: ignore[no-any-return]
+
+    def cdm_materials(self) -> dict[str, Any]:
+        return self._session.cdm_materials()  # type: ignore[no-any-return]
+
+    def cdm_configs(self, show: str | None = None) -> dict[str, Any]:
+        return self._session.cdm_configs(show=show)  # type: ignore[no-any-return]
+
+    def cdm_lookups(self) -> dict[str, Any]:
+        return self._session.cdm_lookups()  # type: ignore[no-any-return]
+
     def delete_cdm_job(self, job_name: str) -> dict[str, Any]:
         return self._session.delete_cdm_job(job_name=job_name)  # type: ignore[no-any-return]
 

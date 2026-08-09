@@ -2594,6 +2594,73 @@ def test_cdm_import_settings_handler(
     )
 
 
+def test_cdm_order_details_handler(monkeypatch: pytest.MonkeyPatch) -> None:
+    rows = [{"job_name": "X", "door_type": "P1"}]
+    monkeypatch.setattr("alphacam_cli.core.cdm_db.order_details", lambda job_name: rows)
+    gw = GatewayServer()
+    am_getter = MagicMock()
+    monkeypatch.setattr(gw, "_cdm_automation_manager", am_getter)
+    result = gw._handler_cdm_order_details({"job_name": "X"})
+    assert result["order_details"] == rows
+    assert result["job_name"] == "X"
+    am_getter.assert_not_called()
+
+
+def test_cdm_order_details_handler_no_job(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr("alphacam_cli.core.cdm_db.order_details", lambda job_name: [])
+    gw = GatewayServer()
+    result = gw._handler_cdm_order_details({})
+    assert result["order_details"] == []
+    assert result["job_name"] is None
+
+
+def test_cdm_door_paths_handler(monkeypatch: pytest.MonkeyPatch) -> None:
+    rows = [{"type_name": "T1", "path": "dir"}]
+    monkeypatch.setattr("alphacam_cli.core.cdm_db.door_paths", lambda type_name: rows)
+    gw = GatewayServer()
+    result = gw._handler_cdm_door_paths({"type_name": "T1"})
+    assert result["door_paths"] == rows
+    assert result["type_name"] == "T1"
+
+
+def test_cdm_materials_handler(monkeypatch: pytest.MonkeyPatch) -> None:
+    rows = [{"id": 1, "name": "MDF_18"}]
+    monkeypatch.setattr("alphacam_cli.core.cdm_db.materials", lambda: rows)
+    gw = GatewayServer()
+    am_getter = MagicMock()
+    monkeypatch.setattr(gw, "_cdm_automation_manager", am_getter)
+    result = gw._handler_cdm_materials({})
+    assert result["materials"] == rows
+    am_getter.assert_not_called()
+
+
+def test_cdm_configs_handler(monkeypatch: pytest.MonkeyPatch) -> None:
+    rows = [{"config_name": "Fronty"}]
+    monkeypatch.setattr("alphacam_cli.core.cdm_db.configs", lambda show: rows)
+    gw = GatewayServer()
+    result = gw._handler_cdm_configs({"show": "all"})
+    assert result["configs"] == rows
+    assert result["show"] == "all"
+
+
+def test_cdm_lookups_handler(monkeypatch: pytest.MonkeyPatch) -> None:
+    lookups = {"edge_types": [{"id": 1, "label": "Prosty"}]}
+    monkeypatch.setattr("alphacam_cli.core.cdm_db.lookups", lambda: lookups)
+    gw = GatewayServer()
+    result = gw._handler_cdm_lookups({})
+    assert result["lookups"] == lookups
+
+
+def test_cdm_order_details_handler_error(monkeypatch: pytest.MonkeyPatch) -> None:
+    def boom(job_name: str | None) -> list[dict[str, Any]]:
+        raise RuntimeError("db locked")  # noqa: TRY003
+
+    monkeypatch.setattr("alphacam_cli.core.cdm_db.order_details", boom)
+    gw = GatewayServer()
+    with pytest.raises(COMError, match="cdm: read order details failed: db locked"):
+        gw._handler_cdm_order_details({"job_name": "X"})
+
+
 def test_cdm_import_csv_handler_setting_not_found(
     server_app: MagicMock, monkeypatch: pytest.MonkeyPatch, tmp_path: pathlib.Path
 ) -> None:

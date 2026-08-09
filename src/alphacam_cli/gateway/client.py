@@ -396,6 +396,30 @@ class RemoteSession:
     def cdm_import_settings(self) -> dict[str, Any]:
         return self._call("cdm_import_settings")  # type: ignore[no-any-return]
 
+    def cdm_order_details(self, job_name: str | None = None) -> dict[str, Any]:
+        params: dict[str, Any] = {}
+        if job_name is not None:
+            params["job_name"] = job_name
+        return self._call("cdm_order_details", params)  # type: ignore[no-any-return]
+
+    def cdm_door_paths(self, type_name: str | None = None) -> dict[str, Any]:
+        params: dict[str, Any] = {}
+        if type_name is not None:
+            params["type_name"] = type_name
+        return self._call("cdm_door_paths", params)  # type: ignore[no-any-return]
+
+    def cdm_materials(self) -> dict[str, Any]:
+        return self._call("cdm_materials")  # type: ignore[no-any-return]
+
+    def cdm_configs(self, show: str | None = None) -> dict[str, Any]:
+        params: dict[str, Any] = {}
+        if show is not None:
+            params["show"] = show
+        return self._call("cdm_configs", params)  # type: ignore[no-any-return]
+
+    def cdm_lookups(self) -> dict[str, Any]:
+        return self._call("cdm_lookups")  # type: ignore[no-any-return]
+
     def delete_cdm_job(self, job_name: str) -> dict[str, Any]:
         return self._call("cdm_delete_job", {"job_name": job_name})  # type: ignore[no-any-return]
 

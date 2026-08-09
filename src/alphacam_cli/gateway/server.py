@@ -1378,6 +1378,39 @@ class GatewayServer:
             )
         return {"settings": out}
 
+    def _handler_cdm_order_details(self, params: dict[str, Any]) -> dict[str, Any]:
+        job_name = str(params.get("job_name")) if params.get("job_name") is not None else None
+        try:
+            return {"order_details": cdm_db.order_details(job_name), "job_name": job_name}
+        except Exception as e:
+            raise COMError(f"cdm: read order details failed: {e}") from e
+
+    def _handler_cdm_door_paths(self, params: dict[str, Any]) -> dict[str, Any]:
+        type_name = str(params.get("type_name")) if params.get("type_name") is not None else None
+        try:
+            return {"door_paths": cdm_db.door_paths(type_name), "type_name": type_name}
+        except Exception as e:
+            raise COMError(f"cdm: read door paths failed: {e}") from e
+
+    def _handler_cdm_materials(self, params: dict[str, Any]) -> dict[str, Any]:
+        try:
+            return {"materials": cdm_db.materials()}
+        except Exception as e:
+            raise COMError(f"cdm: read materials failed: {e}") from e
+
+    def _handler_cdm_configs(self, params: dict[str, Any]) -> dict[str, Any]:
+        show = str(params.get("show")) if params.get("show") is not None else None
+        try:
+            return {"configs": cdm_db.configs(show), "show": show}
+        except Exception as e:
+            raise COMError(f"cdm: read configs failed: {e}") from e
+
+    def _handler_cdm_lookups(self, params: dict[str, Any]) -> dict[str, Any]:
+        try:
+            return {"lookups": cdm_db.lookups()}
+        except Exception as e:
+            raise COMError(f"cdm: read lookups failed: {e}") from e
+
     def _handler_cdm_delete_job(self, params: dict[str, Any]) -> dict[str, Any]:
         job_name = str(params.get("job_name", "")).strip()
         if not job_name:

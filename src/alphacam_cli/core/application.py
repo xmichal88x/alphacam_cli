@@ -1016,6 +1016,26 @@ class Application:
             )
         return {"settings": out}
 
+    def cdm_order_details(self, job_name: str | None = None) -> dict[str, Any]:
+        """Read CDM order details from the vdb5 database (headless-safe)."""
+        return {"order_details": cdm_db.order_details(job_name), "job_name": job_name}
+
+    def cdm_door_paths(self, type_name: str | None = None) -> dict[str, Any]:
+        """Read CDM door paths from the vdb5 database (headless-safe)."""
+        return {"door_paths": cdm_db.door_paths(type_name), "type_name": type_name}
+
+    def cdm_materials(self) -> dict[str, Any]:
+        """Read material definitions from the vdb5 database (headless-safe)."""
+        return {"materials": cdm_db.materials()}
+
+    def cdm_configs(self, show: str | None = None) -> dict[str, Any]:
+        """Read job configurations from the vdb5 database (headless-safe)."""
+        return {"configs": cdm_db.configs(show), "show": show}
+
+    def cdm_lookups(self) -> dict[str, Any]:
+        """Read CDM lookup tables from the vdb5 database (headless-safe)."""
+        return {"lookups": cdm_db.lookups()}
+
     def delete_cdm_job(self, job_name: str) -> dict[str, Any]:
         """Delete a CDM job from the database (headless, no dialogs)."""
         am = self.get_automation_manager_addin()
