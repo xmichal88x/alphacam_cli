@@ -645,12 +645,6 @@ class Application:
             except Exception as e:
                 raise RuntimeError(f"cdm: create job failed: {e}") from e  # noqa: TRY003
         errors: list[str] = []
-        if (
-            material_name
-            and material_id is not None
-            and not self._set_job_material(job_name, material_id)
-        ):
-            errors.append(f"job {job_name}: failed to set material")
         items = 0
         for n, row in enumerate(rows, start=1):
             if has_header and n == 1:
@@ -699,6 +693,12 @@ class Application:
                 errors.append(f"row {n}: save order detail failed: {e}")
                 continue
             items += 1
+        if (
+            material_name
+            and material_id is not None
+            and not self._set_job_material(job_name, material_id)
+        ):
+            errors.append(f"job {job_name}: failed to set material")
         if material_name is None:
             errors.append(f"job {job_name}: no material set (required for processing)")
         return {
