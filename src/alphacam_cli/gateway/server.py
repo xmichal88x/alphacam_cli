@@ -985,9 +985,7 @@ class GatewayServer:
                 has_header=has_header,
                 import_setting=import_setting,
             )
-        separator = str(params.get("separator", ","))
-        if not os.path.exists(csv_path):
-            raise COMError(f"cdm: csv file not found: {csv_path}")
+        separator = str(params.get("separator") or ",")
         try:
             rows = cdm_db.read_cdm_csv(csv_path, separator)
         except Exception as e:
