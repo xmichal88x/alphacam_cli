@@ -93,3 +93,41 @@ def list_jobs() -> None:
         for item in jobs:
             t.add_row(str(item["id"]), str(item["name"]))
         console.print(t)
+
+
+@app.command("import")
+@handle_com_errors
+def import_csv(
+    csv: str = typer.Argument(..., help="CSV file path (Windows path on the server)"),
+    job_name: str | None = typer.Option(
+        None, "--job", help="Existing CDM job name (default: new job from CSV filename)"
+    ),
+    separator: str = typer.Option(",", "--separator", help="CSV separator character"),
+    no_header: bool = typer.Option(False, "--no-header", help="CSV has no header row"),
+) -> None:
+    """Import a CSV door order into a CDM job (create or update, headless)."""
+    require_platform()
+    with alphacam_context(visible=get_visible()) as raw:
+        ac = resolve_app(raw)
+        result = ac.import_cdm_csv(
+            csv=csv,
+            job_name=job_name,
+            separator=separator,
+            has_header=not no_header,
+        )
+        status = "created" if result.get("created") else "updated"
+        console.print(f"[green]OK:[/green] CDM job {status}: {result['job_name']}")
+        console.print(f"     Imported: {result['csv']}")
+
+
+@app.command("delete")
+@handle_com_errors
+def delete_job(
+    job_name: str = typer.Argument(..., help="CDM job name"),
+) -> None:
+    """Delete a CDM job from the database (headless, no dialogs)."""
+    require_platform()
+    with alphacam_context(visible=get_visible()) as raw:
+        ac = resolve_app(raw)
+        result = ac.delete_cdm_job(job_name=job_name)
+        console.print(f"[green]OK:[/green] CDM job deleted: {result['job_name']}")

@@ -328,3 +328,46 @@ def test_remote_cdm_jobs() -> None:
     result = app.cdm_jobs()
     assert result == {"jobs": [{"id": 1, "name": "JOB-001"}]}
     session.cdm_jobs.assert_called_once_with()
+
+
+def test_remote_import_cdm_csv() -> None:
+    session = MagicMock()
+    session.import_cdm_csv.return_value = {
+        "success": True,
+        "job_name": "JOB-001",
+        "csv": r"C:\temp\order.csv",
+        "created": False,
+    }
+    app = RemoteApplication(session)
+    result = app.import_cdm_csv(r"C:\temp\order.csv", job_name="JOB-001")
+    assert result["success"] is True
+    assert result["job_name"] == "JOB-001"
+    assert result["created"] is False
+    session.import_cdm_csv.assert_called_once_with(
+        csv=r"C:\temp\order.csv", job_name="JOB-001", separator=",", has_header=True
+    )
+
+
+def test_remote_delete_cdm_job() -> None:
+    session = MagicMock()
+    session.delete_cdm_job.return_value = {"success": True, "job_name": "JOB-001"}
+    app = RemoteApplication(session)
+    result = app.delete_cdm_job(job_name="JOB-001")
+    assert result == {"success": True, "job_name": "JOB-001"}
+    session.delete_cdm_job.assert_called_once_with(job_name="JOB-001")
+
+
+def test_remote_import_cdm_csv_defaults() -> None:
+    session = MagicMock()
+    session.import_cdm_csv.return_value = {
+        "success": True,
+        "job_name": "order",
+        "csv": "x.csv",
+        "created": True,
+    }
+    app = RemoteApplication(session)
+    result = app.import_cdm_csv("x.csv")
+    assert result["created"] is True
+    session.import_cdm_csv.assert_called_once_with(
+        csv="x.csv", job_name=None, separator=",", has_header=True
+    )

@@ -4,10 +4,12 @@ from __future__ import annotations
 
 import contextlib
 import glob as glob_module
+import json
 import logging
 import os
 import queue
 import socket
+import subprocess
 import threading
 from collections.abc import Callable
 from typing import Any, cast
@@ -682,400 +684,6 @@ class GatewayServer:
             except Exception as e:
                 out["stl_deselect"] = f"FAIL: {e!r}"
 
-        def _am_log(step: str, ok: bool, detail: str = "") -> None:
-            try:
-                with open(r"C:\temp\am_probe_gw.log", "a", encoding="utf-8") as f:
-                    f.write(f"{step}: {'OK' if ok else 'FAIL'} {detail}\n")
-            except Exception:
-                pass
-
-        _am_log("am_probe_start", True)
-        try:
-            import win32com.client.gencache as gencache  # type: ignore[import-untyped]
-
-            mod = gencache.EnsureModule("{D216BAAC-A717-4793-92D3-1AE37AE3AC2E}", 0, 1, 0)
-            _am_log("am_typelib_interface", True, repr(mod))
-            out["am_typelib_interface"] = f"OK: {mod!r}"
-        except Exception as e:
-            _am_log("am_typelib_interface", False, repr(e))
-            out["am_typelib_interface"] = f"FAIL: {e!r}"
-        try:
-            import win32com.client.gencache as gencache  # type: ignore[import-untyped]
-
-            mod = gencache.EnsureModule("{A87DD4DB-67C9-4F1B-BC79-A71EE8C7D1E5}", 0, 1, 0)
-            _am_log("am_typelib_addins", True, repr(mod))
-            out["am_typelib_addins"] = f"OK: {mod!r}"
-        except Exception as e:
-            _am_log("am_typelib_addins", False, repr(e))
-            out["am_typelib_addins"] = f"FAIL: {e!r}"
-        ai: Any = None
-        try:
-            import pythoncom  # type: ignore[import-untyped]
-            import win32com.client as w32  # type: ignore[import-untyped]
-
-            clsid = pythoncom.MakeIID("{39BFE38A-D3E4-43EA-89D0-584C776B97A9}")
-            ai = w32.Dispatch(
-                pythoncom.CoCreateInstance(
-                    clsid, None, pythoncom.CLSCTX_ALL, pythoncom.IID_IDispatch
-                )
-            )
-            _am_log("am_co_create", True, repr(ai))
-            out["am_co_create"] = f"OK: {ai!r}"
-        except Exception as e:
-            _am_log("am_co_create", False, repr(e))
-            out["am_co_create"] = f"FAIL: {e!r}"
-        addins: Any = None
-        astyles: Any = None
-        if ai is not None:
-            try:
-                addins = ai.GetAddInsInterface(app3)
-                _am_log("am_get_addins", True, repr(addins))
-                out["am_get_addins"] = f"OK: {addins!r}"
-            except Exception as e:
-                _am_log("am_get_addins", False, repr(e))
-                out["am_get_addins"] = f"FAIL: {e!r}"
-        if addins is not None:
-            ncman: Any = None
-            reports: Any = None
-            try:
-                ncman = addins.GetNcOutputManagerAddIn()
-                _am_log("am_nc_output_manager", True, repr(ncman))
-                out["am_nc_output_manager"] = f"OK: {ncman!r}"
-            except Exception as e:
-                _am_log("am_nc_output_manager", False, repr(e))
-                out["am_nc_output_manager"] = f"FAIL: {e!r}"
-            try:
-                astyles = addins.GetAutoStylesAddIn()
-                _am_log("am_auto_styles", True, repr(astyles))
-                out["am_auto_styles"] = f"OK: {astyles!r}"
-            except Exception as e:
-                _am_log("am_auto_styles", False, repr(e))
-                out["am_auto_styles"] = f"FAIL: {e!r}"
-            try:
-                reports = addins.GetNewReportsAddIn()
-                _am_log("am_reports", True, repr(reports))
-                out["am_reports"] = f"OK: {reports!r}"
-            except Exception as e:
-                _am_log("am_reports", False, repr(e))
-                out["am_reports"] = f"FAIL: {e!r}"
-            try:
-                coll = ncman.GetOutputConfigurationsCollection()
-                _am_log("am_nc_coll", True, repr(coll.Count))
-                out["am_nc_coll"] = f"OK: {coll.Count!r}"
-            except Exception as e:
-                _am_log("am_nc_coll", False, repr(e))
-                out["am_nc_coll"] = f"FAIL: {e!r}"
-            try:
-                if app3 is not None and app3.ActiveDrawing is not None:
-                    ops = ncman.GetOperationsCollection(app3.ActiveDrawing)
-                    _am_log("am_nc_ops", True, repr(ops))
-                    out["am_nc_ops"] = f"OK: {ops!r}"
-                else:
-                    _am_log("am_nc_ops", True, "SKIP: no active drawing")
-                    out["am_nc_ops"] = "SKIP: no active drawing"
-            except Exception as e:
-                _am_log("am_nc_ops", False, repr(e))
-                out["am_nc_ops"] = f"FAIL: {e!r}"
-            try:
-                import pythoncom  # type: ignore[import-untyped]
-
-                fname = astyles.GetAutoStylesFileName(0, "", pythoncom.Missing)
-                _am_log("am_astyles_file", True, repr(fname))
-                out["am_astyles_file"] = f"OK: {fname!r}"
-            except Exception as e:
-                _am_log("am_astyles_file", False, repr(e))
-                out["am_astyles_file"] = f"FAIL: {e!r}"
-            try:
-                astyles.Apply(r"C:\ALPHACAM\LICOMDIR\Styles\Fronty_AutoStyl.ara")
-                _am_log("astyles_apply_real", True, "")
-                out["astyles_apply_real"] = "OK"
-            except Exception as e:
-                _am_log("astyles_apply_real", False, repr(e))
-                out["astyles_apply_real"] = f"FAIL: {e!r}"
-            try:
-                drw = app3.ActiveDrawing if app3 is not None else None
-                rjob = reports.CreateReportsJob(drw, False, True)
-                _am_log("am_reports_job", True, repr(rjob))
-                out["am_reports_job"] = f"OK: {rjob!r}"
-                try:
-                    rjob.CreateReports()
-                    _am_log("am_reports_create", True, "")
-                    out["am_reports_create"] = "OK"
-                except Exception as e2:
-                    _am_log("am_reports_create", False, repr(e2))
-                    out["am_reports_create"] = f"FAIL: {e2!r}"
-            except Exception as e:
-                _am_log("am_reports_job", False, repr(e))
-                out["am_reports_job"] = f"FAIL: {e!r}"
-        q_drw: Any = None
-        raw_drw: Any = None
-        astyles_any: Any = astyles if addins is not None else None
-        try:
-            q_drw = com_app.new_drawing(200, 100)
-            if q_drw is not None:
-                q_drw.create_circle(20, 60, 50)
-            raw_drw = q_drw._drw if q_drw is not None else None  # type: ignore[attr-defined]
-            q = raw_drw.RunQuery(r"C:\ALPHACAM\LICOMDIR\Queries\Menadżer_Warstw_Fronty.agq")
-            _am_log("agq_run", True, repr(q))
-            out["agq_run"] = f"OK: {q!r}"
-        except Exception as e:
-            _am_log("agq_run", False, repr(e))
-            out["agq_run"] = f"FAIL: {e!r}"
-        try:
-            if astyles_any is None:
-                _am_log("ara_apply", True, "SKIP: no astyles")
-                out["ara_apply"] = "SKIP: no astyles"
-            else:
-                astyles_any.Apply(r"C:\ALPHACAM\LICOMDIR\Styles\Fronty_AutoStyl.ara")
-                _am_log("ara_apply", True, "")
-                out["ara_apply"] = "OK"
-        except Exception as e:
-            _am_log("ara_apply", False, repr(e))
-            out["ara_apply"] = f"FAIL: {e!r}"
-        try:
-            tpc = raw_drw.tool_paths_count
-            _am_log("ara_toolpaths", True, repr(tpc))
-            out["ara_toolpaths"] = f"OK: {tpc!r}"
-        except Exception as e:
-            _am_log("ara_toolpaths", False, repr(e))
-            out["ara_toolpaths"] = f"FAIL: {e!r}"
-        out["am_cdm"] = "SKIP: Automation Manager hangs in Session 0 (verified)"
-        return out
-
-    def _handler_cdm_probe(self, params: dict[str, Any]) -> dict[str, str]:
-        import time
-        from datetime import datetime
-
-        from alphacam_cli.gateway.server import _app as com_app
-
-        out: dict[str, str] = {}
-
-        def _am_log(step: str, ok: bool, detail: str = "") -> None:
-            try:
-                with open(r"C:\temp\cdm_probe2.log", "a", encoding="utf-8") as f:
-                    f.write(f"{step}: {'OK' if ok else 'FAIL'} {detail}\n")
-            except Exception:
-                pass
-
-        _am_log("start", True)
-        out["start"] = "OK"
-
-        import pythoncom  # type: ignore[import-untyped]
-        import win32com.client as w32  # type: ignore[import-untyped]
-
-        ai: Any = None
-        addins: Any = None
-        am: Any = None
-        try:
-            clsid = pythoncom.MakeIID("{39BFE38A-D3E4-43EA-89D0-584C776B97A9}")
-            ai = w32.Dispatch(
-                pythoncom.CoCreateInstance(
-                    clsid, None, pythoncom.CLSCTX_ALL, pythoncom.IID_IDispatch
-                )
-            )
-            _am_log("cdm_co_create", True, repr(ai))
-            out["cdm_co_create"] = f"OK: {ai!r}"
-        except Exception as e:
-            _am_log("cdm_co_create", False, repr(e))
-            out["cdm_co_create"] = f"FAIL: {e!r}"
-
-        if ai is not None:
-            try:
-                raw = getattr(com_app, "_app", None) or getattr(com_app, "raw_dispatch", None)
-                addins = ai.GetAddInsInterface(raw)
-                _am_log("cdm_get_addins", True, repr(addins))
-                out["cdm_get_addins"] = f"OK: {addins!r}"
-            except Exception as e:
-                _am_log("cdm_get_addins", False, repr(e))
-                out["cdm_get_addins"] = f"FAIL: {e!r}"
-
-        if addins is not None:
-            try:
-                am = addins.GetAutomationManagerAddInGUI()
-                _am_log("cdm_get_am", True, repr(am))
-                out["cdm_get_am"] = f"OK: {am!r}"
-            except Exception as e:
-                _am_log("cdm_get_am", False, repr(e))
-                out["cdm_get_am"] = f"FAIL: {e!r}"
-
-        if am is not None:
-            try:
-                out["cdm_authorised"] = f"OK: {am.IsCDMAuthorised()}"
-                _am_log("cdm_authorised", True, out["cdm_authorised"])
-            except Exception as e:
-                _am_log("cdm_authorised", False, repr(e))
-                out["cdm_authorised"] = f"FAIL: {e!r}"
-            try:
-                out["cdm_customers_count"] = f"OK: {am.Customers.Count}"
-                _am_log("cdm_customers_count", True, out["cdm_customers_count"])
-            except Exception as e:
-                _am_log("cdm_customers_count", False, repr(e))
-                out["cdm_customers_count"] = f"FAIL: {e!r}"
-            try:
-                out["cdm_jobs_count"] = f"OK: {am.Jobs.Count}"
-                _am_log("cdm_jobs_count", True, out["cdm_jobs_count"])
-            except Exception as e:
-                _am_log("cdm_jobs_count", False, repr(e))
-                out["cdm_jobs_count"] = f"FAIL: {e!r}"
-            try:
-                names = []
-                for ji in range(1, am.Jobs.Count + 1):
-                    try:
-                        jj = am.Jobs.Item(ji)
-                        try:
-                            dets = jj.CDMOrderDetails
-                            dnames = []
-                            for di in range(1, dets.Count + 1):
-                                try:
-                                    dd = dets.Item(di)
-                                    dnames.append(
-                                        f"{dd.TypeName}|{dd.Width}x{dd.Length}x{dd.Quantity}"
-                                    )
-                                except Exception:
-                                    pass
-                            names.append(f"{jj.JobName}=[{','.join(dnames)}]")
-                        except Exception:
-                            names.append(f"{jj.JobName}=(no details)")
-                    except Exception:
-                        pass
-                out["cdm_jobs_details"] = "OK: " + "; ".join(names)
-                _am_log("cdm_jobs_details", True, out["cdm_jobs_details"])
-            except Exception as e:
-                _am_log("cdm_jobs_details", False, repr(e))
-                out["cdm_jobs_details"] = f"FAIL: {e!r}"
-
-            job: Any = None
-            try:
-                job = am.NewCDMJob()
-                job.JobName = f"CDM_PROBE_{datetime.now():%Y%m%d_%H%M%S}"
-                _am_log("cdm_new_job", True, repr(job))
-                out["cdm_new_job"] = f"OK: {job!r}"
-            except Exception as e:
-                _am_log("cdm_new_job", False, repr(e))
-                out["cdm_new_job"] = f"FAIL: {e!r}"
-
-            if job is not None:
-                try:
-                    job.SaveToDatabase()
-                    _am_log("cdm_job_save", True)
-                    out["cdm_job_save"] = "OK"
-                except Exception as e:
-                    _am_log("cdm_job_save", False, repr(e))
-                    out["cdm_job_save"] = f"FAIL: {e!r}"
-
-                detail: Any = None
-                type_name = str(params.get("type_name", "Single Panel Square"))
-                try:
-                    detail = job.AddCDMOrderDetail(type_name)
-                    _am_log("cdm_add_detail", True, repr(detail))
-                    out["cdm_add_detail"] = f"OK: {detail!r}"
-                except Exception as e:
-                    _am_log("cdm_add_detail", False, repr(e))
-                    out["cdm_add_detail"] = f"FAIL: {e!r}"
-
-                if detail is not None:
-                    try:
-                        detail.Width = 400
-                        detail.Length = 300
-                        detail.Quantity = 1
-                        detail.ByPassNest = False
-                        _am_log("cdm_detail_params", True)
-                        out["cdm_detail_params"] = "OK"
-                    except Exception as e:
-                        _am_log("cdm_detail_params", False, repr(e))
-                        out["cdm_detail_params"] = f"FAIL: {e!r}"
-                    try:
-                        detail.SaveToDatabase()
-                        _am_log("cdm_detail_save", True)
-                        out["cdm_detail_save"] = "OK"
-                    except Exception as e:
-                        _am_log("cdm_detail_save", False, repr(e))
-                        out["cdm_detail_save"] = f"FAIL: {e!r}"
-
-                try:
-                    cs = am.ConfigurationSettings
-                    out["cdm_config_count"] = f"OK: {cs.Count}"
-                    _am_log("cdm_config_count", True, out["cdm_config_count"])
-                    cfg_names = []
-                    for ci in range(1, cs.Count + 1):
-                        try:
-                            c = cs.Item(ci)
-                            cfg_names.append(str(c.Name))
-                        except Exception:
-                            pass
-                    out["cdm_config_names"] = "OK: " + ", ".join(cfg_names)
-                except Exception as e:
-                    out["cdm_config_count"] = f"FAIL: {e!r}"
-                try:
-                    if hasattr(job, "ConfigurationSetting") and am.ConfigurationSettings.Count > 0:
-                        job.ConfigurationSetting = am.ConfigurationSettings.Item(1)
-                        out["cdm_job_config"] = "OK"
-                except Exception as e:
-                    out["cdm_job_config"] = f"FAIL: {e!r}"
-                try:
-                    csv_path = str(params.get("csv", ""))
-                    if csv_path:
-                        _am_log("cdm_import_csv_before", True, csv_path)
-                        try:
-                            imps = am.ImportSettings
-                            out["cdm_import_settings_count"] = f"OK: {imps.Count}"
-                        except Exception as e:
-                            out["cdm_import_settings_count"] = f"FAIL: {e!r}"
-                            imps = None
-                        imp_setting = None
-                        if imps is not None and imps.Count > 0:
-                            try:
-                                imp_setting = imps.Item(1)
-                                out["cdm_import_settings_1"] = f"OK: {imp_setting!r}"
-                            except Exception as e:
-                                out["cdm_import_settings_1"] = f"FAIL: {e!r}"
-                        ok = job.ImportCSVToJob(csv_path, imp_setting)
-                        _am_log("cdm_import_csv", True, f"ok={ok}")
-                        out["cdm_import_csv"] = f"OK: {ok}"
-                except Exception as e:
-                    _am_log("cdm_import_csv", False, repr(e))
-                    out["cdm_import_csv"] = f"FAIL: {e!r}"
-                if bool(params.get("process", False)):
-                    try:
-                        _am_log("cdm_process_before", True, "")
-                        t0 = time.monotonic()
-                        job.Process()
-                        dur = time.monotonic() - t0
-                        _am_log("cdm_job_process", True, f"{dur:.1f}s")
-                        out["cdm_job_process"] = f"OK: {dur:.1f}s"
-                    except Exception as e:
-                        _am_log("cdm_job_process", False, repr(e))
-                        out["cdm_job_process"] = f"FAIL: {e!r}"
-                else:
-                    out["cdm_job_process"] = "SKIP (process=False)"
-
-                try:
-                    drw = com_app.get_active_drawing()
-                    if drw is not None:
-                        _am_log("cdm_active_drawing", True, f"toolpaths={drw.tool_paths_count}")
-                        out["cdm_active_drawing"] = f"OK: toolpaths={drw.tool_paths_count}"
-                    else:
-                        _am_log("cdm_active_drawing", True, "drawing=None")
-                        out["cdm_active_drawing"] = "OK: drawing=None"
-                except Exception as e:
-                    _am_log("cdm_active_drawing", False, repr(e))
-                    out["cdm_active_drawing"] = f"FAIL: {e!r}"
-
-        try:
-            db = am.ImportCDMDatabase() if am is not None else None
-            _am_log("cdm_import_db", True, repr(db))
-            out["cdm_import_db"] = f"OK: {db!r}"
-        except Exception as e:
-            _am_log("cdm_import_db", False, repr(e))
-            out["cdm_import_db"] = f"FAIL: {e!r}"
-
-        if am is not None:
-            try:
-                out["result"] = "CDM_OK" if am.IsCDMAuthorised() else "CDM_FAIL"
-            except Exception:
-                out["result"] = "CDM_FAIL"
-        else:
-            out["result"] = "CDM_FAIL"
         return out
 
     def _cdm_automation_manager(self) -> Any:
@@ -1155,12 +763,58 @@ class GatewayServer:
             "quantity": quantity,
         }
 
+    def _door_type_name(self, row: dict[str, Any]) -> str:
+        for key in ("TypeName", "Name", "DoorTypeName"):
+            value = row.get(key)
+            if isinstance(value, str) and value.strip():
+                return value.strip()
+        for value in row.values():
+            if isinstance(value, str) and value.strip():
+                return value.strip()
+        return ""
+
+    def _vdb5_door_type_names(self) -> tuple[list[str], bool]:
+        script_path = os.path.join(
+            os.path.dirname(os.path.abspath(__file__)),
+            "..",
+            "..",
+            "..",
+            "scripts",
+            "vdb5_door_types.ps1",
+        )
+        try:
+            proc = subprocess.run(
+                ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", script_path],
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+                timeout=20,
+                check=False,
+            )
+            if proc.returncode != 0 or not proc.stdout.strip():
+                return [], False
+            rows = json.loads(proc.stdout)
+        except Exception as e:
+            self._logger.warning("cdm types: vdb5 read failed: %r", e)
+            return [], False
+        if not isinstance(rows, list):
+            return [], False
+        names: list[str] = []
+        for row in rows:
+            if not isinstance(row, dict):
+                continue
+            name = self._door_type_name(row)
+            if name and "do not delete" not in name.lower():
+                names.append(name)
+        return names, True
+
     def _handler_cdm_types(self, params: dict[str, Any]) -> dict[str, Any]:
         try:
             am = self._cdm_automation_manager()
         except Exception as e:
             raise COMError(f"cdm: automation manager unavailable: {e}") from e
-        names: list[str] = []
+        com_names: list[str] = []
         seen: set[str] = set()
         try:
             jobs = am.Jobs
@@ -1176,15 +830,29 @@ class GatewayServer:
                         continue
                     if name and name not in seen:
                         seen.add(name)
-                        names.append(name)
+                        com_names.append(name)
         except Exception as e:
             raise COMError(f"cdm: read door types failed: {e}") from e
-        if not names:
+        vdb5_names, vdb5_ok = self._vdb5_door_type_names()
+        if not vdb5_ok:
+            if not com_names:
+                return {"types": [], "note": "no CDM door types found"}
             return {
-                "types": [],
-                "note": "no CDM jobs with order details yet; door types unavailable headless",
+                "types": [{"id": i, "name": name} for i, name in enumerate(com_names, 1)],
+                "note": "vdb5 read failed; types from jobs only",
             }
-        return {"types": [{"id": i, "name": name} for i, name in enumerate(names, 1)]}
+        merged: list[str] = []
+        merged_seen: set[str] = set()
+        for name in [*vdb5_names, *com_names]:
+            if name and name not in merged_seen:
+                merged_seen.add(name)
+                merged.append(name)
+        if not merged:
+            return {"types": [], "note": "no CDM door types found"}
+        return {
+            "types": [{"id": i, "name": name} for i, name in enumerate(merged, 1)],
+            "source": "vdb5+com",
+        }
 
     def _handler_cdm_jobs(self, params: dict[str, Any]) -> dict[str, Any]:
         try:
@@ -1203,6 +871,105 @@ class GatewayServer:
         except Exception as e:
             raise COMError(f"cdm: list jobs failed: {e}") from e
         return {"jobs": jobs_out}
+
+    def _handler_cdm_import_csv(self, params: dict[str, Any]) -> dict[str, Any]:
+        csv = str(params.get("csv", "")).strip()
+        if not csv:
+            raise COMError("cdm: csv path is required")
+        job_name = str(params.get("job_name", "")).strip() or None
+        separator = str(params.get("separator", ","))
+        has_header = bool(params.get("has_header", True))
+        try:
+            am = self._cdm_automation_manager()
+        except Exception as e:
+            raise COMError(f"cdm: automation manager unavailable: {e}") from e
+        job: Any = None
+        created = False
+        try:
+            if job_name:
+                jobs = am.Jobs
+                for i in range(1, int(jobs.Count) + 1):
+                    try:
+                        jj = jobs.Item(i)
+                    except Exception:
+                        continue
+                    if str(jj.JobName) == job_name:
+                        job = jj
+                        break
+            else:
+                job = am.NewCDMJob()
+                created = True
+                job.JobName = os.path.splitext(os.path.basename(csv.replace("\\", "/")))[0][:60]
+                job.SaveToDatabase()
+        except Exception as e:
+            raise COMError(f"cdm: import csv failed: {e}") from e
+        if job is None:
+            raise COMError(f"cdm: job not found: {job_name}")
+        settings: Any = None
+        try:
+            if hasattr(am, "NewImportSetting"):
+                try:
+                    settings = am.NewImportSetting()
+                except Exception:
+                    settings = None
+                if settings is not None:
+                    for attr in ("Separator", "Delimiter"):
+                        if hasattr(settings, attr):
+                            with contextlib.suppress(Exception):
+                                setattr(settings, attr, separator)
+                    for attr in ("HeaderRow", "FirstRowIsHeader", "HasHeader", "SkipFirstRow"):
+                        if hasattr(settings, attr):
+                            with contextlib.suppress(Exception):
+                                setattr(settings, attr, has_header)
+            if settings is None:
+                try:
+                    if int(am.ImportSettings.Count) > 0:
+                        settings = am.ImportSettings.Item(1)
+                except Exception:
+                    settings = None
+        except Exception as e:
+            raise COMError(f"cdm: import csv failed: {e}") from e
+        try:
+            ok = job.ImportCSVToJob(csv, settings)
+        except Exception as e:
+            raise COMError(f"cdm: import csv failed: {e}") from e
+        return {
+            "success": bool(ok),
+            "job_name": str(job.JobName),
+            "csv": csv,
+            "created": created,
+        }
+
+    def _handler_cdm_delete_job(self, params: dict[str, Any]) -> dict[str, Any]:
+        job_name = str(params.get("job_name", "")).strip()
+        if not job_name:
+            raise COMError("cdm: job_name is required")
+        try:
+            am = self._cdm_automation_manager()
+        except Exception as e:
+            raise COMError(f"cdm: automation manager unavailable: {e}") from e
+        job: Any = None
+        try:
+            jobs = am.Jobs
+            for i in range(1, int(jobs.Count) + 1):
+                try:
+                    jj = jobs.Item(i)
+                except Exception:
+                    continue
+                if str(jj.JobName) == job_name:
+                    job = jj
+                    break
+        except Exception as e:
+            raise COMError(f"cdm: delete job failed: {e}") from e
+        if job is None:
+            raise COMError(f"cdm: job not found: {job_name}")
+        if not hasattr(job, "DeleteFromDB"):
+            raise COMError("cdm: DeleteFromDB unavailable on job")
+        try:
+            job.DeleteFromDB()
+        except Exception as e:
+            raise COMError(f"cdm: delete job failed: {e}") from e
+        return {"success": True, "job_name": job_name}
 
     def _handler_get_info(self, params: dict[str, Any]) -> dict[str, Any]:
         from alphacam_cli.gateway.server import _app as com_app

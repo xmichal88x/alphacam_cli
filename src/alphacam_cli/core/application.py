@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import contextlib
 import glob
 import os
 from typing import TYPE_CHECKING, Any, ClassVar
@@ -552,6 +553,98 @@ class Application:
         except Exception as e:
             raise RuntimeError(f"cdm: list jobs failed: {e}") from e  # noqa: TRY003
         return {"jobs": jobs_out}
+
+    def import_cdm_csv(
+        self,
+        csv: str,
+        job_name: str | None = None,
+        separator: str = ",",
+        has_header: bool = True,
+    ) -> dict[str, Any]:
+        """Import a CSV door order into a CDM job (create or update, headless, no dialogs)."""
+        am = self.get_automation_manager_addin()
+        job: Any = None
+        created = False
+        try:
+            if job_name:
+                jobs = am.Jobs
+                for i in range(1, int(jobs.Count) + 1):
+                    try:
+                        jj = jobs.Item(i)
+                    except Exception:
+                        continue
+                    if str(jj.JobName) == job_name:
+                        job = jj
+                        break
+            else:
+                job = am.NewCDMJob()
+                created = True
+                job.JobName = os.path.splitext(os.path.basename(csv.replace("\\", "/")))[0][:60]
+                job.SaveToDatabase()
+        except Exception as e:
+            raise RuntimeError(f"cdm: import csv failed: {e}") from e  # noqa: TRY003
+        if job is None:
+            raise RuntimeError(f"cdm: job not found: {job_name}")  # noqa: TRY003
+        settings: Any = None
+        try:
+            if hasattr(am, "NewImportSetting"):
+                try:
+                    settings = am.NewImportSetting()
+                except Exception:
+                    settings = None
+                if settings is not None:
+                    for attr in ("Separator", "Delimiter"):
+                        if hasattr(settings, attr):
+                            with contextlib.suppress(Exception):
+                                setattr(settings, attr, separator)
+                    for attr in ("HeaderRow", "FirstRowIsHeader", "HasHeader", "SkipFirstRow"):
+                        if hasattr(settings, attr):
+                            with contextlib.suppress(Exception):
+                                setattr(settings, attr, has_header)
+            if settings is None:
+                try:
+                    if int(am.ImportSettings.Count) > 0:
+                        settings = am.ImportSettings.Item(1)
+                except Exception:
+                    settings = None
+        except Exception as e:
+            raise RuntimeError(f"cdm: import csv failed: {e}") from e  # noqa: TRY003
+        try:
+            ok = job.ImportCSVToJob(csv, settings)
+        except Exception as e:
+            raise RuntimeError(f"cdm: import csv failed: {e}") from e  # noqa: TRY003
+        return {
+            "success": bool(ok),
+            "job_name": str(job.JobName),
+            "csv": csv,
+            "created": created,
+        }
+
+    def delete_cdm_job(self, job_name: str) -> dict[str, Any]:
+        """Delete a CDM job from the database (headless, no dialogs)."""
+        am = self.get_automation_manager_addin()
+        job: Any = None
+        try:
+            jobs = am.Jobs
+            for i in range(1, int(jobs.Count) + 1):
+                try:
+                    jj = jobs.Item(i)
+                except Exception:
+                    continue
+                if str(jj.JobName) == job_name:
+                    job = jj
+                    break
+        except Exception as e:
+            raise RuntimeError(f"cdm: delete job failed: {e}") from e  # noqa: TRY003
+        if job is None:
+            raise RuntimeError(f"cdm: job not found: {job_name}")  # noqa: TRY003
+        if not hasattr(job, "DeleteFromDB"):
+            raise RuntimeError("cdm: DeleteFromDB unavailable on job")  # noqa: TRY003
+        try:
+            job.DeleteFromDB()
+        except Exception as e:
+            raise RuntimeError(f"cdm: delete job failed: {e}") from e  # noqa: TRY003
+        return {"success": True, "job_name": job_name}
 
     def machining_pipeline(
         self,

@@ -333,6 +333,21 @@ class RemoteSession:
     def cdm_jobs(self) -> dict[str, Any]:
         return self._call("cdm_jobs")  # type: ignore[no-any-return]
 
+    def import_cdm_csv(
+        self,
+        csv: str,
+        job_name: str | None = None,
+        separator: str = ",",
+        has_header: bool = True,
+    ) -> dict[str, Any]:
+        params: dict[str, Any] = {"csv": csv, "separator": separator, "has_header": has_header}
+        if job_name is not None:
+            params["job_name"] = job_name
+        return self._call("cdm_import_csv", params)  # type: ignore[no-any-return]
+
+    def delete_cdm_job(self, job_name: str) -> dict[str, Any]:
+        return self._call("cdm_delete_job", {"job_name": job_name})  # type: ignore[no-any-return]
+
     def find_drawing_files(self, pattern: str = "*.amd") -> list[str]:
         return self._call("find_drawing_files", {"pattern": pattern})  # type: ignore[no-any-return]
 

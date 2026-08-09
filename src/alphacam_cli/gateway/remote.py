@@ -288,6 +288,23 @@ class RemoteApplication:
     def cdm_jobs(self) -> dict[str, Any]:
         return self._session.cdm_jobs()  # type: ignore[no-any-return]
 
+    def import_cdm_csv(
+        self,
+        csv: str,
+        job_name: str | None = None,
+        separator: str = ",",
+        has_header: bool = True,
+    ) -> dict[str, Any]:
+        return self._session.import_cdm_csv(  # type: ignore[no-any-return]
+            csv=csv,
+            job_name=job_name,
+            separator=separator,
+            has_header=has_header,
+        )
+
+    def delete_cdm_job(self, job_name: str) -> dict[str, Any]:
+        return self._session.delete_cdm_job(job_name=job_name)  # type: ignore[no-any-return]
+
 
 class _RemoteMillData:
     def __init__(self, session: RemoteSession) -> None:

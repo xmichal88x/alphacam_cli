@@ -919,7 +919,8 @@ def test_auto_style_apply_handler_missing_file(server_app: MagicMock) -> None:
 
 def test_auto_style_apply_handler_invalid_file(server_app: MagicMock) -> None:
     server_app.auto_style_apply.side_effect = RuntimeError(
-        "failed to apply auto-style 'x': invalid or unrecognized AutoStyles file (check format .ara)"
+        "failed to apply auto-style 'x': invalid or unrecognized "
+        "AutoStyles file (check format .ara)"
     )
     gw = GatewayServer()
     with pytest.raises(COMError, match="invalid or unrecognized AutoStyles file"):
@@ -1028,6 +1029,12 @@ def _mock_cdm_com(monkeypatch: pytest.MonkeyPatch) -> tuple[MagicMock, MagicMock
     return ai, addins, am
 
 
+def _mock_vdb5_run(monkeypatch: pytest.MonkeyPatch, stdout: str = "[]") -> MagicMock:
+    run = MagicMock(return_value=types.SimpleNamespace(stdout=stdout, returncode=0))
+    monkeypatch.setattr("subprocess.run", run)
+    return run
+
+
 def test_run_cdm_handler(server_app: MagicMock, monkeypatch: pytest.MonkeyPatch) -> None:
     _, _, am = _mock_cdm_com(monkeypatch)
     job = MagicMock()
@@ -1122,6 +1129,7 @@ def test_run_cdm_handler_door_type_not_found(
 
 def test_cdm_types_handler(server_app: MagicMock, monkeypatch: pytest.MonkeyPatch) -> None:
     _, _, am = _mock_cdm_com(monkeypatch)
+    _mock_vdb5_run(monkeypatch)
     d1 = MagicMock()
     d1.TypeName = "Typ Frontu 1"
     d2 = MagicMock()
@@ -1137,11 +1145,15 @@ def test_cdm_types_handler(server_app: MagicMock, monkeypatch: pytest.MonkeyPatc
     am.Jobs = jobs
     gw = GatewayServer()
     result = gw._handler_cdm_types({})
-    assert result == {"types": [{"id": 1, "name": "Typ Frontu 1"}, {"id": 2, "name": "L_B_10mm"}]}
+    assert result == {
+        "types": [{"id": 1, "name": "Typ Frontu 1"}, {"id": 2, "name": "L_B_10mm"}],
+        "source": "vdb5+com",
+    }
 
 
 def test_cdm_types_handler_dedup(server_app: MagicMock, monkeypatch: pytest.MonkeyPatch) -> None:
     _, _, am = _mock_cdm_com(monkeypatch)
+    _mock_vdb5_run(monkeypatch)
     d1 = MagicMock()
     d1.TypeName = "Typ Frontu 1"
     d2 = MagicMock()
@@ -1157,16 +1169,102 @@ def test_cdm_types_handler_dedup(server_app: MagicMock, monkeypatch: pytest.Monk
     am.Jobs = jobs
     gw = GatewayServer()
     result = gw._handler_cdm_types({})
-    assert result == {"types": [{"id": 1, "name": "Typ Frontu 1"}]}
+    assert result == {
+        "types": [{"id": 1, "name": "Typ Frontu 1"}],
+        "source": "vdb5+com",
+    }
 
 
 def test_cdm_types_handler_empty(server_app: MagicMock, monkeypatch: pytest.MonkeyPatch) -> None:
     _, _, am = _mock_cdm_com(monkeypatch)
+    _mock_vdb5_run(monkeypatch)
     am.Jobs.Count = 0
     gw = GatewayServer()
     result = gw._handler_cdm_types({})
-    assert result["types"] == []
-    assert "note" in result
+    assert result == {"types": [], "note": "no CDM door types found"}
+
+
+def test_cdm_types_handler_vdb5(server_app: MagicMock, monkeypatch: pytest.MonkeyPatch) -> None:
+    _, _, am = _mock_cdm_com(monkeypatch)
+    _mock_vdb5_run(monkeypatch, stdout='[{"TypeName": "Typ Frontu 1"}, {"TypeName": "L_B_10mm"}]')
+    am.Jobs.Count = 0
+    gw = GatewayServer()
+    result = gw._handler_cdm_types({})
+    assert result == {
+        "types": [{"id": 1, "name": "Typ Frontu 1"}, {"id": 2, "name": "L_B_10mm"}],
+        "source": "vdb5+com",
+    }
+
+
+def test_cdm_types_handler_vdb5_merge(
+    server_app: MagicMock, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _, _, am = _mock_cdm_com(monkeypatch)
+    _mock_vdb5_run(monkeypatch, stdout='[{"TypeName": "Typ Frontu 1"}, {"TypeName": "M_01"}]')
+    d1 = MagicMock()
+    d1.TypeName = "M_01"
+    d2 = MagicMock()
+    d2.TypeName = "Typ Frontu 47"
+    details = MagicMock()
+    details.Count = 2
+    details.Item.side_effect = [d1, d2]
+    job1 = MagicMock()
+    job1.CDMOrderDetails = details
+    jobs = MagicMock()
+    jobs.Count = 1
+    jobs.Item.return_value = job1
+    am.Jobs = jobs
+    gw = GatewayServer()
+    result = gw._handler_cdm_types({})
+    assert result == {
+        "types": [
+            {"id": 1, "name": "Typ Frontu 1"},
+            {"id": 2, "name": "M_01"},
+            {"id": 3, "name": "Typ Frontu 47"},
+        ],
+        "source": "vdb5+com",
+    }
+
+
+def test_cdm_types_handler_vdb5_fallback(
+    server_app: MagicMock, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _, _, am = _mock_cdm_com(monkeypatch)
+    monkeypatch.setattr("subprocess.run", MagicMock(side_effect=FileNotFoundError("powershell")))
+    d1 = MagicMock()
+    d1.TypeName = "Typ Frontu 47"
+    details = MagicMock()
+    details.Count = 1
+    details.Item.return_value = d1
+    job1 = MagicMock()
+    job1.CDMOrderDetails = details
+    jobs = MagicMock()
+    jobs.Count = 1
+    jobs.Item.return_value = job1
+    am.Jobs = jobs
+    gw = GatewayServer()
+    result = gw._handler_cdm_types({})
+    assert result == {
+        "types": [{"id": 1, "name": "Typ Frontu 47"}],
+        "note": "vdb5 read failed; types from jobs only",
+    }
+
+
+def test_cdm_types_handler_vdb5_skips_system_row(
+    server_app: MagicMock, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _, _, am = _mock_cdm_com(monkeypatch)
+    _mock_vdb5_run(
+        monkeypatch,
+        stdout=(
+            '[{"TypeName": "Typ Frontu 1"},'
+            ' {"TypeName": "Alphacam Created System Database Field - Do not delete"}]'
+        ),
+    )
+    am.Jobs.Count = 0
+    gw = GatewayServer()
+    result = gw._handler_cdm_types({})
+    assert result == {"types": [{"id": 1, "name": "Typ Frontu 1"}], "source": "vdb5+com"}
 
 
 def test_cdm_jobs_handler(server_app: MagicMock, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -1190,3 +1288,163 @@ def test_cdm_jobs_handler_empty(server_app: MagicMock, monkeypatch: pytest.Monke
     gw = GatewayServer()
     result = gw._handler_cdm_jobs({})
     assert result == {"jobs": []}
+
+
+def test_cdm_import_csv_handler_new_job(
+    server_app: MagicMock, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _, _, am = _mock_cdm_com(monkeypatch)
+    job = MagicMock()
+    settings = MagicMock()
+    am.NewCDMJob.return_value = job
+    am.NewImportSetting.return_value = settings
+    job.ImportCSVToJob.return_value = True
+    gw = GatewayServer()
+    result = gw._handler_cdm_import_csv({"csv": r"C:\temp\order.csv"})
+    assert result == {
+        "success": True,
+        "job_name": "order",
+        "csv": r"C:\temp\order.csv",
+        "created": True,
+    }
+    assert job.JobName == "order"
+    am.NewCDMJob.assert_called_once_with()
+    job.SaveToDatabase.assert_called_once_with()
+    am.NewImportSetting.assert_called_once_with()
+    job.ImportCSVToJob.assert_called_once_with(r"C:\temp\order.csv", settings)
+
+
+def test_cdm_import_csv_handler_existing_job(
+    server_app: MagicMock, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _, _, am = _mock_cdm_com(monkeypatch)
+    job = MagicMock()
+    job.JobName = "JOB-001"
+    jobs = MagicMock()
+    jobs.Count = 1
+    jobs.Item.return_value = job
+    am.Jobs = jobs
+    settings = MagicMock()
+    am.NewImportSetting.return_value = settings
+    job.ImportCSVToJob.return_value = True
+    gw = GatewayServer()
+    result = gw._handler_cdm_import_csv({"csv": r"C:\temp\order.csv", "job_name": "JOB-001"})
+    assert result == {
+        "success": True,
+        "job_name": "JOB-001",
+        "csv": r"C:\temp\order.csv",
+        "created": False,
+    }
+    am.NewCDMJob.assert_not_called()
+    jobs.Item.assert_called_once_with(1)
+    job.ImportCSVToJob.assert_called_once_with(r"C:\temp\order.csv", settings)
+
+
+def test_cdm_import_csv_handler_job_not_found(
+    server_app: MagicMock, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _, _, am = _mock_cdm_com(monkeypatch)
+    am.Jobs.Count = 0
+    gw = GatewayServer()
+    with pytest.raises(COMError, match="cdm: job not found: NOPE"):
+        gw._handler_cdm_import_csv({"csv": r"C:\temp\order.csv", "job_name": "NOPE"})
+
+
+def test_cdm_import_csv_handler_missing_csv(server_app: MagicMock) -> None:
+    gw = GatewayServer()
+    with pytest.raises(COMError, match="cdm: csv path is required"):
+        gw._handler_cdm_import_csv({})
+
+
+def test_cdm_import_csv_handler_fallback_settings(
+    server_app: MagicMock, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _, _, am = _mock_cdm_com(monkeypatch)
+    del am.NewImportSetting
+    job = MagicMock()
+    settings = MagicMock()
+    am.NewCDMJob.return_value = job
+    am.ImportSettings.Count = 1
+    am.ImportSettings.Item.return_value = settings
+    job.ImportCSVToJob.return_value = True
+    gw = GatewayServer()
+    result = gw._handler_cdm_import_csv({"csv": r"C:\temp\order.csv"})
+    assert result["success"] is True
+    assert result["created"] is True
+    am.ImportSettings.Item.assert_called_once_with(1)
+    job.ImportCSVToJob.assert_called_once_with(r"C:\temp\order.csv", settings)
+
+
+def test_cdm_import_csv_handler_failed(
+    server_app: MagicMock, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _, _, am = _mock_cdm_com(monkeypatch)
+    job = MagicMock()
+    am.NewCDMJob.return_value = job
+    job.ImportCSVToJob.side_effect = RuntimeError("parse error")
+    gw = GatewayServer()
+    with pytest.raises(COMError, match=r"cdm: import csv failed: parse error"):
+        gw._handler_cdm_import_csv({"csv": r"C:\temp\order.csv"})
+
+
+def test_cdm_delete_job_handler(server_app: MagicMock, monkeypatch: pytest.MonkeyPatch) -> None:
+    _, _, am = _mock_cdm_com(monkeypatch)
+    job = MagicMock()
+    job.JobName = "JOB-001"
+    jobs = MagicMock()
+    jobs.Count = 1
+    jobs.Item.return_value = job
+    am.Jobs = jobs
+    gw = GatewayServer()
+    result = gw._handler_cdm_delete_job({"job_name": "JOB-001"})
+    assert result == {"success": True, "job_name": "JOB-001"}
+    jobs.Item.assert_called_once_with(1)
+    job.DeleteFromDB.assert_called_once_with()
+
+
+def test_cdm_delete_job_handler_missing_name(server_app: MagicMock) -> None:
+    gw = GatewayServer()
+    with pytest.raises(COMError, match="cdm: job_name is required"):
+        gw._handler_cdm_delete_job({})
+
+
+def test_cdm_delete_job_handler_not_found(
+    server_app: MagicMock, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _, _, am = _mock_cdm_com(monkeypatch)
+    am.Jobs.Count = 0
+    gw = GatewayServer()
+    with pytest.raises(COMError, match="cdm: job not found: NOPE"):
+        gw._handler_cdm_delete_job({"job_name": "NOPE"})
+
+
+def test_cdm_delete_job_handler_failed(
+    server_app: MagicMock, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _, _, am = _mock_cdm_com(monkeypatch)
+    job = MagicMock()
+    job.JobName = "JOB-001"
+    job.DeleteFromDB.side_effect = RuntimeError("locked")
+    jobs = MagicMock()
+    jobs.Count = 1
+    jobs.Item.return_value = job
+    am.Jobs = jobs
+    gw = GatewayServer()
+    with pytest.raises(COMError, match=r"cdm: delete job failed: locked"):
+        gw._handler_cdm_delete_job({"job_name": "JOB-001"})
+
+
+def test_cdm_delete_job_handler_no_delete_method(
+    server_app: MagicMock, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _, _, am = _mock_cdm_com(monkeypatch)
+    job = MagicMock()
+    del job.DeleteFromDB
+    job.JobName = "JOB-001"
+    jobs = MagicMock()
+    jobs.Count = 1
+    jobs.Item.return_value = job
+    am.Jobs = jobs
+    gw = GatewayServer()
+    with pytest.raises(COMError, match="cdm: DeleteFromDB unavailable on job"):
+        gw._handler_cdm_delete_job({"job_name": "JOB-001"})

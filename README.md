@@ -712,6 +712,101 @@ alphacam nest list
 
 ---
 
+### `alphacam cdm`
+
+Cabinet Door Manufacturing (CDM) operations via the Automation Manager add-in — create jobs, list door types, import orders from CSV (headless, no dialogs).
+
+#### `create`
+
+Create a CDM job with a single door position (headless, no dialogs).
+
+**Arguments:**
+
+| Argument | Type | Description |
+|----------|------|-------------|
+| `job_name` | `str` | CDM job name (required) |
+| `type_name` | `str` | Door type name (required, e.g. `Typ Frontu 1`) |
+
+**Options:**
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `--width`, `-w` | `float` | `400` | Door width (mm) |
+| `--length`, `-l` | `float` | `300` | Door length (mm) |
+| `--quantity`, `-q` | `int` | `1` | Door quantity |
+| `--bypass-nest` | `bool` | `False` | Bypass nesting |
+| `--process` | `bool` | `False` | Request processing (requires GUI) |
+
+> **Note:** `--process` requires a GUI session (Session 2) — the job is saved to the database, but processing cannot run headless.
+
+**Example:**
+
+```bash
+alphacam cdm create "Job 2026-01" "Typ Frontu 1" --width 400 --length 300 --quantity 2
+```
+
+#### `types`
+
+List CDM door types from the VistaDB database and seen in existing jobs.
+
+**Example:**
+
+```bash
+alphacam cdm types
+```
+
+#### `jobs`
+
+List existing CDM jobs.
+
+**Example:**
+
+```bash
+alphacam cdm jobs
+```
+
+#### `import`
+
+Import a CSV door order into a CDM job (create or update, headless). The CSV columns must match the import configuration in the Automation Manager.
+
+**Arguments:**
+
+| Argument | Type | Description |
+|----------|------|-------------|
+| `csv` | `str` | CSV file path (Windows path on the server) (required) |
+
+**Options:**
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `--job` | `str` | `None` | Existing CDM job name (default: new job from CSV filename) |
+| `--separator` | `str` | `,` | CSV separator character |
+| `--no-header` | `bool` | `False` | CSV has no header row |
+
+**Example:**
+
+```bash
+alphacam cdm import order.csv --job "Job 2026-01" --separator ";"
+```
+
+#### `delete`
+
+Delete a CDM job from the database (headless, no dialogs).
+
+**Arguments:**
+
+| Argument | Type | Description |
+|----------|------|-------------|
+| `job_name` | `str` | CDM job name (required) |
+
+**Example:**
+
+```bash
+alphacam cdm delete "Job 2026-01"
+```
+
+---
+
 ### `alphacam post list`
 
 List available post-processors from the AlphaCAM posts directory (`.vba` and `.dll` files).
