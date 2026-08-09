@@ -1849,8 +1849,9 @@ def test_cdm_import_csv_handler_all_details_fail_deletes_job(
     am.Jobs = jobs
     monkeypatch.setattr(
         "alphacam_cli.core.cdm_db.find_cdm_job",
-        MagicMock(side_effect=[job, None]),
+        MagicMock(return_value=job),
     )
+    monkeypatch.setattr("alphacam_cli.core.cdm_db.job_count", MagicMock(return_value=0))
     csv_file = tmp_path / "order.csv"
     csv_file.write_text("P003,1,500,500,1;2;3\nP004,1,600,400,1;2;3\n", encoding="utf-8")
     gw = GatewayServer()
@@ -1864,12 +1865,9 @@ def test_cdm_import_csv_handler_all_details_fail_deletes_job(
     assert result["errors"].count("job order: no valid order details, deleted") == 1
     assert any("door type not found: P003" in e for e in result["errors"])
     assert any("door type not found: P004" in e for e in result["errors"])
-    job.DeleteFromDB.assert_called_once_with()
-    assert any(
-        record.levelname == "INFO"
-        and "cdm import cleanup:" in record.getMessage()
-        and "has_db=True" in record.getMessage()
-        and "lookup=True" in record.getMessage()
+    assert job.DeleteFromDB.call_count == 2
+    assert not any(
+        record.levelname == "INFO" and "cdm import cleanup:" in record.getMessage()
         for record in caplog.records
     )
 
@@ -1885,8 +1883,9 @@ def test_cdm_import_csv_handler_all_details_fail_delete_via_lookup(
     found_job = MagicMock()
     monkeypatch.setattr(
         "alphacam_cli.core.cdm_db.find_cdm_job",
-        MagicMock(side_effect=[job, job, found_job, None]),
+        MagicMock(return_value=found_job),
     )
+    monkeypatch.setattr("alphacam_cli.core.cdm_db.job_count", MagicMock(return_value=0))
     csv_file = tmp_path / "order.csv"
     csv_file.write_text("P003,1,500,500,1;2;3\n", encoding="utf-8")
     gw = GatewayServer()
@@ -1913,8 +1912,9 @@ def test_cdm_import_csv_handler_all_details_fail_cleanup_still_present(
     found_job = MagicMock()
     monkeypatch.setattr(
         "alphacam_cli.core.cdm_db.find_cdm_job",
-        MagicMock(side_effect=[job, job, found_job, found_job]),
+        MagicMock(return_value=found_job),
     )
+    monkeypatch.setattr("alphacam_cli.core.cdm_db.job_count", MagicMock(return_value=1))
     csv_file = tmp_path / "order.csv"
     csv_file.write_text("P003,1,500,500,1;2;3\n", encoding="utf-8")
     gw = GatewayServer()
@@ -1971,7 +1971,7 @@ def test_cdm_import_csv_handler_cleanup_failure(
     am.NewCDMJob.return_value = job
     monkeypatch.setattr(
         "alphacam_cli.core.cdm_db.find_cdm_job",
-        MagicMock(side_effect=[job]),
+        MagicMock(return_value=job),
     )
     csv_file = tmp_path / "order.csv"
     csv_file.write_text("P003,1,500,500,1;2;3\n", encoding="utf-8")

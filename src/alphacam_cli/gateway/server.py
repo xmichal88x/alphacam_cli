@@ -954,27 +954,14 @@ class GatewayServer:
             errors.append(f"job {job_name}: no material set (required for processing)")
         if items == 0 and not job_param:
             deleted = False
-            has_db = hasattr(job, "DeleteFromDB")
             try:
-                lookup = cdm_db.find_cdm_job(am, job_name)
-            except Exception as e:
-                self._logger.warning("cdm import cleanup: initial lookup failed: %r", e)
-                lookup = None
-            self._logger.info(
-                "cdm import cleanup: job=%s has_db=%s lookup=%s",
-                job_name,
-                has_db,
-                lookup is not None,
-            )
-            try:
-                if has_db:
+                if hasattr(job, "DeleteFromDB"):
                     job.DeleteFromDB()
-                    deleted = cdm_db.find_cdm_job(am, job_name) is None
-                if not deleted:
-                    found = cdm_db.find_cdm_job(am, job_name)
-                    if found is not None and hasattr(found, "DeleteFromDB"):
-                        found.DeleteFromDB()
-                    deleted = cdm_db.find_cdm_job(am, job_name) is None
+                found = cdm_db.find_cdm_job(am, job_name)
+                if found is not None and hasattr(found, "DeleteFromDB"):
+                    found.DeleteFromDB()
+                count = cdm_db.job_count(job_name)
+                deleted = count == 0
             except Exception as e:
                 self._logger.warning("cdm import: cleanup failed: %r", e)
             if deleted:

@@ -220,6 +220,46 @@ def set_job_material(job_name: str, material_id: int) -> bool:
     return bool(match and int(match.group(1)) > 0)
 
 
+def job_count(job_name: str) -> int | None:
+    """Count AM_JobDetails rows for a job by name; None when the read fails."""
+    script_path = os.path.join(
+        os.path.dirname(os.path.abspath(__file__)),
+        "..",
+        "..",
+        "..",
+        "scripts",
+        "vdb5_job_count.ps1",
+    )
+    try:
+        proc = subprocess.run(
+            [
+                "powershell",
+                "-NoProfile",
+                "-ExecutionPolicy",
+                "Bypass",
+                "-File",
+                script_path,
+                "-JobName",
+                job_name,
+            ],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=20,
+            check=False,
+        )
+    except Exception as e:
+        logger.warning("cdm count: vdb5 read failed: %r", e)
+        return None
+    if proc.returncode != 0 or not proc.stdout.strip():
+        return None
+    match = re.search(r"count:\s*(\d+)", proc.stdout)
+    if match is None:
+        return None
+    return int(match.group(1))
+
+
 def _door_type_name(row: dict[str, Any]) -> str:
     for key in ("TypeName", "Name", "DoorTypeName"):
         value = row.get(key)

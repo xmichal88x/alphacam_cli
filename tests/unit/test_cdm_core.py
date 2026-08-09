@@ -206,8 +206,9 @@ def test_import_cdm_csv_all_details_fail_deletes_job(
     )
     monkeypatch.setattr(
         "alphacam_cli.core.cdm_db.find_cdm_job",
-        MagicMock(side_effect=[None]),
+        MagicMock(return_value=job),
     )
+    monkeypatch.setattr("alphacam_cli.core.cdm_db.job_count", MagicMock(return_value=0))
     csv_file = tmp_path / "order.csv"
     csv_file.write_text("P003,1,500,500,1;2;3\nP004,1,600,400,1;2;3\n", encoding="utf-8")
     result = _app_with_am(am).import_cdm_csv(str(csv_file))
@@ -216,7 +217,7 @@ def test_import_cdm_csv_all_details_fail_deletes_job(
     assert result["errors"].count("job order: no valid order details, deleted") == 1
     assert any("door type not found: P003" in e for e in result["errors"])
     assert any("door type not found: P004" in e for e in result["errors"])
-    job.DeleteFromDB.assert_called_once_with()
+    assert job.DeleteFromDB.call_count == 2
 
 
 def test_import_cdm_csv_all_details_fail_delete_via_lookup(
@@ -230,8 +231,9 @@ def test_import_cdm_csv_all_details_fail_delete_via_lookup(
     found_job = MagicMock()
     monkeypatch.setattr(
         "alphacam_cli.core.cdm_db.find_cdm_job",
-        MagicMock(side_effect=[job, found_job, None]),
+        MagicMock(return_value=found_job),
     )
+    monkeypatch.setattr("alphacam_cli.core.cdm_db.job_count", MagicMock(return_value=0))
     monkeypatch.setattr(
         "alphacam_cli.core.cdm_db.vdb5_job_defaults",
         lambda: {"config_name": "Fronty", "material_id": None},
@@ -257,8 +259,9 @@ def test_import_cdm_csv_all_details_fail_cleanup_still_present(
     found_job = MagicMock()
     monkeypatch.setattr(
         "alphacam_cli.core.cdm_db.find_cdm_job",
-        MagicMock(side_effect=[job, found_job, found_job]),
+        MagicMock(return_value=found_job),
     )
+    monkeypatch.setattr("alphacam_cli.core.cdm_db.job_count", MagicMock(return_value=1))
     monkeypatch.setattr(
         "alphacam_cli.core.cdm_db.vdb5_job_defaults",
         lambda: {"config_name": "Fronty", "material_id": None},

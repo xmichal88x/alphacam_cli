@@ -720,12 +720,11 @@ class Application:
             try:
                 if hasattr(cdm_job, "DeleteFromDB"):
                     cdm_job.DeleteFromDB()
-                    deleted = cdm_db.find_cdm_job(am, job_name) is None
-                if not deleted:
-                    found = cdm_db.find_cdm_job(am, job_name)
-                    if found is not None and hasattr(found, "DeleteFromDB"):
-                        found.DeleteFromDB()
-                    deleted = cdm_db.find_cdm_job(am, job_name) is None
+                found = cdm_db.find_cdm_job(am, job_name)
+                if found is not None and hasattr(found, "DeleteFromDB"):
+                    found.DeleteFromDB()
+                count = cdm_db.job_count(job_name)
+                deleted = count == 0
             except Exception as e:
                 errors.append(f"job {job_name}: no valid order details, cleanup failed: {e}")
             else:

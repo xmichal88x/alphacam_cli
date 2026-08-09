@@ -143,6 +143,33 @@ def test_set_job_material_subprocess_failure(monkeypatch: pytest.MonkeyPatch) ->
     assert cdm_db.set_job_material("order", 4) is False
 
 
+def test_job_count_parses(monkeypatch: pytest.MonkeyPatch) -> None:
+    run = _mock_run(monkeypatch, stdout="count: 5")
+    assert cdm_db.job_count("order") == 5
+    args, _ = run.call_args
+    assert args[0][args[0].index("-JobName") + 1] == "order"
+
+
+def test_job_count_zero(monkeypatch: pytest.MonkeyPatch) -> None:
+    _mock_run(monkeypatch, stdout="count: 0")
+    assert cdm_db.job_count("order") == 0
+
+
+def test_job_count_nonzero_returncode(monkeypatch: pytest.MonkeyPatch) -> None:
+    _mock_run(monkeypatch, stdout="", returncode=1)
+    assert cdm_db.job_count("order") is None
+
+
+def test_job_count_bad_stdout(monkeypatch: pytest.MonkeyPatch) -> None:
+    _mock_run(monkeypatch, stdout="not a count")
+    assert cdm_db.job_count("order") is None
+
+
+def test_job_count_subprocess_failure(monkeypatch: pytest.MonkeyPatch) -> None:
+    _mock_run(monkeypatch).side_effect = FileNotFoundError("powershell")
+    assert cdm_db.job_count("order") is None
+
+
 def test_read_cdm_csv_utf8_bom_stripped(tmp_path: pathlib.Path) -> None:
     f = tmp_path / "bom.csv"
     f.write_bytes(b"\xef\xbb\xbfStyle,Quantity,Width,Length,DesignDimensions\nP003,1,400,300,0\n")
