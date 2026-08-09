@@ -335,16 +335,21 @@ def test_remote_import_cdm_csv() -> None:
     session.import_cdm_csv.return_value = {
         "success": True,
         "job_name": "JOB-001",
-        "csv": r"C:\temp\order.csv",
-        "created": False,
+        "items": 2,
+        "errors": [],
     }
     app = RemoteApplication(session)
-    result = app.import_cdm_csv(r"C:\temp\order.csv", job_name="JOB-001")
+    result = app.import_cdm_csv(r"C:\temp\order.csv", job="JOB-001")
     assert result["success"] is True
     assert result["job_name"] == "JOB-001"
-    assert result["created"] is False
+    assert result["items"] == 2
     session.import_cdm_csv.assert_called_once_with(
-        csv=r"C:\temp\order.csv", job_name="JOB-001", separator=",", has_header=False
+        csv=r"C:\temp\order.csv",
+        job="JOB-001",
+        name=None,
+        config=None,
+        separator=",",
+        has_header=False,
     )
 
 
@@ -362,12 +367,38 @@ def test_remote_import_cdm_csv_defaults() -> None:
     session.import_cdm_csv.return_value = {
         "success": True,
         "job_name": "order",
-        "csv": "x.csv",
-        "created": True,
+        "items": 1,
+        "errors": [],
     }
     app = RemoteApplication(session)
     result = app.import_cdm_csv("x.csv")
-    assert result["created"] is True
+    assert result["job_name"] == "order"
     session.import_cdm_csv.assert_called_once_with(
-        csv="x.csv", job_name=None, separator=",", has_header=False
+        csv="x.csv",
+        job=None,
+        name=None,
+        config=None,
+        separator=",",
+        has_header=False,
+    )
+
+
+def test_remote_import_cdm_csv_name_config() -> None:
+    session = MagicMock()
+    session.import_cdm_csv.return_value = {
+        "success": True,
+        "job_name": "Zadanie 132",
+        "items": 4,
+        "errors": [],
+    }
+    app = RemoteApplication(session)
+    result = app.import_cdm_csv(r"C:\temp\order.csv", name="Zadanie 132", config="Fronty")
+    assert result["items"] == 4
+    session.import_cdm_csv.assert_called_once_with(
+        csv=r"C:\temp\order.csv",
+        job=None,
+        name="Zadanie 132",
+        config="Fronty",
+        separator=",",
+        has_header=False,
     )

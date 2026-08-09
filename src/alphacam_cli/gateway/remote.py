@@ -291,13 +291,17 @@ class RemoteApplication:
     def import_cdm_csv(
         self,
         csv: str,
-        job_name: str | None = None,
+        job: str | None = None,
+        name: str | None = None,
+        config: str | None = None,
         separator: str = ",",
         has_header: bool = False,
     ) -> dict[str, Any]:
         return self._session.import_cdm_csv(  # type: ignore[no-any-return]
             csv=csv,
-            job_name=job_name,
+            job=job,
+            name=name,
+            config=config,
             separator=separator,
             has_header=has_header,
         )

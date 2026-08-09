@@ -336,13 +336,19 @@ class RemoteSession:
     def import_cdm_csv(
         self,
         csv: str,
-        job_name: str | None = None,
+        job: str | None = None,
+        name: str | None = None,
+        config: str | None = None,
         separator: str = ",",
         has_header: bool = False,
     ) -> dict[str, Any]:
         params: dict[str, Any] = {"csv": csv, "separator": separator, "has_header": has_header}
-        if job_name is not None:
-            params["job_name"] = job_name
+        if job is not None:
+            params["job"] = job
+        if name is not None:
+            params["name"] = name
+        if config is not None:
+            params["config"] = config
         return self._call("cdm_import_csv", params)  # type: ignore[no-any-return]
 
     def delete_cdm_job(self, job_name: str) -> dict[str, Any]:

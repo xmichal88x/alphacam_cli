@@ -99,31 +99,39 @@ def list_jobs() -> None:
 @handle_com_errors
 def import_csv(
     csv: str = typer.Argument(..., help="CSV file path (Windows path on the server)"),
+    name: str | None = typer.Option(
+        None, "--name", help="Job name for a new CDM job (default: CSV basename)"
+    ),
+    config: str | None = typer.Option(
+        None, "--config", help="Configuration name for a new CDM job (e.g. 'Fronty')"
+    ),
+    job: str | None = typer.Option(None, "--job", help="Import into an existing CDM job by name"),
     separator: str = typer.Option(",", "--separator", help="CSV separator character"),
     header: bool = typer.Option(False, "--header", help="CSV has a header row"),
 ) -> None:
-    """Import a CSV door order into CDM job(s) (headless, no dialogs)."""
+    """Import a CSV door order into a single CDM job (headless, no dialogs)."""
     require_platform()
     with alphacam_context(visible=get_visible()) as raw:
         ac = resolve_app(raw)
         result = ac.import_cdm_csv(
             csv=csv,
+            job=job,
+            name=name,
+            config=config,
             separator=separator,
             has_header=header,
         )
-        if result.get("success"):
-            for job in result.get("jobs", []):
-                console.print(
-                    f"[green]OK:[/green] CDM job created: {job['job_name']} "
-                    f"({job['items']} item(s))"
-                )
-            console.print(f"     Imported: {csv}")
-            for err in result.get("errors", []):
-                console.print(f"[yellow]WARNING:[/yellow] {err}")
-        else:
+        if not result.get("success"):
             for err in result.get("errors", []):
                 console.print(f"[red]ERROR:[/red] {err}")
             raise typer.Exit(code=1)
+        verb = "updated" if job else "created"
+        console.print(
+            f"[green]OK:[/green] CDM job {verb}: {result['job_name']} ({result['items']} item(s))"
+        )
+        console.print(f"     Imported: {csv}")
+        for err in result.get("errors", []):
+            console.print(f"[yellow]WARNING:[/yellow] {err}")
 
 
 @app.command("delete")

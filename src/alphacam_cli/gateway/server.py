@@ -884,6 +884,11 @@ class GatewayServer:
         csv_path = str(params.get("csv", "")).strip()
         if not csv_path:
             raise COMError("cdm: csv path is required")
+        job_param = str(params.get("job", "")).strip() or None
+        name_param = str(params.get("name", "")).strip() or None
+        config_param = str(params.get("config", "")).strip() or None
+        if job_param and name_param:
+            raise COMError("cdm: --name and --job are mutually exclusive")
         separator = str(params.get("separator", ","))
         has_header = bool(params.get("has_header", False))
         if not os.path.exists(csv_path):
@@ -898,11 +903,42 @@ class GatewayServer:
             am = self._cdm_automation_manager()
         except Exception as e:
             raise COMError(f"cdm: automation manager unavailable: {e}") from e
-        default_job_name = os.path.splitext(os.path.basename(csv_path))[0]
+        job: Any = None
+        if job_param:
+            try:
+                jobs = am.Jobs
+                for i in range(1, int(jobs.Count) + 1):
+                    try:
+                        jj = jobs.Item(i)
+                    except Exception:
+                        continue
+                    if str(jj.JobName) == job_param:
+                        job = jj
+                        break
+            except Exception as e:
+                raise COMError(f"cdm: import csv failed: {e}") from e
+            if job is None:
+                raise COMError(f"cdm: job not found: {job_param}")
+            job_name = job_param
+        else:
+            default_job_name = os.path.splitext(os.path.basename(csv_path))[0]
+            job_name = (name_param or default_job_name)[:60]
+            try:
+                job = am.NewCDMJob()
+            except Exception as e:
+                raise COMError(f"cdm: create job failed: {e}") from e
+            job.JobName = job_name
+            if config_param:
+                try:
+                    job.ConfigurationSetting = am.ConfigurationSettings.GetByName(config_param)
+                except Exception as e:
+                    raise COMError(f"cdm: config not found: {config_param}") from e
+            try:
+                job.SaveToDatabase()
+            except Exception as e:
+                raise COMError(f"cdm: create job failed: {e}") from e
         errors: list[str] = []
-        jobs: dict[str, dict[str, Any]] = {}
-        current_job_name: str | None = None
-        total_items = 0
+        items = 0
         rows = csv.reader(io.StringIO(text), delimiter=separator)
         for n, row in enumerate(rows, start=1):
             if has_header and n == 1:
@@ -931,36 +967,9 @@ class GatewayServer:
             except ValueError:
                 errors.append(f"row {n}: invalid length: {row[3]!r}")
                 continue
-            design_dims = str(row[4]).strip() if len(row) > 4 else ""
-            material = str(row[5]).strip() if len(row) > 5 else ""
-            row_job_name = str(row[6]).strip() if len(row) > 6 else ""
-            config_name = str(row[7]).strip() if len(row) > 7 else ""
-            if material:
-                errors.append(f"row {n}: material column ignored (v1): {material}")
-            job_name = row_job_name if row_job_name else (current_job_name or default_job_name)
-            entry = jobs.get(job_name)
-            if entry is None:
-                try:
-                    job = am.NewCDMJob()
-                except Exception as e:
-                    errors.append(f"row {n}: create job failed: {e}")
-                    continue
-                job.JobName = job_name
-                if config_name:
-                    try:
-                        job.ConfigurationSetting = am.ConfigurationSettings.GetByName(config_name)
-                    except Exception:
-                        errors.append(f"row {n}: config not found: {config_name}")
-                try:
-                    job.SaveToDatabase()
-                except Exception as e:
-                    errors.append(f"row {n}: create job failed: {e}")
-                    continue
-                entry = {"job_name": job_name, "job": job, "items": 0}
-                jobs[job_name] = entry
-                current_job_name = job_name
+            design_dims = str(row[4]).strip()
             try:
-                detail = entry["job"].AddCDMOrderDetail(style)
+                detail = job.AddCDMOrderDetail(style)
             except Exception:
                 errors.append(f"row {n}: door type not found: {style}")
                 continue
@@ -977,14 +986,12 @@ class GatewayServer:
             except Exception as e:
                 errors.append(f"row {n}: save order detail failed: {e}")
                 continue
-            entry["items"] += 1
-            total_items += 1
-        jobs_out = [{"job_name": name, "items": entry["items"]} for name, entry in jobs.items()]
+            items += 1
         return {
-            "success": total_items > 0,
-            "jobs": jobs_out,
+            "success": items > 0,
+            "job_name": job_name,
+            "items": items,
             "errors": errors,
-            "total_items": total_items,
         }
 
     def _handler_cdm_delete_job(self, params: dict[str, Any]) -> dict[str, Any]:

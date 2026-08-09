@@ -150,9 +150,9 @@ def test_cdm_import_command_success() -> None:
             "alphacam_cli.core.application.Application.import_cdm_csv",
             return_value={
                 "success": True,
-                "jobs": [{"job_name": "order", "items": 2}],
+                "job_name": "order",
+                "items": 2,
                 "errors": [],
-                "total_items": 2,
             },
         ) as mock_import,
     ):
@@ -160,7 +160,81 @@ def test_cdm_import_command_success() -> None:
     assert result.exit_code == 0
     assert "CDM job created: order (2 item(s))" in result.stderr
     assert "Imported:" in result.stderr
-    mock_import.assert_called_once_with(csv=r"C:\temp\order.csv", separator=",", has_header=False)
+    mock_import.assert_called_once_with(
+        csv=r"C:\temp\order.csv",
+        job=None,
+        name=None,
+        config=None,
+        separator=",",
+        has_header=False,
+    )
+
+
+def test_cdm_import_command_update_existing_job() -> None:
+    from tests.unit.test_cli import _mock_com
+
+    with (
+        _mock_com(),
+        patch(
+            "alphacam_cli.core.application.Application.import_cdm_csv",
+            return_value={
+                "success": True,
+                "job_name": "JOB-001",
+                "items": 3,
+                "errors": [],
+            },
+        ) as mock_import,
+    ):
+        result = runner.invoke(app, ["cdm", "import", r"C:\temp\order.csv", "--job", "JOB-001"])
+    assert result.exit_code == 0
+    assert "CDM job updated: JOB-001 (3 item(s))" in result.stderr
+    mock_import.assert_called_once_with(
+        csv=r"C:\temp\order.csv",
+        job="JOB-001",
+        name=None,
+        config=None,
+        separator=",",
+        has_header=False,
+    )
+
+
+def test_cdm_import_command_name_and_config() -> None:
+    from tests.unit.test_cli import _mock_com
+
+    with (
+        _mock_com(),
+        patch(
+            "alphacam_cli.core.application.Application.import_cdm_csv",
+            return_value={
+                "success": True,
+                "job_name": "Zadanie 132",
+                "items": 1,
+                "errors": [],
+            },
+        ) as mock_import,
+    ):
+        result = runner.invoke(
+            app,
+            [
+                "cdm",
+                "import",
+                r"C:\temp\order.csv",
+                "--name",
+                "Zadanie 132",
+                "--config",
+                "Fronty",
+            ],
+        )
+    assert result.exit_code == 0
+    assert "CDM job created: Zadanie 132 (1 item(s))" in result.stderr
+    mock_import.assert_called_once_with(
+        csv=r"C:\temp\order.csv",
+        job=None,
+        name="Zadanie 132",
+        config="Fronty",
+        separator=",",
+        has_header=False,
+    )
 
 
 def test_cdm_import_command_header_flag() -> None:
@@ -172,9 +246,9 @@ def test_cdm_import_command_header_flag() -> None:
             "alphacam_cli.core.application.Application.import_cdm_csv",
             return_value={
                 "success": True,
-                "jobs": [{"job_name": "order", "items": 1}],
+                "job_name": "order",
+                "items": 1,
                 "errors": [],
-                "total_items": 1,
             },
         ) as mock_import,
     ):
@@ -183,7 +257,14 @@ def test_cdm_import_command_header_flag() -> None:
         )
     assert result.exit_code == 0
     assert "CDM job created: order (1 item(s))" in result.stderr
-    mock_import.assert_called_once_with(csv=r"C:\temp\order.csv", separator=";", has_header=True)
+    mock_import.assert_called_once_with(
+        csv=r"C:\temp\order.csv",
+        job=None,
+        name=None,
+        config=None,
+        separator=";",
+        has_header=True,
+    )
 
 
 def test_cdm_import_command_warnings() -> None:
@@ -195,16 +276,16 @@ def test_cdm_import_command_warnings() -> None:
             "alphacam_cli.core.application.Application.import_cdm_csv",
             return_value={
                 "success": True,
-                "jobs": [{"job_name": "order", "items": 1}],
-                "errors": ["row 2: material column ignored (v1): MDF"],
-                "total_items": 1,
+                "job_name": "order",
+                "items": 1,
+                "errors": ["row 2: expected at least 5 columns, got 3"],
             },
         ),
     ):
         result = runner.invoke(app, ["cdm", "import", r"C:\temp\order.csv"])
     assert result.exit_code == 0
     assert "WARNING" in result.stderr
-    assert "material column ignored" in result.stderr
+    assert "expected at least 5 columns" in result.stderr
 
 
 def test_cdm_import_command_failure() -> None:
@@ -216,9 +297,9 @@ def test_cdm_import_command_failure() -> None:
             "alphacam_cli.core.application.Application.import_cdm_csv",
             return_value={
                 "success": False,
-                "jobs": [],
+                "job_name": "order",
+                "items": 0,
                 "errors": ["row 1: door type not found: XYZ"],
-                "total_items": 0,
             },
         ),
     ):
