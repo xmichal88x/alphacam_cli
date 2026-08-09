@@ -620,3 +620,85 @@ detail.Width=600; detail.Length=400; detail.Quantity=2; detail.SaveToDatabase()
 - `am.Jobs` po DeleteFromDB zwraca usunięty obiekt (stęchła kolekcja) — NIGDY nie weryfikuj usunięcia przez COM, tylko przez VistaDB
 - subprocess powershell przez ssh z parametrami zawierającymi spacje — testować przez handler, nie ręcznie
 - Windows cmd: `&` w ssh urywa resztę komendy (Input redirection error) — rozdzielać kroki
+
+### ✅ E2E FAZA 1 — CDM IMPORT MAPPING (2026-08-09, gateway RPC, commity bf836b8..c79fba2)
+
+Push `90c5a60..c79fba2` master → git pull na maszynie (fast-forward, bez konfliktów) → restart AlphaCAMGateway (sc stop/start, RUNNING) → RPC OK.
+
+**E2E A — import z mapowaniem "sklep CSV" (id=3, 8 kolumn) ✅**
+- `cdm import e2e_sklep.csv --import-setting 3` → success, job "Faza1 E2E 001", 2 items, Material: MDF_18
+- Wariant z nazwą: `--import-setting "sklep CSV"` na kopii z jobem 002 → success
+- Baza (vdb5_order_details): 2 wiersze; style_name="PS_03" (style_number=930); quantity 1/2; width/length 500/500 i 600/400; material_id=2; user_variable_string 50 pozycji; user_description_string = "Typ_Krawedzi;Grubosc_Plyty;..." (11 pozycji)
+
+**E2E B — nowe pola CDM (ustawienie testowe id=10, 17 pól) ⚠️ CZĘŚCIOWY**
+- Setup: backup (2 settings / 14 params), INSERT ustawienia + 17 parametrów, weryfikacja → RPC import-settings list pokazuje 17 pól (1→door_type ... 17→door_small_nest)
+- Import `e2e_nowe_pola.csv --import-setting 10 --name "Faza1 E2E NowePola"` → success 2 items, ale 4 WARNING-i
+- Baza: csv_customer_name="Kowalski Jan"/"Nowak Anna" ✅, csv_order_number="KW/2026/08"/"Z/100/2026" ✅, csv_item_number="Nr 5"/"Nr 8" ✅, production_comment="Komentarz testowy"/"Komentarz 2" ✅, custom_fields {"1":"F1","2":"F2"} / {"1":"G3","2":"G4"} ✅, nesting_priority=5/3 ✅, rotation_angle=45/90 ✅, small_nest_part=true/false ✅, material_id=2 ✅, quantity 1/3 ✅
+- **NIEDZIAŁA (WARNING-i, do fixu w kolejnym tasku):**
+  - `WARNING: row 1: RotationMethod failed: (-2147467262, 'Taki interfejs nie jest obsługiwany.', (0, 'mscorlib', 'Element OleAut wystąpiła zgłosił niezgodność typów.', None, 0, -2147467262), None)` → rotation_method=0 w bazie (oczekiwane 1/2)
+  - `WARNING: row 1: HasDrilling failed: '<win32com.gen_py.ALPHACAM Add-Ins 1.0 Type Library.ICDMOrderDetail instance at 0x...>' object has no attribute 'HasDrilling'` → has_drilling=false (oczekiwane true) — brak atrybutu w typelibie
+  - (takie same dla row 2) — pozostałe settery (RotationAngle, NestingPriority, SmallNestPart) działały
+
+**E2E B-2 — po fixach (rotation_method int + has_drilling vdb5) ⚠️ CZĘŚCIOWY (T6d, commity c79fba2..f7ecb93):**
+- Deploy: push c79fba2..f7ecb93 → git pull fast-forward (7 plików, +275) → restart AlphaCAMGateway (RUNNING) → RPC OK
+- Setup: backup 2 settings + 14 params → INSERT 'E2E Faza1 Fix' + 17 parametrów (bez ID!) → **new_id=11** (MAX przed=4, po=11 — auto-increment potwierdzony, sekwencja nie wraca), PARAM_COUNT=17
+- Import `e2e_fix.csv --import-setting 11 --name "Faza1 E2E Fix"` → **success 2 items, ale 1 WARNING**: `WARNING: job Faza1 E2E Fix: failed to set has_drilling` (ZERO warningów dla rotation)
+- Baza (vdb5_order_details):
+  - wiersz1: csv_customer_name="Kowalski Jan" ✅, csv_order_number="KW/2026/08" ✅, csv_item_number="Nr 5" ✅, production_comment="Komentarz testowy" ✅, custom_fields {"1":"F1","2":"F2"} ✅, **rotation_method=3 ✅ (fix ffefc72 działa!)**, rotation_angle=30 ✅, nesting_priority=7 ✅, **has_drilling=false ❌ (oczekiwane true)**, small_nest_part=true ✅, material_id=2 ✅, quantity=1 ✅
+  - wiersz2: "Nowak Anna" ✅, "Z/100/2026" ✅, "Nr 8" ✅, "Komentarz 2" ✅, {"1":"G3","2":"G4"} ✅, **rotation_method=1 ✅**, rotation_angle=90 ✅, nesting_priority=2 ✅, has_drilling=false (oczekiwane false — bez zmian), small_nest_part=false ✅, quantity=3 ✅
+- Preview (dry run): tabela 17 pól OK, vdb5_job_count przed=1 po=1 (bez zmian) ✅
+- **ROOT CAUSE has_drilling (NOWY — nie COM!): `vdb5_set_has_drilling.ps1:28` — `$values = $Values -split ';'`.** W PowerShell zmienne są **case-INSENSITIVE**: `$values` i `$Values` to TA SAMA zmienna zadeklarowana w `param([string]$Values)`, więc przypisanie tablicy ze splitu jest **rzutowane na [string]** → "1 0" (1 element!) → "row count mismatch: 2 rows vs 1 values" → Write-Error → stderr (gateway loguje tylko stdout → mylące puste "vdb5 update failed: ") → returncode 1 → warning
+- Diagnoza: test_subprocess.py (subprocess dokładnie jak gateway) → RC=1, stdout='', stderr='row count mismatch: 2 rows vs 1 values'; echo_args.ps1 (`$v2` — inna nazwa!) → split daje 2 elementy; minimalny skrypt z `[string]$Values` + `$values = $Values -split ';'` → COUNT=1 JOIN=[1 0]; inline `[string]$v='1;0'; $v = $v -split ';'` → COUNT=1 JOIN=[1 0] **potwierdzenie 100%**; inline bez typowania → COUNT=2
+- **FIX (kolejny task):** w `scripts/vdb5_set_has_drilling.ps1` użyć INNEJ nazwy zmiennej niż `$Values` (np. `$valuesList`/`$flags`), bo case-insensitivity + [string] param psuje split. Sprawdzone: jedyny skrypt z tym wzorcem; vdb5_set_job_material.ps1 działa (brak splitu na zmiennej param)
+- Sprzątanie ✅: cdm delete success, vdb5_job_count=0; DELETE 17 params + 1 setting (id=11) potwierdzone (LEFT=0/0); rmdir C:\temp\faza1_e2e2; import-settings list: tylko 3 i 4
+
+**E2E B-3 — has_drilling po fixie case-insensitive ✅ (T6c-3, commit 6d508fc):**
+- Fix: `scripts/vdb5_set_has_drilling.ps1` — lokalna zmienna `$values` → `$flags` (PS case-insensitive kolidowała z `param([string]$Values)`); `$flags = $Values -split ';'` daje tablicę (nie string "1 0")
+- Deploy: push 6d508fc → git pull fast-forward (1 plik, +4/-4) → restart AlphaCAMGateway (RUNNING, PID 12520)
+- Setup: backup 2 settings + 14 params → INSERT 'E2E Faza1 Fix2' (bez ID) → **new_id=12** (auto-increment ciąg dalszy), PARAM_COUNT=17
+- Import `e2e_drill.csv --import-setting 12 --name "Faza1 E2E Drill"` → **success 2 items, ZERO WARNING-ów** ✅
+- Baza (vdb5_order_details): wiersz1 "Kowalski Jan"/"KW/2026/08"/"Nr 5"/"Komentarz testowy"/{"1":"F1","2":"F2"} ✅, rotation_method=3 ✅, rotation_angle=30 ✅, nesting_priority=7 ✅, **has_drilling=true ✅ (FIX DZIAŁA)**, small_nest_part=true ✅, material_id=2 ✅, quantity=1 ✅; wiersz2 "Nowak Anna"/"Z/100/2026"/"Nr 8"/"Komentarz 2"/{"1":"G3","2":"G4"} ✅, rotation_method=1 ✅, rotation_angle=90 ✅, nesting_priority=2 ✅, **has_drilling=false ✅**, small_nest_part=false ✅, material_id=2 ✅, quantity=3 ✅
+- Ręczny test skryptu nie był potrzebny (import przeszedł bez warningów)
+- Sprzątanie ✅: cdm delete success; DELETE 17 params + 1 setting (id=12), LEFT=0/0; rmdir C:\temp\faza1_e2e3; import-settings list: tylko 3 i 4
+
+**E2E B-4 — sanity F3 import --job z drillingiem ⚠️ CZĘŚCIOWY FAIL (commit 8d695a1):**
+- Deploy: push fd9dedb → git pull fast-forward (8 plików, +224/-63) → restart AlphaCAMGateway (nssm; uwaga: `sc stop && ... && sc start` w jednym łańcuchu NIE zadziałał — brak wpisu START w event logu, usługa STOPPED; osobne `sc start` + 45s → RUNNING, port 8721 LISTENING)
+- Setup: backup 2 tabel → INSERT 'E2E Sanity Drill' (bez ID) → **new_id=13**, PARAM_COUNT=17, kol 16→298 ✓
+- **Test 1 (nowy job, drill1.csv 2 wiersze: drilling 1,0): success 2 items, ZERO warningów — ALE BAZA ODWRÓCONA: ID=105 "Nr 5" (drilling=1 w CSV) has_drilling=FALSE ❌, ID=106 "Nr 8" (drilling=0) has_drilling=TRUE ❌** (oczekiwane: 105=true, 106=false). Regresja F3: `ORDER BY CDMOrderDetailID DESC` + `GetRange(0, N)` odwraca kolejność values vs wiersze dla wielu wierszy naraz
+- **Test 2 (import --job, drill2.csv 1 wiersz drilling=1): success 1 item, ZERO warningów ✅ (F3 naprawił sedno — wcześniej "failed to set has_drilling"); nowy wiersz ID=107 "Nr 9" has_drilling=true ✅; 105/106 nietknięte przez --job (ale już błędne po Teście 1)**
+- Test 3 niepotrzebny (Test 2 przeszedł)
+- **Wniosek: F3 naprawia import --job (1 nowy wiersz), ale łamie kolejność dla nowego joba z wieloma wierszami. Poprawny fix: ORDER BY ASC + `GetRange(ids.Count - flags.Count, flags.Count)` (ostatnie N w kolejności rosnącej) zamiast DESC + GetRange(0,N)**
+- Sprzątanie ✅: cdm delete success; DELETE 17 params + 1 setting (id=13), LEFT=0/0; rmdir C:\temp\faza1_sanity; import-settings list: tylko 3 i 4
+
+**E2E B-5 — F3b: ASC + last N slice — oba testy ✅ (commit 82cbef4):**
+- Fix: `scripts/vdb5_set_has_drilling.ps1` — `ORDER BY CDMOrderDetailID ASC` (powrót z DESC), pobranie WSZYSTKICH ID, `$start = $ids.Count - $flags.Count` → mismatch exit 1 tylko gdy start<0; `if ($start -gt 0) { $ids = $ids.GetRange($start, $flags.Count) }` (ostatnie N rosnąco). Dla nowego joba start=0 (wszystkie), dla --job z 2 starymi + 1 nowym start=2 (tylko nowy). Zachowane: `$flags = $Values -split ';'` (case-sensitive!), `[HasDrilling]`, `rows: N`
+- Deploy: push 82cbef4 → git pull fast-forward (1 plik, +5/-4) → restart AlphaCAMGateway (osobno `sc stop` → osobno `sc start` + 45s → RUNNING)
+- Setup: backup 2 tabel → INSERT 'E2E Sanity Drill2' (bez ID) → **new_id=15** (pierwsza próba id=14 z błędną kolejnością typów — usunięta), PARAM_COUNT=17, kol 16→298; **kolejność mapowania kolumn (potwierdzona): 1→256(type), 2→259(qty), 3→257(width), 4→258(height), 5→264(design), 6→260(material), 7→261(customer), 8→262(order), 9→263(item), 10→265(comment), 11→266(custom1), 12→267(custom2), 13→271(rotation), 14→272(angle), 15→274(nest), 16→298(drilling), 17→299(small)**
+- **Test 1 (nowy job, drill1.csv 2 wiersze drilling 1,0): success 2 items, ZERO warningów ✅; baza: wiersz1 "Nr 5" has_drilling=TRUE ✅ (drilling=1), wiersz2 "Nr 8" has_drilling=FALSE ✅ (drilling=0) — regresja B-4 NAPRAWIONA, kolejność values poprawna**
+- **Test 2 (import --job, drill2.csv 1 wiersz drilling=1): success 1 item, ZERO warningów ✅; baza: 3 wiersze — (1) "Nr 5" true (nietknięty) ✅, (2) "Nr 8" false (nietknięty) ✅, (3) "Nr 9" nowy true ✅ — F3b działa dla --job (start=2 → tylko nowy)**
+- Sprzątanie ✅: cdm delete success; DELETE 17 params + 1 setting (id=15), LEFT=0/0; rmdir C:\temp\faza1_sanity2; import-settings list: tylko 3 i 4
+
+**E2E C — preview (dry run) ✅**
+- `cdm import e2e_sklep.csv --import-setting 3 --preview` → tabela Field mapping (8 kolumn: 1→door_type, 2→door_quantity, 3→door_width, 4→door_height, 5→door_design_dimensions, 6→job_material_id, 7→job_name, 8→job_config_id), Job "Faza1 E2E 001", Items: 2, exit 0
+- Dowód braku zmian: vdb5_job_count przed=1, po=1
+- Preview 17-pola: klient/komentarz/custom widoczne (JobName z nazwy pliku gdy --name nie podany)
+
+**E2E D — wsteczna zgodność (stary parser, 5 kolumn) ✅**
+- `cdm import e2e_5kol.csv --name "Faza1 E2E Legacy"` (bez --import-setting) → success 1 item; baza: 1 wiersz, user_variable_string 50 pozycji, material_id=4 (MDF18 default starego parsera), style PS_03
+
+**import-settings list:** przed: 3 "sklep CSV" (8), 4 "Ustawienia Importu CSV 2" (6) → w trakcie + 10 "E2E Faza1 Test" (17) → po sprzątaniu: tylko 3 i 4 ✅
+
+**Sprzątanie ✅:** cdm delete ×4 (001, 002, NowePola, Legacy) success, vdb5_job_count=0; DELETE 17 params + 1 setting (id=10) potwierdzone; rmdir C:\temp\faza1_e2e; import-settings list bez "E2E Faza1 Test"
+
+**Pułapki (WAŻNE dla przyszłych tasków):**
+- **AM_ImportSettings.ImportSettingID i AM_ImportSettingsParameter.ImportSettingsParameterID to AUTO-INCREMENT w VistaDB** — jawny ID w INSERT jest IGNOROWANY (podaliśmy 5, dostał 9 → DELETE po 5 nic nie usunął). Wstawiać BEZ kolumny ID i odczytać `SELECT MAX(...)` po INSERT; sekwencja nie wraca (kolejny będzie 11)
+- `$pid` w PowerShell = wbudowana stała read-only — `$pid = ...` rzuca "Cannot overwrite variable PID"; używać np. `$newParamId`
+- ConvertTo-Csv na hashtable daje śmieci ("IsReadOnly","Count"...) — używać PSCustomObject + Add-Member
+- style dla P003 w tej bazie = PS_03 (style_number 930); legacy material_id=4 (MDF18)
+- Komentarze ASCII działają; polskie znaki w CSV nie były testowane (tylko ASCII w tym teście)
+
+### ⏳ Pre-existing z review Fazy 1 (2026-08-09)
+- **Duplikacja logiki CDM między application.py a server.py** (helpers, _FIELD_SETTERS, _import_cdm_csv_mapped) — refactor do wspólnego modułu (przyczyna przeoczenia cache w _handler_run_cdm) — **wysoki priorytet**
+- **Twarde ścieżki w skryptach ps1** (`C:\Program Files\Hexagon\ALPHACAM 2025\`, `C:\ALPHACAM\`) — złamie przy zmianie wersji
+- **_handler_probe_nest (server.py ~425-779)** — ~350 linii diagnostycznych z hardcoded ścieżkami użytkownika w produkcyjnym gateway — do wycięcia/feature flag
+- **No-op settery _RemoteMillData** (rapid_down_to, drill_type, process_type — remote.py) — ciche pomijanie parametrów w trybie zdalnym
