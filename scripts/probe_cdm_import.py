@@ -31,11 +31,14 @@ Outputs:
 """
 
 import argparse
+import ctypes
 import json
 import logging
 import os
+import subprocess
 import threading
 import time
+from ctypes import wintypes
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -264,7 +267,14 @@ def probe_build_settings(s: Any, field_types: list[int], out: dict[str, Any]) ->
         logger.exception("Name FAIL")
 
 
-def probe_import(am: Any, s: Any, csv: str, job_name: str, out: dict[str, Any]) -> None:
+def probe_import(
+    am: Any,
+    s: Any,
+    csv: str,
+    job_name: str,
+    out: dict[str, Any],
+    watch_windows: bool = False,
+) -> None:
     job: Any = None
     try:
         job = am.NewCDMJob()
@@ -294,6 +304,9 @@ def probe_import(am: Any, s: Any, csv: str, job_name: str, out: dict[str, Any]) 
     entry: dict[str, Any] = {"call_started": datetime.now().isoformat(timespec="seconds")}
     out["import"] = entry
     dump(out)
+    watcher_started = False
+    if watch_windows:
+        watcher_started = _watch_acam_windows()
     started = time.monotonic()
     logger.info("ImportCSVToJob started (csv=%s)", csv)
     try:
@@ -307,12 +320,24 @@ def probe_import(am: Any, s: Any, csv: str, job_name: str, out: dict[str, Any]) 
         entry["duration_s"] = round(time.monotonic() - started, 3)
         entry["error"] = f"{type(e).__name__}: {e}"
         logger.exception("ImportCSVToJob FAIL")
+    finally:
+        if watcher_started:
+            logger.info("WATCH STOP")
 
 
-def probe_bulk(am: Any, s: Any, csv: str, out: dict[str, Any]) -> None:
+def probe_bulk(
+    am: Any,
+    s: Any,
+    csv: str,
+    out: dict[str, Any],
+    watch_windows: bool = False,
+) -> None:
     entry: dict[str, Any] = {"call_started": datetime.now().isoformat(timespec="seconds")}
     out["bulk"] = entry
     dump(out)
+    watcher_started = False
+    if watch_windows:
+        watcher_started = _watch_acam_windows()
     started = time.monotonic()
     logger.info("CreateJobsFromCSVFile started (csv=%s)", csv)
     try:
@@ -326,6 +351,9 @@ def probe_bulk(am: Any, s: Any, csv: str, out: dict[str, Any]) -> None:
         entry["error"] = f"{type(e).__name__}: {e}"
         logger.exception("CreateJobsFromCSVFile FAIL")
         return
+    finally:
+        if watcher_started:
+            logger.info("WATCH STOP")
     try:
         count = int(coll.Count)
         entry["count"] = count
@@ -359,6 +387,61 @@ def probe_bulk(am: Any, s: Any, csv: str, out: dict[str, Any]) -> None:
             logger.exception("bulk job %d SaveToDatabase FAIL", i)
         jobs.append(job)
     entry["jobs"] = jobs
+
+
+def _get_acam_pid() -> int | None:
+    try:
+        result = subprocess.run(
+            ["tasklist", "/FI", "IMAGENAME eq Acam.exe", "/FO", "CSV"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+    except Exception:
+        return None
+    pids: list[int] = []
+    for line in result.stdout.splitlines()[1:]:
+        fields = line.split(",")
+        if len(fields) < 2:
+            continue
+        try:
+            pids.append(int(fields[1].strip('"')))
+        except ValueError:
+            continue
+    return max(pids) if pids else None
+
+
+def _window_watcher(target_pid: int) -> None:
+    user32 = ctypes.windll.user32
+
+    def _cb(hwnd: int, lparam: int) -> bool:
+        if not user32.IsWindowVisible(hwnd):
+            return True
+        pid = wintypes.DWORD()
+        user32.GetWindowThreadProcessId(hwnd, ctypes.byref(pid))
+        if pid.value != target_pid:
+            return True
+        length = user32.GetWindowTextLengthW(hwnd)
+        if length:
+            buf = ctypes.create_unicode_buffer(length + 1)
+            user32.GetWindowTextW(hwnd, buf, length + 1)
+            logger.info("WINDOW: %r", buf.value)
+        return True
+
+    callback = ctypes.WINFUNCTYPE(ctypes.c_bool, wintypes.HWND, wintypes.LPARAM)(_cb)
+    while True:
+        time.sleep(3)
+        user32.EnumWindows(callback, 0)
+
+
+def _watch_acam_windows() -> bool:
+    pid = _get_acam_pid()
+    if pid is None:
+        logger.info("WINDOW WATCH: Acam.exe PID not found")
+        return False
+    logger.info("WINDOW WATCH start (pid=%d)", pid)
+    threading.Thread(target=_window_watcher, args=(pid,), daemon=True).start()
+    return True
 
 
 def main() -> None:
@@ -403,6 +486,11 @@ def main() -> None:
         default=60,
         help="watchdog timeout in seconds (default: 60)",
     )
+    parser.add_argument(
+        "--watch-windows",
+        action="store_true",
+        help="log visible Acam.exe window titles every 3s during import/bulk COM calls",
+    )
     args = parser.parse_args()
 
     if args.method == "build-settings":
@@ -428,6 +516,7 @@ def main() -> None:
         "method": args.method,
         "job_name": job_name,
         "fields": args.fields,
+        "watch_windows": args.watch_windows,
     }
     logger.info(
         "start variant=probe_cdm_import csv=%s settings_id=%d settings_name=%s method=%s fields=%s",
@@ -523,10 +612,23 @@ def main() -> None:
                     logger.exception("--fields parse FAIL: %s", args.fields)
             else:
                 if args.method in ("import", "both"):
-                    probe_import(am, s, args.csv, job_name, out)
+                    probe_import(
+                        am,
+                        s,
+                        args.csv,
+                        job_name,
+                        out,
+                        watch_windows=args.watch_windows,
+                    )
                     dump(out)
                 if args.method in ("bulk", "both"):
-                    probe_bulk(am, s, args.csv, out)
+                    probe_bulk(
+                        am,
+                        s,
+                        args.csv,
+                        out,
+                        watch_windows=args.watch_windows,
+                    )
                     dump(out)
 
     dump(out)
