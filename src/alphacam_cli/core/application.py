@@ -463,6 +463,96 @@ class Application:
             raise RuntimeError(msg) from e  # noqa: TRY003
         return {"success": True, "file": file}
 
+    def get_automation_manager_addin(self) -> Any:
+        """Return the CDM Automation Manager (headless-safe: GetAutomationManagerAddInGUI)."""
+        addins = self.get_addins()
+        if addins is None:
+            raise RuntimeError("Add-ins interface unavailable")  # noqa: TRY003
+        return addins.GetAutomationManagerAddInGUI()
+
+    def run_cdm(
+        self,
+        job_name: str,
+        type_name: str,
+        width: float = 400,
+        length: float = 300,
+        quantity: int = 1,
+        bypass_nest: bool = False,
+    ) -> dict[str, Any]:
+        """Create a CDM job with a single order detail (headless, no dialogs)."""
+        am = self.get_automation_manager_addin()
+        try:
+            job = am.NewCDMJob()
+            job.JobName = job_name
+            job.SaveToDatabase()
+        except Exception as e:
+            raise RuntimeError(f"cdm: create job failed: {e}") from e  # noqa: TRY003
+        try:
+            detail = job.AddCDMOrderDetail(type_name)
+        except Exception as e:
+            raise RuntimeError(f"cdm: door type not found: {type_name}") from e  # noqa: TRY003
+        try:
+            detail.Width = width
+            detail.Length = length
+            detail.Quantity = quantity
+            detail.ByPassNest = bypass_nest
+            detail.SaveToDatabase()
+        except Exception as e:
+            raise RuntimeError(f"cdm: save order detail failed: {e}") from e  # noqa: TRY003
+        return {
+            "success": True,
+            "job_name": job_name,
+            "type_name": type_name,
+            "width": width,
+            "length": length,
+            "quantity": quantity,
+        }
+
+    def cdm_types(self) -> dict[str, Any]:
+        """List CDM door types seen in existing jobs (headless-safe)."""
+        am = self.get_automation_manager_addin()
+        names: list[str] = []
+        seen: set[str] = set()
+        try:
+            jobs = am.Jobs
+            for i in range(1, int(jobs.Count) + 1):
+                try:
+                    details = jobs.Item(i).CDMOrderDetails
+                except Exception:
+                    continue
+                for di in range(1, int(details.Count) + 1):
+                    try:
+                        name = str(details.Item(di).TypeName)
+                    except Exception:
+                        continue
+                    if name and name not in seen:
+                        seen.add(name)
+                        names.append(name)
+        except Exception as e:
+            raise RuntimeError(f"cdm: read door types failed: {e}") from e  # noqa: TRY003
+        if not names:
+            return {
+                "types": [],
+                "note": "no CDM jobs with order details yet; door types unavailable headless",
+            }
+        return {"types": [{"id": i, "name": name} for i, name in enumerate(names, 1)]}
+
+    def cdm_jobs(self) -> dict[str, Any]:
+        """List existing CDM jobs (headless-safe)."""
+        am = self.get_automation_manager_addin()
+        jobs_out: list[dict[str, Any]] = []
+        try:
+            jobs = am.Jobs
+            for i in range(1, int(jobs.Count) + 1):
+                try:
+                    jj = jobs.Item(i)
+                    jobs_out.append({"id": i, "name": str(jj.JobName)})
+                except Exception:
+                    continue
+        except Exception as e:
+            raise RuntimeError(f"cdm: list jobs failed: {e}") from e  # noqa: TRY003
+        return {"jobs": jobs_out}
+
     def machining_pipeline(
         self,
         agq: str | None = None,

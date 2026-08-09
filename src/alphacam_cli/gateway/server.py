@@ -928,7 +928,9 @@ class GatewayServer:
                             for di in range(1, dets.Count + 1):
                                 try:
                                     dd = dets.Item(di)
-                                    dnames.append(f"{dd.TypeName}|{dd.Width}x{dd.Length}x{dd.Quantity}")
+                                    dnames.append(
+                                        f"{dd.TypeName}|{dd.Width}x{dd.Length}x{dd.Quantity}"
+                                    )
                                 except Exception:
                                     pass
                             names.append(f"{jj.JobName}=[{','.join(dnames)}]")
@@ -1075,6 +1077,132 @@ class GatewayServer:
         else:
             out["result"] = "CDM_FAIL"
         return out
+
+    def _cdm_automation_manager(self) -> Any:
+        """Return the IAutomationManager via GetAutomationManagerAddInGUI (headless-safe)."""
+        import pythoncom  # type: ignore[import-untyped]
+        import win32com.client as w32  # type: ignore[import-untyped]
+
+        from alphacam_cli.gateway.server import _app as com_app
+
+        clsid = pythoncom.MakeIID("{39BFE38A-D3E4-43EA-89D0-584C776B97A9}")
+        ai = w32.Dispatch(
+            pythoncom.CoCreateInstance(clsid, None, pythoncom.CLSCTX_ALL, pythoncom.IID_IDispatch)
+        )
+        raw = getattr(com_app, "_app", None) or getattr(com_app, "raw_dispatch", None)
+        addins = ai.GetAddInsInterface(raw)
+        return addins.GetAutomationManagerAddInGUI()
+
+    def _cdm_known_door_types(self, am: Any) -> set[str]:
+        types: set[str] = set()
+        try:
+            jobs = am.Jobs
+            for i in range(1, int(jobs.Count) + 1):
+                try:
+                    details = jobs.Item(i).CDMOrderDetails
+                except Exception:
+                    continue
+                for di in range(1, int(details.Count) + 1):
+                    try:
+                        types.add(str(details.Item(di).TypeName))
+                    except Exception:
+                        continue
+        except Exception:
+            pass
+        return types
+
+    def _handler_run_cdm(self, params: dict[str, Any]) -> dict[str, Any]:
+        job_name = str(params.get("job_name", "")).strip()
+        if not job_name:
+            raise COMError("cdm: job_name is required")
+        type_name = str(params.get("type_name", "")).strip()
+        if not type_name:
+            raise COMError("cdm: type_name is required")
+        width = float(params.get("width", 400))
+        length = float(params.get("length", 300))
+        quantity = int(params.get("quantity", 1))
+        bypass_nest = bool(params.get("bypass_nest", False))
+        try:
+            am = self._cdm_automation_manager()
+        except Exception as e:
+            raise COMError(f"cdm: automation manager unavailable: {e}") from e
+        try:
+            job = am.NewCDMJob()
+            job.JobName = job_name
+            job.SaveToDatabase()
+        except Exception as e:
+            raise COMError(f"cdm: create job failed: {e}") from e
+        try:
+            detail = job.AddCDMOrderDetail(type_name)
+        except Exception as e:
+            if type_name not in self._cdm_known_door_types(am):
+                raise COMError(f"cdm: door type not found: {type_name}") from e
+            raise COMError(f"cdm: add order detail failed: {e}") from e
+        try:
+            detail.Width = width
+            detail.Length = length
+            detail.Quantity = quantity
+            detail.ByPassNest = bypass_nest
+            detail.SaveToDatabase()
+        except Exception as e:
+            raise COMError(f"cdm: save order detail failed: {e}") from e
+        return {
+            "success": True,
+            "job_name": job_name,
+            "type_name": type_name,
+            "width": width,
+            "length": length,
+            "quantity": quantity,
+        }
+
+    def _handler_cdm_types(self, params: dict[str, Any]) -> dict[str, Any]:
+        try:
+            am = self._cdm_automation_manager()
+        except Exception as e:
+            raise COMError(f"cdm: automation manager unavailable: {e}") from e
+        names: list[str] = []
+        seen: set[str] = set()
+        try:
+            jobs = am.Jobs
+            for i in range(1, int(jobs.Count) + 1):
+                try:
+                    details = jobs.Item(i).CDMOrderDetails
+                except Exception:
+                    continue
+                for di in range(1, int(details.Count) + 1):
+                    try:
+                        name = str(details.Item(di).TypeName)
+                    except Exception:
+                        continue
+                    if name and name not in seen:
+                        seen.add(name)
+                        names.append(name)
+        except Exception as e:
+            raise COMError(f"cdm: read door types failed: {e}") from e
+        if not names:
+            return {
+                "types": [],
+                "note": "no CDM jobs with order details yet; door types unavailable headless",
+            }
+        return {"types": [{"id": i, "name": name} for i, name in enumerate(names, 1)]}
+
+    def _handler_cdm_jobs(self, params: dict[str, Any]) -> dict[str, Any]:
+        try:
+            am = self._cdm_automation_manager()
+        except Exception as e:
+            raise COMError(f"cdm: automation manager unavailable: {e}") from e
+        jobs_out: list[dict[str, Any]] = []
+        try:
+            jobs = am.Jobs
+            for i in range(1, int(jobs.Count) + 1):
+                try:
+                    jj = jobs.Item(i)
+                    jobs_out.append({"id": i, "name": str(jj.JobName)})
+                except Exception:
+                    continue
+        except Exception as e:
+            raise COMError(f"cdm: list jobs failed: {e}") from e
+        return {"jobs": jobs_out}
 
     def _handler_get_info(self, params: dict[str, Any]) -> dict[str, Any]:
         from alphacam_cli.gateway.server import _app as com_app

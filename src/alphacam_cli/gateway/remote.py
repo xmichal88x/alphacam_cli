@@ -264,6 +264,30 @@ class RemoteApplication:
             down_feed=down_feed,
         )
 
+    def run_cdm(
+        self,
+        job_name: str,
+        type_name: str,
+        width: float = 400,
+        length: float = 300,
+        quantity: int = 1,
+        bypass_nest: bool = False,
+    ) -> dict[str, Any]:
+        return self._session.run_cdm(  # type: ignore[no-any-return]
+            job_name=job_name,
+            type_name=type_name,
+            width=width,
+            length=length,
+            quantity=quantity,
+            bypass_nest=bypass_nest,
+        )
+
+    def cdm_types(self) -> dict[str, Any]:
+        return self._session.cdm_types()  # type: ignore[no-any-return]
+
+    def cdm_jobs(self) -> dict[str, Any]:
+        return self._session.cdm_jobs()  # type: ignore[no-any-return]
+
 
 class _RemoteMillData:
     def __init__(self, session: RemoteSession) -> None:

@@ -85,6 +85,7 @@ _SUBCOMMANDS: list[tuple[str, str]] = [
     ("alphacam_cli.cli.reports", "reports"),
     ("alphacam_cli.cli.ncmanager", "ncmanager"),
     ("alphacam_cli.cli.autostyle", "autostyle"),
+    ("alphacam_cli.cli.cdm", "cdm"),
 ]
 
 for module_path, name in _SUBCOMMANDS:

@@ -1000,3 +1000,193 @@ def test_machining_pipeline_handler_failure(server_app: MagicMock) -> None:
     gw = GatewayServer()
     with pytest.raises(COMError, match=r"machining pipeline failed: boom"):
         gw._handler_machining_pipeline({"ara": r"C:\styles\auto.ara"})
+
+
+def _mock_cdm_com(monkeypatch: pytest.MonkeyPatch) -> tuple[MagicMock, MagicMock, MagicMock]:
+    """Install fake pythoncom/win32com.client and return (ai, addins, am)."""
+    pythoncom = MagicMock()
+    pythoncom.MakeIID.return_value = "CDM-CLSID"
+    pythoncom.CoCreateInstance.return_value = object()
+    pythoncom.CLSCTX_ALL = 23
+    pythoncom.IID_IDispatch = "IDispatch"
+
+    w32 = MagicMock()
+    ai = MagicMock()
+    addins = MagicMock()
+    am = MagicMock()
+    w32.Dispatch.return_value = ai
+    ai.GetAddInsInterface.return_value = addins
+    addins.GetAutomationManagerAddInGUI.return_value = am
+
+    client_mod = types.ModuleType("win32com.client")
+    client_mod.Dispatch = w32.Dispatch  # type: ignore[attr-defined]
+    win32com = types.ModuleType("win32com")
+    win32com.client = client_mod  # type: ignore[attr-defined]
+    monkeypatch.setitem(sys.modules, "win32com", win32com)
+    monkeypatch.setitem(sys.modules, "win32com.client", client_mod)
+    monkeypatch.setitem(sys.modules, "pythoncom", pythoncom)
+    return ai, addins, am
+
+
+def test_run_cdm_handler(server_app: MagicMock, monkeypatch: pytest.MonkeyPatch) -> None:
+    _, _, am = _mock_cdm_com(monkeypatch)
+    job = MagicMock()
+    detail = MagicMock()
+    am.NewCDMJob.return_value = job
+    job.AddCDMOrderDetail.return_value = detail
+    gw = GatewayServer()
+    result = gw._handler_run_cdm(
+        {
+            "job_name": "JOB-001",
+            "type_name": "Typ Frontu 1",
+            "width": 500,
+            "length": 320,
+            "quantity": 2,
+            "bypass_nest": True,
+        }
+    )
+    assert result == {
+        "success": True,
+        "job_name": "JOB-001",
+        "type_name": "Typ Frontu 1",
+        "width": 500.0,
+        "length": 320.0,
+        "quantity": 2,
+    }
+    assert job.JobName == "JOB-001"
+    job.SaveToDatabase.assert_called_once_with()
+    job.AddCDMOrderDetail.assert_called_once_with("Typ Frontu 1")
+    assert detail.Width == 500.0
+    assert detail.Length == 320.0
+    assert detail.Quantity == 2
+    assert detail.ByPassNest is True
+    detail.SaveToDatabase.assert_called_once_with()
+
+
+def test_run_cdm_handler_defaults(server_app: MagicMock, monkeypatch: pytest.MonkeyPatch) -> None:
+    _, _, am = _mock_cdm_com(monkeypatch)
+    job = MagicMock()
+    detail = MagicMock()
+    am.NewCDMJob.return_value = job
+    job.AddCDMOrderDetail.return_value = detail
+    gw = GatewayServer()
+    result = gw._handler_run_cdm({"job_name": "JOB-001", "type_name": "Typ Frontu 1"})
+    assert result["width"] == 400.0
+    assert result["length"] == 300.0
+    assert result["quantity"] == 1
+    assert detail.ByPassNest is False
+
+
+def test_run_cdm_handler_missing_job_name(server_app: MagicMock) -> None:
+    gw = GatewayServer()
+    with pytest.raises(COMError, match="cdm: job_name is required"):
+        gw._handler_run_cdm({"type_name": "Typ Frontu 1"})
+
+
+def test_run_cdm_handler_missing_type_name(server_app: MagicMock) -> None:
+    gw = GatewayServer()
+    with pytest.raises(COMError, match="cdm: type_name is required"):
+        gw._handler_run_cdm({"job_name": "JOB-001"})
+
+
+def test_run_cdm_handler_am_unavailable(
+    server_app: MagicMock, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _, addins, _ = _mock_cdm_com(monkeypatch)
+    addins.GetAutomationManagerAddInGUI.side_effect = RuntimeError("no license")
+    gw = GatewayServer()
+    with pytest.raises(COMError, match="cdm: automation manager unavailable"):
+        gw._handler_run_cdm({"job_name": "JOB-001", "type_name": "Typ Frontu 1"})
+
+
+def test_run_cdm_handler_job_failed(server_app: MagicMock, monkeypatch: pytest.MonkeyPatch) -> None:
+    _, _, am = _mock_cdm_com(monkeypatch)
+    am.NewCDMJob.side_effect = RuntimeError("db locked")
+    gw = GatewayServer()
+    with pytest.raises(COMError, match="cdm: create job failed: db locked"):
+        gw._handler_run_cdm({"job_name": "JOB-001", "type_name": "Typ Frontu 1"})
+
+
+def test_run_cdm_handler_door_type_not_found(
+    server_app: MagicMock, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _, _, am = _mock_cdm_com(monkeypatch)
+    job = MagicMock()
+    job.AddCDMOrderDetail.side_effect = RuntimeError("FOREIGN KEY constraint failed")
+    am.NewCDMJob.return_value = job
+    am.Jobs.Count = 0
+    gw = GatewayServer()
+    with pytest.raises(COMError, match="cdm: door type not found: XYZ"):
+        gw._handler_run_cdm({"job_name": "JOB-001", "type_name": "XYZ"})
+
+
+def test_cdm_types_handler(server_app: MagicMock, monkeypatch: pytest.MonkeyPatch) -> None:
+    _, _, am = _mock_cdm_com(monkeypatch)
+    d1 = MagicMock()
+    d1.TypeName = "Typ Frontu 1"
+    d2 = MagicMock()
+    d2.TypeName = "L_B_10mm"
+    details = MagicMock()
+    details.Count = 2
+    details.Item.side_effect = [d1, d2]
+    job1 = MagicMock()
+    job1.CDMOrderDetails = details
+    jobs = MagicMock()
+    jobs.Count = 1
+    jobs.Item.return_value = job1
+    am.Jobs = jobs
+    gw = GatewayServer()
+    result = gw._handler_cdm_types({})
+    assert result == {"types": [{"id": 1, "name": "Typ Frontu 1"}, {"id": 2, "name": "L_B_10mm"}]}
+
+
+def test_cdm_types_handler_dedup(server_app: MagicMock, monkeypatch: pytest.MonkeyPatch) -> None:
+    _, _, am = _mock_cdm_com(monkeypatch)
+    d1 = MagicMock()
+    d1.TypeName = "Typ Frontu 1"
+    d2 = MagicMock()
+    d2.TypeName = "Typ Frontu 1"
+    details = MagicMock()
+    details.Count = 2
+    details.Item.side_effect = [d1, d2]
+    job1 = MagicMock()
+    job1.CDMOrderDetails = details
+    jobs = MagicMock()
+    jobs.Count = 1
+    jobs.Item.return_value = job1
+    am.Jobs = jobs
+    gw = GatewayServer()
+    result = gw._handler_cdm_types({})
+    assert result == {"types": [{"id": 1, "name": "Typ Frontu 1"}]}
+
+
+def test_cdm_types_handler_empty(server_app: MagicMock, monkeypatch: pytest.MonkeyPatch) -> None:
+    _, _, am = _mock_cdm_com(monkeypatch)
+    am.Jobs.Count = 0
+    gw = GatewayServer()
+    result = gw._handler_cdm_types({})
+    assert result["types"] == []
+    assert "note" in result
+
+
+def test_cdm_jobs_handler(server_app: MagicMock, monkeypatch: pytest.MonkeyPatch) -> None:
+    _, _, am = _mock_cdm_com(monkeypatch)
+    j1 = MagicMock()
+    j1.JobName = "JOB-001"
+    j2 = MagicMock()
+    j2.JobName = "JOB-002"
+    jobs = MagicMock()
+    jobs.Count = 2
+    jobs.Item.side_effect = [j1, j2]
+    am.Jobs = jobs
+    gw = GatewayServer()
+    result = gw._handler_cdm_jobs({})
+    assert result == {"jobs": [{"id": 1, "name": "JOB-001"}, {"id": 2, "name": "JOB-002"}]}
+
+
+def test_cdm_jobs_handler_empty(server_app: MagicMock, monkeypatch: pytest.MonkeyPatch) -> None:
+    _, _, am = _mock_cdm_com(monkeypatch)
+    am.Jobs.Count = 0
+    gw = GatewayServer()
+    result = gw._handler_cdm_jobs({})
+    assert result == {"jobs": []}

@@ -262,3 +262,69 @@ def test_remote_machining_pipeline_defaults() -> None:
     result = app.machining_pipeline()
     assert result == {"success": True}
     session.machining_pipeline.assert_called_once_with(agq=None, ara=None, layer_map=None)
+
+
+def test_remote_run_cdm() -> None:
+    session = MagicMock()
+    session.run_cdm.return_value = {
+        "success": True,
+        "job_name": "JOB-001",
+        "type_name": "Typ Frontu 1",
+        "width": 500.0,
+        "length": 300.0,
+        "quantity": 2,
+    }
+    app = RemoteApplication(session)
+    result = app.run_cdm(
+        job_name="JOB-001",
+        type_name="Typ Frontu 1",
+        width=500,
+        length=300,
+        quantity=2,
+        bypass_nest=True,
+    )
+    assert result["success"] is True
+    assert result["job_name"] == "JOB-001"
+    session.run_cdm.assert_called_once_with(
+        job_name="JOB-001",
+        type_name="Typ Frontu 1",
+        width=500,
+        length=300,
+        quantity=2,
+        bypass_nest=True,
+    )
+
+
+def test_remote_run_cdm_defaults() -> None:
+    session = MagicMock()
+    session.run_cdm.return_value = {"success": True}
+    app = RemoteApplication(session)
+    app.run_cdm(job_name="JOB-001", type_name="Typ Frontu 1")
+    session.run_cdm.assert_called_once_with(
+        job_name="JOB-001",
+        type_name="Typ Frontu 1",
+        width=400,
+        length=300,
+        quantity=1,
+        bypass_nest=False,
+    )
+
+
+def test_remote_cdm_types() -> None:
+    session = MagicMock()
+    session.cdm_types.return_value = {
+        "types": [{"id": 1, "name": "Typ Frontu 1"}, {"id": 2, "name": "L_B_10mm"}]
+    }
+    app = RemoteApplication(session)
+    result = app.cdm_types()
+    assert result == {"types": [{"id": 1, "name": "Typ Frontu 1"}, {"id": 2, "name": "L_B_10mm"}]}
+    session.cdm_types.assert_called_once_with()
+
+
+def test_remote_cdm_jobs() -> None:
+    session = MagicMock()
+    session.cdm_jobs.return_value = {"jobs": [{"id": 1, "name": "JOB-001"}]}
+    app = RemoteApplication(session)
+    result = app.cdm_jobs()
+    assert result == {"jobs": [{"id": 1, "name": "JOB-001"}]}
+    session.cdm_jobs.assert_called_once_with()

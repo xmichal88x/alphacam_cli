@@ -306,6 +306,33 @@ class RemoteSession:
                 params[key] = value
         return self._call("run_nest", params)  # type: ignore[no-any-return]
 
+    def run_cdm(
+        self,
+        job_name: str,
+        type_name: str,
+        width: float = 400,
+        length: float = 300,
+        quantity: int = 1,
+        bypass_nest: bool = False,
+    ) -> dict[str, Any]:
+        return self._call(  # type: ignore[no-any-return]
+            "run_cdm",
+            {
+                "job_name": job_name,
+                "type_name": type_name,
+                "width": width,
+                "length": length,
+                "quantity": quantity,
+                "bypass_nest": bypass_nest,
+            },
+        )
+
+    def cdm_types(self) -> dict[str, Any]:
+        return self._call("cdm_types")  # type: ignore[no-any-return]
+
+    def cdm_jobs(self) -> dict[str, Any]:
+        return self._call("cdm_jobs")  # type: ignore[no-any-return]
+
     def find_drawing_files(self, pattern: str = "*.amd") -> list[str]:
         return self._call("find_drawing_files", {"pattern": pattern})  # type: ignore[no-any-return]
 
