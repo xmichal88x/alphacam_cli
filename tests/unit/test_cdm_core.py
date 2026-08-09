@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import pathlib
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, PropertyMock
 
 import pytest
 
@@ -490,6 +490,36 @@ def test_import_cdm_csv_mapped_no_drilling_column(
     assert result["items"] == 1
     assert result["errors"] == []
     set_has_drilling.assert_not_called()
+
+
+def test_import_cdm_csv_mapped_setter_warning_keeps_detail(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: pathlib.Path
+) -> None:
+    am = MagicMock()
+    job = MagicMock()
+    detail = MagicMock()
+    am.NewCDMJob.return_value = job
+    job.AddCDMOrderDetail.return_value = detail
+    _mock_cdm_db(
+        monkeypatch,
+        _setting_with([(1, 256), (2, 259), (3, 257), (4, 258), (5, 264), (6, 261), (7, 298)]),
+        materials={"MDF_18": 5},
+        defaults={"config_name": "Fronty", "material_id": 5},
+    )
+    set_has_drilling = MagicMock(return_value=True)
+    monkeypatch.setattr("alphacam_cli.core.cdm_db.set_has_drilling", set_has_drilling)
+    type(detail).CSV_CustomerName = PropertyMock(side_effect=RuntimeError("boom"))
+    csv_file = tmp_path / "order.csv"
+    csv_file.write_text(
+        "PS_03,1,500,400,1;2;3,Jan Kowalski,1\nPS_04,1,600,400,1;2;3,Anna Nowak,0\n",
+        encoding="utf-8",
+    )
+    result = _app_with_am(am).import_cdm_csv(str(csv_file), import_setting=3)
+    assert result["success"] is True
+    assert result["items"] == 2
+    assert len([e for e in result["errors"] if "CSV_CustomerName failed" in e]) == 2
+    assert detail.SaveToDatabase.call_count == 2
+    set_has_drilling.assert_called_once_with("order", [True, False])
 
 
 def test_import_cdm_csv_import_setting_not_found(

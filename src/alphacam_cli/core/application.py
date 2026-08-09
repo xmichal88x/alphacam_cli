@@ -874,16 +874,14 @@ class Application:
                 try:
                     setattr(detail, setter, value)
                 except Exception as e:
-                    errors.append(f"row {d['row']}: {field} failed: {e}")
-                    break
-            else:
-                try:
-                    detail.SaveToDatabase()
-                except Exception as e:
-                    errors.append(f"row {d['row']}: save order detail failed: {e}")
-                    continue
-                items += 1
-                ok_details.append(d)
+                    errors.append(f"row {d['row']}: {setter} failed: {e}")
+            try:
+                detail.SaveToDatabase()
+            except Exception as e:
+                errors.append(f"row {d['row']}: save order detail failed: {e}")
+                continue
+            items += 1
+            ok_details.append(d)
         if material_id is not None:
             if not cdm_db.set_job_material(job_name, material_id):
                 errors.append(f"job {job_name}: failed to set material")
