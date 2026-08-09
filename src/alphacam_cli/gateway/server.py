@@ -953,16 +953,14 @@ class GatewayServer:
         elif material_name is None:
             errors.append(f"job {job_name}: no material set (required for processing)")
         if items == 0 and not job_param:
-            deleted = False
-            try:
-                created_job = cdm_db.find_cdm_job(am, job_name)
-                if created_job is not None and hasattr(created_job, "DeleteFromDB"):
-                    created_job.DeleteFromDB()
-                    deleted = True
-            except Exception:
-                deleted = False
-            if deleted:
-                errors.append(f"job {job_name}: no valid order details, deleted")
+            if hasattr(job, "DeleteFromDB"):
+                try:
+                    job.DeleteFromDB()
+                except Exception as e:
+                    self._logger.warning("cdm import: cleanup failed: %r", e)
+                    errors.append(f"job {job_name}: no valid order details, cleanup failed: {e}")
+                else:
+                    errors.append(f"job {job_name}: no valid order details, deleted")
             else:
                 errors.append(f"job {job_name}: no valid order details, cleanup failed")
         return {
