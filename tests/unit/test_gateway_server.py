@@ -1444,8 +1444,48 @@ def test_cdm_import_csv_handler_single_job(
     assert detail.Width == 500.0
     assert detail.Length == 500.0
     assert detail.Quantity == 1
-    assert detail.UserVariableString == "1;18;0;0"
+    assert len(detail.UserVariableString.split(";")) == 50
+    assert detail.UserVariableString.startswith("1;18;0;0;")
+    assert detail.UserVariableString.endswith(";0;0")
     detail.SaveToDatabase.assert_called_once_with()
+
+
+def test_cdm_import_csv_handler_pads_variables(
+    server_app: MagicMock, monkeypatch: pytest.MonkeyPatch, tmp_path: pathlib.Path
+) -> None:
+    _, _, am = _mock_cdm_com(monkeypatch)
+    job = MagicMock()
+    detail = MagicMock()
+    am.NewCDMJob.return_value = job
+    job.AddCDMOrderDetail.return_value = detail
+    csv_file = tmp_path / "order.csv"
+    csv_file.write_text("P003,1,500,500,1;18;0", encoding="utf-8")
+    gw = GatewayServer()
+    result = gw._handler_cdm_import_csv({"csv": str(csv_file)})
+    assert result["success"] is True
+    assert len(detail.UserVariableString.split(";")) == 50
+    assert detail.UserVariableString.startswith("1;18;0;")
+    assert detail.UserVariableString.endswith(";0;0")
+
+
+def test_cdm_import_csv_handler_pads_variables_skips_empty_parts(
+    server_app: MagicMock, monkeypatch: pytest.MonkeyPatch, tmp_path: pathlib.Path
+) -> None:
+    _, _, am = _mock_cdm_com(monkeypatch)
+    job = MagicMock()
+    detail = MagicMock()
+    am.NewCDMJob.return_value = job
+    job.AddCDMOrderDetail.return_value = detail
+    csv_file = tmp_path / "order.csv"
+    csv_file.write_text("P003,1,500,500,1;;0", encoding="utf-8")
+    gw = GatewayServer()
+    result = gw._handler_cdm_import_csv({"csv": str(csv_file)})
+    assert result["success"] is True
+    parts = detail.UserVariableString.split(";")
+    assert len(parts) == 50
+    assert parts[0] == "1"
+    assert parts[1] == "0"
+    assert parts[2] == "0"
 
 
 def test_cdm_import_csv_handler_multi_row_jobs(

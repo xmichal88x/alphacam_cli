@@ -968,7 +968,10 @@ class GatewayServer:
             detail.Length = length
             detail.Quantity = quantity
             if design_dims:
-                detail.UserVariableString = design_dims
+                parts = [p for p in design_dims.split(";") if p != ""]
+                if len(parts) < 50:
+                    parts += ["0"] * (50 - len(parts))
+                detail.UserVariableString = ";".join(parts)
             try:
                 detail.SaveToDatabase()
             except Exception as e:
