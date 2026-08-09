@@ -412,7 +412,8 @@ def _get_acam_pid() -> int | None:
 
 
 def _window_watcher(target_pid: int) -> None:
-    user32 = ctypes.windll.user32
+    # Windows-only API; absent from ctypes stubs on non-Windows
+    user32 = ctypes.windll.user32  # type: ignore[attr-defined]
     windows: list[tuple[int, str, str]] = []
     children: list[tuple[int, str, str]] = []
 
@@ -424,7 +425,7 @@ def _window_watcher(target_pid: int) -> None:
         children.append((hwnd, cls_buf.value, text_buf.value))
         return True
 
-    child_callback = ctypes.WINFUNCTYPE(ctypes.c_bool, wintypes.HWND, wintypes.LPARAM)(_child_cb)
+    child_callback = ctypes.WINFUNCTYPE(ctypes.c_bool, wintypes.HWND, wintypes.LPARAM)(_child_cb)  # type: ignore[attr-defined]  # Windows-only API
 
     def _cb(hwnd: int, lparam: int) -> bool:
         pid = wintypes.DWORD()
@@ -446,7 +447,7 @@ def _window_watcher(target_pid: int) -> None:
             logger.info("PROPS hwnd=%d children=%r", hwnd, list(children))
         return True
 
-    callback = ctypes.WINFUNCTYPE(ctypes.c_bool, wintypes.HWND, wintypes.LPARAM)(_cb)
+    callback = ctypes.WINFUNCTYPE(ctypes.c_bool, wintypes.HWND, wintypes.LPARAM)(_cb)  # type: ignore[attr-defined]  # Windows-only API
     while True:
         time.sleep(3)
         windows.clear()

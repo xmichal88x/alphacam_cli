@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from typing import Any, cast
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -445,7 +446,7 @@ def test_drawing_init_none(mock_com: MagicMock) -> None:
         from alphacam_cli.core.drawing import Drawing
 
         with pytest.raises(ValueError, match="dispatch cannot be None"):
-            Drawing(None)
+            Drawing(cast(Any, None))
 
 
 def test_create_layer(mock_com: MagicMock) -> None:
