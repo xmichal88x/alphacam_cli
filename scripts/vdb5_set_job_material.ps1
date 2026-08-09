@@ -19,6 +19,9 @@ try {
         $cmd2 = $conn.CreateCommand()
         $cmd2.CommandText = "UPDATE AM_JobDetails SET [fkMaterialID] = $MaterialID WHERE JobDetailID = $jdId"
         Write-Output ("rows: " + $cmd2.ExecuteNonQuery())
+        $cmd3 = $conn.CreateCommand()
+        $cmd3.CommandText = "UPDATE CDM_OrderDetails SET [fkMaterialID] = $MaterialID WHERE fkJobDetailID = $jdId"
+        Write-Output ("detail_rows: " + $cmd3.ExecuteNonQuery())
     } else {
         Write-Output "rows: 0"
     }

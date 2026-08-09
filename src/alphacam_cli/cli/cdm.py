@@ -102,8 +102,8 @@ def import_csv(
     name: str | None = typer.Option(
         None, "--name", help="Job name for a new CDM job (default: CSV basename)"
     ),
-    config: str | None = typer.Option(
-        None, "--config", help="Configuration name for a new CDM job (e.g. 'Fronty')"
+    config: str = typer.Option(
+        "Fronty", "--config", help="Configuration name for a new CDM job (e.g. 'Fronty')"
     ),
     job: str | None = typer.Option(None, "--job", help="Import into an existing CDM job by name"),
     separator: str = typer.Option(",", "--separator", help="CSV separator character"),

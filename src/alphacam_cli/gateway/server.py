@@ -981,7 +981,7 @@ class GatewayServer:
             raise COMError("cdm: csv path is required")
         job_param = str(params.get("job", "")).strip() or None
         name_param = str(params.get("name", "")).strip() or None
-        config_param = str(params.get("config", "")).strip() or None
+        config_param = str(params.get("config") or "Fronty").strip()
         material_param = str(params.get("material", "")).strip() or None
         if job_param and name_param:
             raise COMError("cdm: --name and --job are mutually exclusive")

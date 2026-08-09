@@ -564,7 +564,7 @@ class Application:
         csv: str,
         job: str | None = None,
         name: str | None = None,
-        config: str | None = None,
+        config: str = "Fronty",
         separator: str = ",",
         has_header: bool = False,
         material: str | None = None,

@@ -1481,6 +1481,21 @@ def test_cdm_import_csv_handler_auto_create_with_config(
     assert job.ConfigurationSetting == am.ConfigurationSettings.GetByName.return_value
 
 
+def test_cdm_import_csv_handler_default_config(
+    server_app: MagicMock, monkeypatch: pytest.MonkeyPatch, tmp_path: pathlib.Path
+) -> None:
+    _, _, am = _mock_cdm_com(monkeypatch)
+    job = MagicMock()
+    am.NewCDMJob.return_value = job
+    csv_file = tmp_path / "order.csv"
+    csv_file.write_text("P003,1,500,500,1;18;0;0\n", encoding="utf-8")
+    gw = GatewayServer()
+    result = gw._handler_cdm_import_csv({"csv": str(csv_file)})
+    assert result["success"] is True
+    am.ConfigurationSettings.GetByName.assert_called_once_with("Fronty")
+    assert job.ConfigurationSetting == am.ConfigurationSettings.GetByName.return_value
+
+
 def test_cdm_import_csv_handler_job_lookup(
     server_app: MagicMock, monkeypatch: pytest.MonkeyPatch, tmp_path: pathlib.Path
 ) -> None:
@@ -1571,7 +1586,7 @@ def test_cdm_import_csv_handler_extra_columns_ignored(
     csv_file.write_text("P003,1,500,500,1;18;0;0,MDF_18,ImportE2E 001,Fronty\n", encoding="utf-8")
     gw = GatewayServer()
     gw._sheet_materials = lambda: {"MDF_18": 3}  # type: ignore[method-assign]
-    _mock_vdb5_run(monkeypatch, stdout="rows: 1")
+    _mock_vdb5_run(monkeypatch, stdout="rows: 1\ndetail_rows: 1")
     result = gw._handler_cdm_import_csv({"csv": str(csv_file)})
     assert result["success"] is True
     assert result["items"] == 1
@@ -1636,7 +1651,7 @@ def test_cdm_import_csv_handler_short_row(
     )
     gw = GatewayServer()
     gw._sheet_materials = lambda: {"MDF": 7}  # type: ignore[method-assign]
-    _mock_vdb5_run(monkeypatch, stdout="rows: 1")
+    _mock_vdb5_run(monkeypatch, stdout="rows: 1\ndetail_rows: 1")
     result = gw._handler_cdm_import_csv({"csv": str(csv_file)})
     assert result["success"] is True
     assert result["items"] == 1
@@ -1658,7 +1673,7 @@ def test_cdm_import_csv_handler_material_from_csv(
     )
     gw = GatewayServer()
     gw._sheet_materials = lambda: {"MDF_18": 2}  # type: ignore[method-assign]
-    run = _mock_vdb5_run(monkeypatch, stdout="rows: 1")
+    run = _mock_vdb5_run(monkeypatch, stdout="rows: 1\ndetail_rows: 1")
     result = gw._handler_cdm_import_csv({"csv": str(csv_file)})
     assert result["success"] is True
     assert result["job_name"] == "order"
@@ -1685,7 +1700,7 @@ def test_cdm_import_csv_handler_material_cli_overrides(
     csv_file.write_text("P003,1,500,500,1;18;0;0,MDF_18\n", encoding="utf-8")
     gw = GatewayServer()
     gw._sheet_materials = lambda: {"MDF_18": 3, "Material 3 - 2440 x 1220": 5}  # type: ignore[method-assign]
-    run = _mock_vdb5_run(monkeypatch, stdout="rows: 1")
+    run = _mock_vdb5_run(monkeypatch, stdout="rows: 1\ndetail_rows: 1")
     result = gw._handler_cdm_import_csv(
         {"csv": str(csv_file), "material": "Material 3 - 2440 x 1220"}
     )
