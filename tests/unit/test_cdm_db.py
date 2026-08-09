@@ -157,6 +157,12 @@ def test_set_has_drilling_rows_updated(monkeypatch: pytest.MonkeyPatch) -> None:
     args, _ = run.call_args
     assert args[0][args[0].index("-JobName") + 1] == "order"
     assert args[0][args[0].index("-Values") + 1] == "1;0"
+    assert args[0][args[0].index("-JobName") : args[0].index("-Values") + 2] == [
+        "-JobName",
+        "order",
+        "-Values",
+        "1;0",
+    ]
 
 
 def test_set_has_drilling_no_rows(monkeypatch: pytest.MonkeyPatch) -> None:

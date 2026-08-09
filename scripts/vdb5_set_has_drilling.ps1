@@ -20,15 +20,18 @@ try {
         exit 1
     }
     $cmd2 = $conn.CreateCommand()
-    $cmd2.CommandText = "SELECT CDMOrderDetailID FROM CDM_OrderDetails WHERE fkJobDetailID = $jdId ORDER BY CDMOrderDetailID"
+    $cmd2.CommandText = "SELECT CDMOrderDetailID FROM CDM_OrderDetails WHERE fkJobDetailID = $jdId ORDER BY CDMOrderDetailID DESC"
     $r2 = $cmd2.ExecuteReader()
     $ids = New-Object System.Collections.Generic.List[int]
     while ($r2.Read()) { $ids.Add([int]$r2.GetValue(0)) }
     $r2.Close()
     $flags = $Values -split ';'
-    if ($ids.Count -ne $flags.Count) {
+    if ($ids.Count -lt $flags.Count) {
         Write-Error "row count mismatch: $($ids.Count) rows vs $($flags.Count) values"
         exit 1
+    }
+    if ($ids.Count -gt $flags.Count) {
+        $ids = $ids.GetRange(0, $flags.Count)
     }
     $updated = 0
     for ($i = 0; $i -lt $ids.Count; $i++) {
