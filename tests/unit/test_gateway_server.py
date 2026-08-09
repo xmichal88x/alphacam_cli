@@ -1832,6 +1832,60 @@ def test_cdm_import_csv_handler_bad_type(
     assert any("door type not found: XYZ" in e for e in result["errors"])
 
 
+def test_cdm_import_csv_handler_all_details_fail_deletes_job(
+    server_app: MagicMock, monkeypatch: pytest.MonkeyPatch, tmp_path: pathlib.Path
+) -> None:
+    _, _, am = _mock_cdm_com(monkeypatch)
+    job = MagicMock()
+    job.JobName = "order"
+    job.AddCDMOrderDetail.side_effect = RuntimeError("type does not exist")
+    am.NewCDMJob.return_value = job
+    jobs = MagicMock()
+    jobs.Count = 1
+    jobs.Item.return_value = job
+    am.Jobs = jobs
+    csv_file = tmp_path / "order.csv"
+    csv_file.write_text("P003,1,500,500,1;2;3\nP004,1,600,400,1;2;3\n", encoding="utf-8")
+    gw = GatewayServer()
+    monkeypatch.setattr(
+        "alphacam_cli.core.cdm_db.vdb5_job_defaults",
+        lambda: {"config_name": "Fronty", "material_id": None},
+    )
+    result = gw._handler_cdm_import_csv({"csv": str(csv_file)})
+    assert result["success"] is False
+    assert result["items"] == 0
+    assert result["errors"].count("job order: no valid order details, deleted") == 1
+    assert any("door type not found: P003" in e for e in result["errors"])
+    assert any("door type not found: P004" in e for e in result["errors"])
+    job.DeleteFromDB.assert_called_once_with()
+
+
+def test_cdm_import_csv_handler_all_details_fail_keeps_existing_job(
+    server_app: MagicMock, monkeypatch: pytest.MonkeyPatch, tmp_path: pathlib.Path
+) -> None:
+    _, _, am = _mock_cdm_com(monkeypatch)
+    job = MagicMock()
+    job.JobName = "X"
+    job.AddCDMOrderDetail.side_effect = RuntimeError("type does not exist")
+    jobs = MagicMock()
+    jobs.Count = 1
+    jobs.Item.return_value = job
+    am.Jobs = jobs
+    csv_file = tmp_path / "order.csv"
+    csv_file.write_text("P003,1,500,500,1;2;3\nP004,1,600,400,1;2;3\n", encoding="utf-8")
+    gw = GatewayServer()
+    monkeypatch.setattr(
+        "alphacam_cli.core.cdm_db.vdb5_job_defaults",
+        lambda: {"config_name": "Fronty", "material_id": None},
+    )
+    result = gw._handler_cdm_import_csv({"csv": str(csv_file), "job": "X"})
+    assert result["success"] is False
+    assert result["items"] == 0
+    assert not any("no valid order details" in e for e in result["errors"])
+    am.NewCDMJob.assert_not_called()
+    job.DeleteFromDB.assert_not_called()
+
+
 def test_cdm_import_csv_handler_all_rows_invalid(
     server_app: MagicMock, monkeypatch: pytest.MonkeyPatch, tmp_path: pathlib.Path
 ) -> None:

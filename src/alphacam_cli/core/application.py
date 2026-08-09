@@ -715,6 +715,19 @@ class Application:
                 errors.append(f"job {job_name}: failed to set material")
         elif material_name is None:
             errors.append(f"job {job_name}: no material set (required for processing)")
+        if items == 0 and not job:
+            deleted = False
+            try:
+                created_job = cdm_db.find_cdm_job(am, job_name)
+                if created_job is not None and hasattr(created_job, "DeleteFromDB"):
+                    created_job.DeleteFromDB()
+                    deleted = True
+            except Exception:
+                deleted = False
+            if deleted:
+                errors.append(f"job {job_name}: no valid order details, deleted")
+            else:
+                errors.append(f"job {job_name}: no valid order details, cleanup failed")
         return {
             "success": items > 0,
             "job_name": job_name,

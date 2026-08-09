@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import pathlib
 from unittest.mock import MagicMock
 
 import pytest
@@ -182,3 +183,58 @@ def test_cdm_types_com_read_failure(monkeypatch: pytest.MonkeyPatch) -> None:
     am.Jobs = _BoomJobs()
     with pytest.raises(RuntimeError, match="cdm: read door types failed: db locked"):
         _app_with_am(am).cdm_types()
+
+
+# --- Application.import_cdm_csv ---
+
+
+def test_import_cdm_csv_all_details_fail_deletes_job(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: pathlib.Path
+) -> None:
+    am = MagicMock()
+    job = MagicMock()
+    job.JobName = "order"
+    job.AddCDMOrderDetail.side_effect = RuntimeError("type does not exist")
+    am.NewCDMJob.return_value = job
+    jobs = MagicMock()
+    jobs.Count = 1
+    jobs.Item.return_value = job
+    am.Jobs = jobs
+    monkeypatch.setattr(
+        "alphacam_cli.core.cdm_db.vdb5_job_defaults",
+        lambda: {"config_name": "Fronty", "material_id": None},
+    )
+    csv_file = tmp_path / "order.csv"
+    csv_file.write_text("P003,1,500,500,1;2;3\nP004,1,600,400,1;2;3\n", encoding="utf-8")
+    result = _app_with_am(am).import_cdm_csv(str(csv_file))
+    assert result["success"] is False
+    assert result["items"] == 0
+    assert result["errors"].count("job order: no valid order details, deleted") == 1
+    assert any("door type not found: P003" in e for e in result["errors"])
+    assert any("door type not found: P004" in e for e in result["errors"])
+    job.DeleteFromDB.assert_called_once_with()
+
+
+def test_import_cdm_csv_all_details_fail_keeps_existing_job(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: pathlib.Path
+) -> None:
+    am = MagicMock()
+    job = MagicMock()
+    job.JobName = "X"
+    job.AddCDMOrderDetail.side_effect = RuntimeError("type does not exist")
+    jobs = MagicMock()
+    jobs.Count = 1
+    jobs.Item.return_value = job
+    am.Jobs = jobs
+    monkeypatch.setattr(
+        "alphacam_cli.core.cdm_db.vdb5_job_defaults",
+        lambda: {"config_name": "Fronty", "material_id": None},
+    )
+    csv_file = tmp_path / "order.csv"
+    csv_file.write_text("P003,1,500,500,1;2;3\nP004,1,600,400,1;2;3\n", encoding="utf-8")
+    result = _app_with_am(am).import_cdm_csv(str(csv_file), job="X")
+    assert result["success"] is False
+    assert result["items"] == 0
+    assert not any("no valid order details" in e for e in result["errors"])
+    am.NewCDMJob.assert_not_called()
+    job.DeleteFromDB.assert_not_called()
