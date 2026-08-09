@@ -453,3 +453,41 @@ detail.Width=600; detail.Length=400; detail.Quantity=2; detail.SaveToDatabase()
 - Joby testowe CDM_PROBE_* / PROD_TEST_* zostały w bazie (do usunięcia w GUI Automation Manager).
 - Wiszące probe `cdm_probe`/`am_probe` w server.py — do usunięcia przy refactorze (handler `_handler_cdm_probe` z logami do C:\temp).
 - Restart usługi po zmianach: taskkill Acam.exe → sc stop/start AlphaCAMGateway (inaczej stary proces z zablokowanym STA wisi).
+
+### ✅ CDM TODO-NEXT (2026-08-09) — import CSV gated (GUI), types vdb5, delete E2E
+
+**Nowe komendy (headless Session 0):**
+
+| Komenda | Opis | Status E2E |
+|---|---|---|
+| `cdm types` | PEŁNA lista typów z bazy VistaDB (CDM_DoorTypes) + typy z jobów (merge dedupe) | ✅ 34 typy (source vdb5+com) |
+| `cdm delete JOB` | Usuwa job przez `job.DeleteFromDB()` | ✅ 17 jobów testowych usuniętych przez RPC |
+| `cdm import CSV` | ⚠️ **GATED** — zwraca czytelny błąd "requires GUI (Session 2)" | ✅ nie wisi, nie blokuje usługi |
+
+**KLUCZOWE ODKRYCIE (pełna diagnostyka na maszynie, Session 0):** import CSV przez API NIE DZIAŁA headless:
+- `job.ImportCSVToJob(csv, None)` → WISI (dialog wyboru settings, MessageBox)
+- `job.ImportCSVToJob(csv, settings)` (NewImportSetting / ImportSettings.Item(1)) → wyjątek `UserInteractive` ("modalne okno... nieprawidłowe gdy aplikacja nie pracuje w trybie UserInteractive") lub WISI (blokuje STA usługi!)
+- `am.CreateJobsFromCSVFile(csv, settings)` → z `CreateJob=0` (baza) zwraca PUSTĄ kolekcję; z `CreateJob=1` (UPDATE bazy) → WISI
+- **Import CSV wymaga GUI (Session 2)** — joby tworzyć przez `cdm create` lub Automation Manager GUI
+
+**Diagnostyka ImportSettings (laptop-monika, baza vdb5):**
+- Tabela `AM_ImportSettings` (4 konfiguracje): Item1="sklep CSV" (IsCDMImport=True, DelimiterChar=`,`, SubDelimiterChar=`;`, IgnoreHeader=True, ImportSettingID=3) — konfiguracja sklepu
+- Tabela `AM_ImportSettingsParameter` / `FieldsOrder`: mapowanie kolumn (Type 256=Style, 259/264/265/266=Width/Height/Qty/Material wg "sklep CSV")
+- API: `IAutomationManagerImportSetting` (FieldsOrder, SetAsSelected, NewImportSettingField, SaveToDatabase(True/False)), `IAutomationManagerImportSettingField` (Type, ColumnNumber settable)
+- VistaDB nie ma INFORMATION_SCHEMA — schemat przez `conn.GetSchema('Tables')`
+
+**Sprzątanie na maszynie:**
+- Usunięte joby: CDM_PROBE_* (10), PROD_TEST_* (2), E2E_CSV_TEST, DIAG_JOB/NONE/ITEM1/NEW (5) — przez `cdm delete` ✅
+- Usunięte z C:\temp: diag_importcsv.py, diag_fields.py, diag_bulk_sel.py, logi, CSV-e testowe, skrypty ps1; task schtasks "diag_importcsv" usunięty
+- W bazie przywrócone `CreateJob=0` dla ImportSettingID=3 (było testowo 1)
+
+**Probe w Session 0 bez blokowania usługi (recepta!):** `schtasks /create /tn X /tr "python skrypt.py" /sc once /st 23:59 /ru SYSTEM /f` + `schtasks /run /tn X` → proces w Session 0 jako SYSTEM, osobny od usługi; watchdog w skrypcie (threading.Timer + os._exit). Uwaga: `sc` w PowerShell to alias Set-Content → używać `sc.exe`.
+
+**Commity (master):** `fd79494` (cdm import/types-vdb5/delete + cleanup probes + README) → `b01e206` (fix vdb5 JSON array PS 5.1) → `607a686` (fix: import gated). Testy: 447 passed, ruff 0, mypy 0.
+
+**TASKS.md (do następnych sesji):**
+- [ ] **`_handler_probe_nest` wciąż wywoływalny przez RPC** (auto-dispatch `_handler_*`) — zawiera niebezpieczne modalne wywołania i `str()` na COM (zamiast repr). Do usunięcia lub whitelist w `_dispatch`.
+- [ ] **`Application.cdm_types()` (core/local) nie czyta vdb5** — tryb lokalny niepełny; przenieść logikę vdb5 do core (wspólne źródło) albo dokumentować różnicę.
+- [ ] Kaizen: `_handler_cdm_delete_job` lookup po nazwie — kandydat na helper (duplikacja zmalała po gatingu importu).
+- [ ] Gateway bez autoryzacji (port 8721) — świadome, do rozważenia przy produkcji.
+- [ ] Odczyt vdb5 (scripts/vdb5_door_types.ps1) ma twarde ścieżki maszynowe (VistaDB dll, vdb5) — ograniczenie instalacji, udokumentować.
