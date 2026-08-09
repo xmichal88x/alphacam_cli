@@ -841,3 +841,231 @@ def test_diagnose() -> None:
         result = runner.invoke(app, ["diagnose", "diagnose"])
     assert result.exit_code == 0
     assert "AlphaCAM Diagnostics" in result.stderr
+
+
+# =============================================================================
+# mill: tool selection via --tool (saw/engrave) and rough tool side
+# =============================================================================
+
+
+def test_mill_saw_tool_exact_path() -> None:
+    paths = ["C:/tools/flat.art"]
+    with (
+        _mock_com() as app_mock,
+        patch("alphacam_cli.core.application.Application.find_tool_files", return_value=paths),
+    ):
+        app_mock.ActiveDrawing.Geometries.Count = 1
+        result = runner.invoke(app, ["mill", "saw", "-d", "-10", "--tool", "C:/tools/flat.art"])
+    assert result.exit_code == 0
+    assert "Saw done" in result.stderr
+    app_mock.SelectTool.assert_called_once_with("C:/tools/flat.art")
+
+
+def test_mill_saw_tool_basename_exact() -> None:
+    paths = ["C:/tools/other.art", "C:/tools/flat.art"]
+    with (
+        _mock_com() as app_mock,
+        patch("alphacam_cli.core.application.Application.find_tool_files", return_value=paths),
+    ):
+        app_mock.ActiveDrawing.Geometries.Count = 1
+        result = runner.invoke(app, ["mill", "saw", "-d", "-10", "--tool", "flat.art"])
+    assert result.exit_code == 0
+    app_mock.SelectTool.assert_called_once_with("C:/tools/flat.art")
+
+
+def test_mill_saw_tool_substring_path() -> None:
+    paths = ["C:/tools/subdir/flat.art"]
+    with (
+        _mock_com() as app_mock,
+        patch("alphacam_cli.core.application.Application.find_tool_files", return_value=paths),
+    ):
+        app_mock.ActiveDrawing.Geometries.Count = 1
+        result = runner.invoke(app, ["mill", "saw", "-d", "-10", "--tool", "subdir/flat"])
+    assert result.exit_code == 0
+    app_mock.SelectTool.assert_called_once_with("C:/tools/subdir/flat.art")
+
+
+def test_mill_saw_tool_prefix_match() -> None:
+    paths = ["C:/tools/Flat-10mm.art"]
+    with (
+        _mock_com() as app_mock,
+        patch("alphacam_cli.core.application.Application.find_tool_files", return_value=paths),
+    ):
+        app_mock.ActiveDrawing.Geometries.Count = 1
+        result = runner.invoke(app, ["mill", "saw", "-d", "-10", "--tool", "flat"])
+    assert result.exit_code == 0
+    app_mock.SelectTool.assert_called_once_with("C:/tools/Flat-10mm.art")
+
+
+def test_mill_saw_tool_substring_match() -> None:
+    paths = ["C:/tools/my_flat_tool.art"]
+    with (
+        _mock_com() as app_mock,
+        patch("alphacam_cli.core.application.Application.find_tool_files", return_value=paths),
+    ):
+        app_mock.ActiveDrawing.Geometries.Count = 1
+        result = runner.invoke(app, ["mill", "saw", "-d", "-10", "--tool", "flat"])
+    assert result.exit_code == 0
+    app_mock.SelectTool.assert_called_once_with("C:/tools/my_flat_tool.art")
+
+
+def test_mill_engrave_tool_no_match() -> None:
+    paths = ["C:/tools/flat.art"]
+    with (
+        _mock_com() as app_mock,
+        patch("alphacam_cli.core.application.Application.find_tool_files", return_value=paths),
+    ):
+        app_mock.ActiveDrawing.Geometries.Count = 1
+        result = runner.invoke(app, ["mill", "engrave", "-d", "-0.5", "--tool", "NotFound"])
+    assert result.exit_code == 1
+    assert "No tool matching" in result.stderr
+
+
+def test_mill_engrave_tool_multiple_matches() -> None:
+    paths = ["C:/tools/a/flat.art", "C:/tools/b/flat.art"]
+    with (
+        _mock_com() as app_mock,
+        patch("alphacam_cli.core.application.Application.find_tool_files", return_value=paths),
+    ):
+        app_mock.ActiveDrawing.Geometries.Count = 1
+        result = runner.invoke(app, ["mill", "engrave", "-d", "-0.5", "--tool", "flat.art"])
+    assert result.exit_code == 1
+    assert "Multiple tools matched" in result.stderr
+    assert "Please use a more specific name" in result.stderr
+
+
+def test_mill_engrave_tool_select_failed() -> None:
+    paths = ["C:/tools/flat.art"]
+    with (
+        _mock_com() as app_mock,
+        patch("alphacam_cli.core.application.Application.find_tool_files", return_value=paths),
+    ):
+        app_mock.ActiveDrawing.Geometries.Count = 1
+        app_mock.SelectTool.return_value = None
+        result = runner.invoke(app, ["mill", "engrave", "-d", "-0.5", "--tool", "flat.art"])
+    assert result.exit_code == 1
+    assert "Failed to select tool" in result.stderr
+
+
+def test_mill_rough_invalid_tool_side() -> None:
+    with _mock_com() as app_mock:
+        app_mock.ActiveDrawing.Geometries.Count = 1
+        result = runner.invoke(app, ["mill", "rough", "--side", "left"])
+    assert result.exit_code == 2
+    assert "Invalid tool side" in result.stderr
+
+
+def test_mill_style_list_size_error() -> None:
+    with (
+        _mock_com(),
+        patch(
+            "alphacam_cli.core.application.Application.find_style_files",
+            return_value=["C:/Licomdir/Styles/Broken.ary"],
+        ),
+        patch("os.path.getsize", side_effect=OSError("no such file")),
+    ):
+        result = runner.invoke(app, ["mill", "style-list"])
+    assert result.exit_code == 0
+    assert "Broken.ary" in result.stderr
+    assert "-" in result.stderr
+
+
+def test_mill_style_list_outside_dir() -> None:
+    with (
+        _mock_com(),
+        patch(
+            "alphacam_cli.core.application.Application.find_style_files",
+            return_value=["C:/OtherDir/Edge.ary"],
+        ),
+        patch("os.path.getsize", return_value=10),
+    ):
+        result = runner.invoke(app, ["mill", "style-list"])
+    assert result.exit_code == 0
+    assert "C:/OtherDir" in result.stderr
+
+
+# =============================================================================
+# main: remote mode and subcommand loading errors
+# =============================================================================
+
+
+def test_main_remote_cli() -> None:
+    with (
+        _mock_com(),
+        patch("alphacam_cli.com.manager.set_remote_mode") as mock_set_remote,
+    ):
+        result = runner.invoke(
+            app, ["--remote", "--host", "10.0.0.1", "--port", "9000", "connect", "info"]
+        )
+    assert result.exit_code == 0
+    mock_set_remote.assert_called_once_with("10.0.0.1", 9000)
+
+
+def test_main_remote_from_config() -> None:
+    import alphacam_cli.main as main_module
+    from alphacam_cli.core.config import AlphaCamConfig
+
+    old_config = main_module._config
+    try:
+        main_module._config = None
+        with (
+            _mock_com(),
+            patch(
+                "alphacam_cli.main.AlphaCamConfig.load",
+                return_value=AlphaCamConfig(
+                    remote_mode=True, remote_host="10.1.1.5", remote_port=8888
+                ),
+            ),
+            patch("alphacam_cli.com.manager.set_remote_mode") as mock_set_remote,
+        ):
+            result = runner.invoke(app, ["connect", "info"])
+    finally:
+        main_module._config = old_config
+    assert result.exit_code == 0
+    mock_set_remote.assert_called_once_with("10.1.1.5", 8888)
+
+
+def test_main_subcommand_import_error() -> None:
+    import importlib
+
+    import alphacam_cli.main as main_module
+
+    real_import = importlib.import_module
+
+    def fake_import(name: str) -> object:
+        if name == "alphacam_cli.cli.nc":
+            raise ImportError("simulated import error")  # noqa: TRY003
+        return real_import(name)
+
+    with patch("importlib.import_module", side_effect=fake_import):
+        importlib.reload(main_module)
+    try:
+        group_names = {g.name for g in main_module.app.registered_groups}
+        assert "nc" not in group_names
+        assert "mill" in group_names
+    finally:
+        importlib.reload(main_module)
+    assert "nc" in {g.name for g in main_module.app.registered_groups}
+
+
+def test_main_subcommand_generic_error() -> None:
+    import importlib
+
+    import alphacam_cli.main as main_module
+
+    real_import = importlib.import_module
+
+    def fake_import(name: str) -> object:
+        if name == "alphacam_cli.cli.cdm":
+            raise RuntimeError("simulated load failure")  # noqa: TRY003
+        return real_import(name)
+
+    with patch("importlib.import_module", side_effect=fake_import):
+        importlib.reload(main_module)
+    try:
+        group_names = {g.name for g in main_module.app.registered_groups}
+        assert "cdm" not in group_names
+        assert "mill" in group_names
+    finally:
+        importlib.reload(main_module)
+    assert "cdm" in {g.name for g in main_module.app.registered_groups}

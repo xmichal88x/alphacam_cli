@@ -4,6 +4,7 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 from unittest.mock import MagicMock, patch
 
+import pytest
 from typer.testing import CliRunner
 
 from alphacam_cli.cli.diagnose import app
@@ -83,3 +84,22 @@ def test_diagnose_create_mill_data_fails() -> None:
         result = runner.invoke(app, [])
     assert result.exit_code == 0
     assert "create failed" in result.stderr
+
+
+def test_diagnose_win32com_import_error(monkeypatch: pytest.MonkeyPatch) -> None:
+    import importlib
+    import sys
+
+    import alphacam_cli.cli.diagnose as diagnose_module
+
+    original = sys.modules.get("win32com")
+    monkeypatch.setitem(sys.modules, "win32com", None)
+    monkeypatch.setitem(sys.modules, "win32com.client", None)
+    importlib.reload(diagnose_module)
+    try:
+        assert getattr(diagnose_module, "win32com") is None  # type: ignore[attr-defined]
+    finally:
+        if original is not None:
+            sys.modules["win32com"] = original
+            sys.modules["win32com.client"] = original.client
+            importlib.reload(diagnose_module)
