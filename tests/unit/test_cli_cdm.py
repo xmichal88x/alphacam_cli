@@ -141,46 +141,19 @@ def test_cdm_jobs_empty() -> None:
     assert "No CDM jobs found" in result.stderr
 
 
-def test_cdm_import_command_existing_job() -> None:
+def test_cdm_import_command_requires_gui() -> None:
     from tests.unit.test_cli import _mock_com
 
     with (
         _mock_com(),
         patch(
             "alphacam_cli.core.application.Application.import_cdm_csv",
-            return_value={
-                "success": True,
-                "job_name": "JOB-001",
-                "csv": r"C:\temp\order.csv",
-                "created": False,
-            },
-        ),
-    ):
-        result = runner.invoke(app, ["cdm", "import", r"C:\temp\order.csv", "--job", "JOB-001"])
-    assert result.exit_code == 0
-    assert "CDM job updated: JOB-001" in result.stderr
-    assert "Imported: C:\\temp\\order.csv" in result.stderr
-
-
-def test_cdm_import_command_new_job() -> None:
-    from tests.unit.test_cli import _mock_com
-
-    with (
-        _mock_com(),
-        patch(
-            "alphacam_cli.core.application.Application.import_cdm_csv",
-            return_value={
-                "success": True,
-                "job_name": "order",
-                "csv": r"C:\temp\order.csv",
-                "created": True,
-            },
+            side_effect=RuntimeError("cdm: CSV import requires GUI (Session 2)"),
         ),
     ):
         result = runner.invoke(app, ["cdm", "import", r"C:\temp\order.csv"])
-    assert result.exit_code == 0
-    assert "CDM job created: order" in result.stderr
-    assert "Imported: C:\\temp\\order.csv" in result.stderr
+    assert result.exit_code == 1
+    assert "requires GUI" in result.stderr
 
 
 def test_cdm_delete_command() -> None:

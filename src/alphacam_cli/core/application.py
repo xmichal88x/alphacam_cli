@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import contextlib
 import glob
 import os
 from typing import TYPE_CHECKING, Any, ClassVar
@@ -561,64 +560,17 @@ class Application:
         separator: str = ",",
         has_header: bool = True,
     ) -> dict[str, Any]:
-        """Import a CSV door order into a CDM job (create or update, headless, no dialogs)."""
-        am = self.get_automation_manager_addin()
-        job: Any = None
-        created = False
-        try:
-            if job_name:
-                jobs = am.Jobs
-                for i in range(1, int(jobs.Count) + 1):
-                    try:
-                        jj = jobs.Item(i)
-                    except Exception:
-                        continue
-                    if str(jj.JobName) == job_name:
-                        job = jj
-                        break
-            else:
-                job = am.NewCDMJob()
-                created = True
-                job.JobName = os.path.splitext(os.path.basename(csv.replace("\\", "/")))[0][:60]
-                job.SaveToDatabase()
-        except Exception as e:
-            raise RuntimeError(f"cdm: import csv failed: {e}") from e  # noqa: TRY003
-        if job is None:
-            raise RuntimeError(f"cdm: job not found: {job_name}")  # noqa: TRY003
-        settings: Any = None
-        try:
-            if hasattr(am, "NewImportSetting"):
-                try:
-                    settings = am.NewImportSetting()
-                except Exception:
-                    settings = None
-                if settings is not None:
-                    for attr in ("Separator", "Delimiter"):
-                        if hasattr(settings, attr):
-                            with contextlib.suppress(Exception):
-                                setattr(settings, attr, separator)
-                    for attr in ("HeaderRow", "FirstRowIsHeader", "HasHeader", "SkipFirstRow"):
-                        if hasattr(settings, attr):
-                            with contextlib.suppress(Exception):
-                                setattr(settings, attr, has_header)
-            if settings is None:
-                try:
-                    if int(am.ImportSettings.Count) > 0:
-                        settings = am.ImportSettings.Item(1)
-                except Exception:
-                    settings = None
-        except Exception as e:
-            raise RuntimeError(f"cdm: import csv failed: {e}") from e  # noqa: TRY003
-        try:
-            ok = job.ImportCSVToJob(csv, settings)
-        except Exception as e:
-            raise RuntimeError(f"cdm: import csv failed: {e}") from e  # noqa: TRY003
-        return {
-            "success": bool(ok),
-            "job_name": str(job.JobName),
-            "csv": csv,
-            "created": created,
-        }
+        """Import a CSV door order into a CDM job.
+
+        Gated: CSV import requires a GUI session — ImportCSVToJob shows modal
+        dialogs and hangs in Session 0, so this never touches COM.
+        """
+        if not csv.strip():
+            raise RuntimeError("cdm: csv path is required")  # noqa: TRY003
+        raise RuntimeError(  # noqa: TRY003
+            "cdm: CSV import requires GUI (Session 2): ImportCSVToJob/CreateJobsFromCSVFile "
+            "show modal dialogs and hang in Session 0"
+        )
 
     def delete_cdm_job(self, job_name: str) -> dict[str, Any]:
         """Delete a CDM job from the database (headless, no dialogs)."""

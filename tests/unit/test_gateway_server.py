@@ -1312,100 +1312,15 @@ def test_cdm_jobs_handler_empty(server_app: MagicMock, monkeypatch: pytest.Monke
     assert result == {"jobs": []}
 
 
-def test_cdm_import_csv_handler_new_job(
-    server_app: MagicMock, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    _, _, am = _mock_cdm_com(monkeypatch)
-    job = MagicMock()
-    settings = MagicMock()
-    am.NewCDMJob.return_value = job
-    am.NewImportSetting.return_value = settings
-    job.ImportCSVToJob.return_value = True
-    gw = GatewayServer()
-    result = gw._handler_cdm_import_csv({"csv": r"C:\temp\order.csv"})
-    assert result == {
-        "success": True,
-        "job_name": "order",
-        "csv": r"C:\temp\order.csv",
-        "created": True,
-    }
-    assert job.JobName == "order"
-    am.NewCDMJob.assert_called_once_with()
-    job.SaveToDatabase.assert_called_once_with()
-    am.NewImportSetting.assert_called_once_with()
-    job.ImportCSVToJob.assert_called_once_with(r"C:\temp\order.csv", settings)
-
-
-def test_cdm_import_csv_handler_existing_job(
-    server_app: MagicMock, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    _, _, am = _mock_cdm_com(monkeypatch)
-    job = MagicMock()
-    job.JobName = "JOB-001"
-    jobs = MagicMock()
-    jobs.Count = 1
-    jobs.Item.return_value = job
-    am.Jobs = jobs
-    settings = MagicMock()
-    am.NewImportSetting.return_value = settings
-    job.ImportCSVToJob.return_value = True
-    gw = GatewayServer()
-    result = gw._handler_cdm_import_csv({"csv": r"C:\temp\order.csv", "job_name": "JOB-001"})
-    assert result == {
-        "success": True,
-        "job_name": "JOB-001",
-        "csv": r"C:\temp\order.csv",
-        "created": False,
-    }
-    am.NewCDMJob.assert_not_called()
-    jobs.Item.assert_called_once_with(1)
-    job.ImportCSVToJob.assert_called_once_with(r"C:\temp\order.csv", settings)
-
-
-def test_cdm_import_csv_handler_job_not_found(
-    server_app: MagicMock, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    _, _, am = _mock_cdm_com(monkeypatch)
-    am.Jobs.Count = 0
-    gw = GatewayServer()
-    with pytest.raises(COMError, match="cdm: job not found: NOPE"):
-        gw._handler_cdm_import_csv({"csv": r"C:\temp\order.csv", "job_name": "NOPE"})
-
-
 def test_cdm_import_csv_handler_missing_csv(server_app: MagicMock) -> None:
     gw = GatewayServer()
     with pytest.raises(COMError, match="cdm: csv path is required"):
         gw._handler_cdm_import_csv({})
 
 
-def test_cdm_import_csv_handler_fallback_settings(
-    server_app: MagicMock, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    _, _, am = _mock_cdm_com(monkeypatch)
-    del am.NewImportSetting
-    job = MagicMock()
-    settings = MagicMock()
-    am.NewCDMJob.return_value = job
-    am.ImportSettings.Count = 1
-    am.ImportSettings.Item.return_value = settings
-    job.ImportCSVToJob.return_value = True
+def test_cdm_import_csv_handler_requires_gui(server_app: MagicMock) -> None:
     gw = GatewayServer()
-    result = gw._handler_cdm_import_csv({"csv": r"C:\temp\order.csv"})
-    assert result["success"] is True
-    assert result["created"] is True
-    am.ImportSettings.Item.assert_called_once_with(1)
-    job.ImportCSVToJob.assert_called_once_with(r"C:\temp\order.csv", settings)
-
-
-def test_cdm_import_csv_handler_failed(
-    server_app: MagicMock, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    _, _, am = _mock_cdm_com(monkeypatch)
-    job = MagicMock()
-    am.NewCDMJob.return_value = job
-    job.ImportCSVToJob.side_effect = RuntimeError("parse error")
-    gw = GatewayServer()
-    with pytest.raises(COMError, match=r"cdm: import csv failed: parse error"):
+    with pytest.raises(COMError, match="requires GUI"):
         gw._handler_cdm_import_csv({"csv": r"C:\temp\order.csv"})
 
 

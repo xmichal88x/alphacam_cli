@@ -714,7 +714,7 @@ alphacam nest list
 
 ### `alphacam cdm`
 
-Cabinet Door Manufacturing (CDM) operations via the Automation Manager add-in — create jobs, list door types, import orders from CSV (headless, no dialogs).
+Cabinet Door Manufacturing (CDM) operations via the Automation Manager add-in — create jobs, list door types and jobs.
 
 #### `create`
 
@@ -767,7 +767,9 @@ alphacam cdm jobs
 
 #### `import`
 
-Import a CSV door order into a CDM job (create or update, headless). The CSV columns must match the import configuration in the Automation Manager.
+Import a CSV door order into a CDM job (create or update). The CSV columns must match the import configuration in the Automation Manager.
+
+> **Note:** CSV import requires a GUI session (Session 2) — `ImportCSVToJob`/`CreateJobsFromCSVFile` show modal dialogs and hang in Session 0. In headless mode (Session 0) the command returns a clear error; create CDM jobs with `cdm create` or in the Automation Manager GUI.
 
 **Arguments:**
 

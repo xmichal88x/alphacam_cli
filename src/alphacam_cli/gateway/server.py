@@ -878,72 +878,13 @@ class GatewayServer:
         return {"jobs": jobs_out}
 
     def _handler_cdm_import_csv(self, params: dict[str, Any]) -> dict[str, Any]:
-        csv = str(params.get("csv", "")).strip()
-        if not csv:
+        csv_path = str(params.get("csv", "")).strip()
+        if not csv_path:
             raise COMError("cdm: csv path is required")
-        job_name = str(params.get("job_name", "")).strip() or None
-        separator = str(params.get("separator", ","))
-        has_header = bool(params.get("has_header", True))
-        try:
-            am = self._cdm_automation_manager()
-        except Exception as e:
-            raise COMError(f"cdm: automation manager unavailable: {e}") from e
-        job: Any = None
-        created = False
-        try:
-            if job_name:
-                jobs = am.Jobs
-                for i in range(1, int(jobs.Count) + 1):
-                    try:
-                        jj = jobs.Item(i)
-                    except Exception:
-                        continue
-                    if str(jj.JobName) == job_name:
-                        job = jj
-                        break
-            else:
-                job = am.NewCDMJob()
-                created = True
-                job.JobName = os.path.splitext(os.path.basename(csv.replace("\\", "/")))[0][:60]
-                job.SaveToDatabase()
-        except Exception as e:
-            raise COMError(f"cdm: import csv failed: {e}") from e
-        if job is None:
-            raise COMError(f"cdm: job not found: {job_name}")
-        settings: Any = None
-        try:
-            if hasattr(am, "NewImportSetting"):
-                try:
-                    settings = am.NewImportSetting()
-                except Exception:
-                    settings = None
-                if settings is not None:
-                    for attr in ("Separator", "Delimiter"):
-                        if hasattr(settings, attr):
-                            with contextlib.suppress(Exception):
-                                setattr(settings, attr, separator)
-                    for attr in ("HeaderRow", "FirstRowIsHeader", "HasHeader", "SkipFirstRow"):
-                        if hasattr(settings, attr):
-                            with contextlib.suppress(Exception):
-                                setattr(settings, attr, has_header)
-            if settings is None:
-                try:
-                    if int(am.ImportSettings.Count) > 0:
-                        settings = am.ImportSettings.Item(1)
-                except Exception:
-                    settings = None
-        except Exception as e:
-            raise COMError(f"cdm: import csv failed: {e}") from e
-        try:
-            ok = job.ImportCSVToJob(csv, settings)
-        except Exception as e:
-            raise COMError(f"cdm: import csv failed: {e}") from e
-        return {
-            "success": bool(ok),
-            "job_name": str(job.JobName),
-            "csv": csv,
-            "created": created,
-        }
+        raise COMError(
+            "cdm: CSV import requires GUI (Session 2): ImportCSVToJob/CreateJobsFromCSVFile "
+            "show modal dialogs and hang in Session 0"
+        )
 
     def _handler_cdm_delete_job(self, params: dict[str, Any]) -> dict[str, Any]:
         job_name = str(params.get("job_name", "")).strip()
