@@ -555,7 +555,7 @@ def test_remote_cdm_import_settings() -> None:
 
 def test_remote_session_import_cdm_csv_digit_string_setting() -> None:
     client = RemoteSession()
-    client._call = MagicMock(return_value={"success": True})
+    client._call = MagicMock(return_value={"success": True})  # type: ignore[method-assign]
     client.import_cdm_csv(r"C:\temp\order.csv", import_setting="3")
     client._call.assert_called_once_with(
         "cdm_import_csv",
@@ -565,7 +565,7 @@ def test_remote_session_import_cdm_csv_digit_string_setting() -> None:
 
 def test_remote_session_import_cdm_csv_name_setting_unchanged() -> None:
     client = RemoteSession()
-    client._call = MagicMock(return_value={"success": True})
+    client._call = MagicMock(return_value={"success": True})  # type: ignore[method-assign]
     client.import_cdm_csv(r"C:\temp\order.csv", import_setting="sklep CSV")
     client._call.assert_called_once_with(
         "cdm_import_csv",
@@ -575,7 +575,7 @@ def test_remote_session_import_cdm_csv_name_setting_unchanged() -> None:
 
 def test_remote_session_import_cdm_preview_digit_string_setting() -> None:
     client = RemoteSession()
-    client._call = MagicMock(return_value={"success": True})
+    client._call = MagicMock(return_value={"success": True})  # type: ignore[method-assign]
     client.import_cdm_preview(r"C:\temp\order.csv", import_setting="7")
     client._call.assert_called_once_with(
         "cdm_import_preview",
@@ -585,35 +585,35 @@ def test_remote_session_import_cdm_preview_digit_string_setting() -> None:
 
 def test_remote_session_cdm_order_details_with_job() -> None:
     client = RemoteSession()
-    client._call = MagicMock(return_value={"order_details": [], "job_name": "X"})
+    client._call = MagicMock(return_value={"order_details": [], "job_name": "X"})  # type: ignore[method-assign]
     client.cdm_order_details(job_name="X")
     client._call.assert_called_once_with("cdm_order_details", {"job_name": "X"})
 
 
 def test_remote_session_cdm_order_details_no_job() -> None:
     client = RemoteSession()
-    client._call = MagicMock(return_value={"order_details": [], "job_name": None})
+    client._call = MagicMock(return_value={"order_details": [], "job_name": None})  # type: ignore[method-assign]
     client.cdm_order_details()
     client._call.assert_called_once_with("cdm_order_details", {})
 
 
 def test_remote_session_cdm_door_paths_with_type() -> None:
     client = RemoteSession()
-    client._call = MagicMock(return_value={"door_paths": [], "type_name": "T1"})
+    client._call = MagicMock(return_value={"door_paths": [], "type_name": "T1"})  # type: ignore[method-assign]
     client.cdm_door_paths(type_name="T1")
     client._call.assert_called_once_with("cdm_door_paths", {"type_name": "T1"})
 
 
 def test_remote_session_cdm_configs_with_show() -> None:
     client = RemoteSession()
-    client._call = MagicMock(return_value={"configs": [], "show": "all"})
+    client._call = MagicMock(return_value={"configs": [], "show": "all"})  # type: ignore[method-assign]
     client.cdm_configs(show="all")
     client._call.assert_called_once_with("cdm_configs", {"show": "all"})
 
 
 def test_remote_session_cdm_materials_lookups_no_params() -> None:
     client = RemoteSession()
-    client._call = MagicMock(return_value={"materials": [], "lookups": {}})
+    client._call = MagicMock(return_value={"materials": [], "lookups": {}})  # type: ignore[method-assign]
     client.cdm_materials()
     client._call.assert_called_once_with("cdm_materials")
     client._call.reset_mock()

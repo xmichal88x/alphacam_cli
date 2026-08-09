@@ -514,18 +514,26 @@ def test_find_import_setting_by_id() -> None:
         {"id": 3, "name": "sklep CSV", "delimiter_char": ",", "fields": []},
         {"id": 4, "name": "Ustawienia Importu CSV 2", "delimiter_char": ";", "fields": []},
     ]
-    assert cdm_db.find_import_setting(settings, 4)["name"] == "Ustawienia Importu CSV 2"
-    assert cdm_db.find_import_setting(settings, 3)["name"] == "sklep CSV"
+    found = cdm_db.find_import_setting(settings, 4)
+    assert found is not None
+    assert found["name"] == "Ustawienia Importu CSV 2"
+    found = cdm_db.find_import_setting(settings, 3)
+    assert found is not None
+    assert found["name"] == "sklep CSV"
 
 
 def test_find_import_setting_by_name() -> None:
     settings = [{"id": 3, "name": "sklep CSV", "delimiter_char": ",", "fields": []}]
-    assert cdm_db.find_import_setting(settings, "sklep CSV")["id"] == 3
+    found = cdm_db.find_import_setting(settings, "sklep CSV")
+    assert found is not None
+    assert found["id"] == 3
 
 
 def test_find_import_setting_name_casefold_trim() -> None:
     settings = [{"id": 3, "name": "  Sklep csv  ", "delimiter_char": ",", "fields": []}]
-    assert cdm_db.find_import_setting(settings, "SKLEP CSV")["id"] == 3
+    found = cdm_db.find_import_setting(settings, "SKLEP CSV")
+    assert found is not None
+    assert found["id"] == 3
 
 
 def test_find_import_setting_not_found() -> None:
@@ -1378,7 +1386,7 @@ def test_lookups_missing_section(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def test_lookups_fallback(monkeypatch: pytest.MonkeyPatch) -> None:
-    expected = {key: [] for key in cdm_db.LOOKUP_KEYS}
+    expected: dict[str, list[dict[str, Any]]] = {key: [] for key in cdm_db.LOOKUP_KEYS}
     _mock_run(monkeypatch).side_effect = FileNotFoundError("powershell")
     assert cdm_db.lookups() == expected
     _mock_run(monkeypatch, stdout="", returncode=1)

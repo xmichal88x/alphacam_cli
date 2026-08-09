@@ -578,7 +578,7 @@ class _RaiseOnNesting(MagicMock):
     def __getattr__(self, name: str) -> MagicMock:
         if name == "Nesting":
             raise RuntimeError("COMError -2147467259")  # noqa: TRY003
-        return super().__getattr__(name)
+        return super().__getattr__(name)  # type: ignore[no-any-return]
 
 
 def test_apply_mill_style(mock_com: MagicMock) -> None:

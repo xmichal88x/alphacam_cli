@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import pathlib
 import sys
 import types
@@ -73,13 +74,11 @@ def test_apply_style_handler_missing_style(server_app: MagicMock) -> None:
 def test_apply_style_handler_tool_full_path(
     server_app: MagicMock, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    import alphacam_cli.gateway.server as server_module
-
     drw = MagicMock()
     drw.geometries_count = 1
     server_app.get_active_drawing.return_value = drw
     tool_path = r"C:\ALPHACAM\LICOMDAT\MTools.Alp\Flat - 10mm.art"
-    monkeypatch.setattr(server_module.os.path, "exists", lambda p: p == tool_path)
+    monkeypatch.setattr(os.path, "exists", lambda p: p == tool_path)
     gw = GatewayServer()
     result = gw._handler_apply_style(
         {"style": r"C:\ALPHACAM\LICOMDIR\Styles\Edge.ary", "tool": tool_path}
@@ -91,14 +90,12 @@ def test_apply_style_handler_tool_full_path(
 def test_apply_style_handler_tool_by_name(
     server_app: MagicMock, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    import alphacam_cli.gateway.server as server_module
-
     drw = MagicMock()
     drw.geometries_count = 1
     server_app.get_active_drawing.return_value = drw
     files = [r"C:\ALPHACAM\LICOMDAT\MTools.Alp\Flat - 10mm.art"]
     server_app.find_tool_files.return_value = files
-    monkeypatch.setattr(server_module.os.path, "exists", lambda p: False)
+    monkeypatch.setattr(os.path, "exists", lambda p: False)
     gw = GatewayServer()
     result = gw._handler_apply_style(
         {"style": r"C:\ALPHACAM\LICOMDIR\Styles\Edge.ary", "tool": "Flat - 10mm"}
@@ -110,14 +107,12 @@ def test_apply_style_handler_tool_by_name(
 def test_apply_style_handler_tool_partial_path(
     server_app: MagicMock, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    import alphacam_cli.gateway.server as server_module
-
     drw = MagicMock()
     drw.geometries_count = 1
     server_app.get_active_drawing.return_value = drw
     tool_path = r"C:\ALPHACAM\LICOMDAT\RTools.Alp\Reichenbacher\Ball 10mm 2F.art"
     server_app.find_tool_files.return_value = [tool_path]
-    monkeypatch.setattr(server_module.os.path, "exists", lambda p: False)
+    monkeypatch.setattr(os.path, "exists", lambda p: False)
     gw = GatewayServer()
     result = gw._handler_apply_style(
         {"style": r"C:\ALPHACAM\LICOMDIR\Styles\Edge.ary", "tool": r"Reichenbacher\Ball 10mm 2F"}
@@ -180,8 +175,6 @@ def test_list_posts_handler(server_app: MagicMock) -> None:
 
 
 def test_list_styles_handler(server_app: MagicMock, monkeypatch: pytest.MonkeyPatch) -> None:
-    import alphacam_cli.gateway.server as server_module
-
     files = [
         "C:/ALPHACAM/LICOMDIR/Styles/Fronty/Ball_06.ary",
         "C:/ALPHACAM/LICOMDIR/Styles/Edge.ary",
@@ -194,7 +187,7 @@ def test_list_styles_handler(server_app: MagicMock, monkeypatch: pytest.MonkeyPa
     }
     server_app.find_style_files.return_value = files
     server_app.licomdir_path = "C:/ALPHACAM/LICOMDIR"
-    monkeypatch.setattr(server_module.os.path, "getsize", lambda p: sizes[p])
+    monkeypatch.setattr(os.path, "getsize", lambda p: sizes[p])
     gw = GatewayServer()
     result = gw._handler_list_styles({})
     assert result == {
@@ -240,11 +233,9 @@ def test_list_styles_handler_missing_size(server_app: MagicMock) -> None:
 def test_select_post_handler_by_name(
     server_app: MagicMock, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    import alphacam_cli.gateway.server as server_module
-
     post_path = "C:/ALPHACAM/LICOMDAT/RPosts.Alp/fanuc.arp"
     server_app.find_post_files.return_value = [post_path]
-    monkeypatch.setattr(server_module.os.path, "exists", lambda p: False)
+    monkeypatch.setattr(os.path, "exists", lambda p: False)
     gw = GatewayServer()
     result = gw._handler_select_post({"name": "fanuc"})
     assert result == {"success": True}
@@ -254,10 +245,8 @@ def test_select_post_handler_by_name(
 def test_select_post_handler_not_found(
     server_app: MagicMock, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    import alphacam_cli.gateway.server as server_module
-
     server_app.find_post_files.return_value = []
-    monkeypatch.setattr(server_module.os.path, "exists", lambda p: False)
+    monkeypatch.setattr(os.path, "exists", lambda p: False)
     gw = GatewayServer()
     with pytest.raises(COMError, match="No post matching 'missing'"):
         gw._handler_select_post({"name": "missing"})
@@ -267,10 +256,8 @@ def test_select_post_handler_not_found(
 def test_select_post_handler_full_path(
     server_app: MagicMock, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    import alphacam_cli.gateway.server as server_module
-
     post_path = "C:/ALPHACAM/LICOMDAT/RPosts.Alp/fanuc.arp"
-    monkeypatch.setattr(server_module.os.path, "exists", lambda p: p == post_path)
+    monkeypatch.setattr(os.path, "exists", lambda p: p == post_path)
     gw = GatewayServer()
     result = gw._handler_select_post({"name": post_path})
     assert result == {"success": True}
