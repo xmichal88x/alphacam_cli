@@ -933,3 +933,109 @@ def test_order_details_value_wrap(monkeypatch: pytest.MonkeyPatch) -> None:
     details = cdm_db.order_details()
     assert len(details) == 1
     assert details[0]["style_name"] == "P003"
+
+
+# --- door_paths ---
+
+_DOOR_PATH_ROW = (
+    '{"path_id": 3, "cdm_path_id": 0, "door_type_id": 11, "door_type": "L_B_10mm",'
+    ' "path_number": 1, "path_name": "Ryfle Ball 10mm", "group_id": 1,'
+    ' "tool_name": "", "tool_full_path": "", "tool_number": 0, "tool_offset": 0,'
+    ' "machining_method": "MachiningStyle", "machining_style":'
+    ' "LICOMDIR\\\\Styles\\\\Fronty\\\\Ball_10mm_AZ.ary", "cut_type": "Full",'
+    ' "creation_method": "MachiningStyle", "last_modified": "2026-01-01 12:00:00",'
+    ' "insert_file_path": "", "safe_rapid": 5.0, "rapid_down_to": 2.0,'
+    ' "final_depth": -10.5, "final_depth_percentage": 100.0, "spindle_speed": 12000.0,'
+    ' "down_feed": 1500.0, "cut_feed": 3000.0, "cut_direction": 1.0,'
+    ' "material_top": 0.0, "stock": 0.0, "chord_error": 0.02,'
+    ' "thickness_first_cut": 1.0, "thickness_last_cut": 1.0,'
+    ' "thickness_first_cut_percent": 0.0, "thickness_last_cut_percent": 0.0,'
+    ' "diameter": 10.0, "step_length": 0.0, "path_offset_value": 0.0,'
+    ' "pocket_boundary": 0.0, "lead_line_length": 3.0, "lead_line_length_out": 3.0,'
+    ' "lead_arc_radius": 0.0, "lead_approach_angle": 45.0, "lead_overlap": 0.0,'
+    ' "lead3d_approach_angle": 0.0, "lead3d_approach": 0.0, "width_of_cut": 10.0,'
+    ' "insert_file_point_x": 0.0, "insert_file_point_y": 0.0,'
+    ' "engrave_corner_angle": 0.0, "partial_start_elem_dist": 0.0,'
+    ' "partial_end_elem_dist": 0.0, "deceleration_distance": 0.0,'
+    ' "slow_down_to": 0.0, "do_not_slow_down_radius": 0.0,'
+    ' "ignore_angle_greater_than": 0.0, "simple_engrave_feed": 0.0,'
+    ' "simple_engrave_clearance": 0.0, "is_final_depth_percent": true,'
+    ' "comp_on_rapid": false, "slope_in": true, "slope_out": false,'
+    ' "depths_of_cut_specified": false, "multiple_passes": true,'
+    ' "tool_direction_cw": false, "tool_direction_reversed": true,'
+    ' "pocket3d_approach": false, "slow_down_for_corners": true,'
+    ' "accelerate_out_of_corner": false, "tool_side_partial_reverse": true,'
+    ' "mc_comp": 0, "tool_in_out": 1, "tool_side": 0, "lead_in": 1,'
+    ' "lead_out": 1, "insert_file_reference_point": 0, "number_of_cuts": 1,'
+    ' "xy_corners": 0, "final_pass_island": 0, "pocket_type": 0,'
+    ' "start_cutting": 0, "path_offset_side": 0, "path_offset_from": 0,'
+    ' "lead_entry_point_is_corner": 0, "partial_start_elem_index": 0,'
+    ' "partial_end_elem_index": 0, "number_of_steps": 0,'
+    ' "insert_parametric_group_number": 0}'
+)
+
+
+def test_door_paths_parses(monkeypatch: pytest.MonkeyPatch) -> None:
+    second = _DOOR_PATH_ROW.replace('"path_id": 3', '"path_id": 4').replace(
+        '"path_number": 1', '"path_number": 2'
+    )
+    _mock_run(monkeypatch, stdout=f"[{_DOOR_PATH_ROW},{second}]")
+    paths = cdm_db.door_paths()
+    assert len(paths) == 2
+    first = paths[0]
+    assert first["path_id"] == 3
+    assert first["path_number"] == 1
+    assert first["door_type_id"] == 11
+    assert first["door_type"] == "L_B_10mm"
+    assert first["path_name"] == "Ryfle Ball 10mm"
+    assert first["tool_name"] == ""
+    assert first["machining_method"] == "MachiningStyle"
+    assert first["machining_style"] == r"LICOMDIR\Styles\Fronty\Ball_10mm_AZ.ary"
+    assert first["cut_type"] == "Full"
+    assert first["creation_method"] == "MachiningStyle"
+    assert first["spindle_speed"] == 12000.0
+    assert first["final_depth"] == -10.5
+    assert first["diameter"] == 10.0
+    assert first["lead_in"] == 1
+    assert first["lead_out"] == 1
+    assert first["tool_in_out"] == 1
+    assert first["is_final_depth_percent"] is True
+    assert first["slope_in"] is True
+    assert first["slope_out"] is False
+    assert first["multiple_passes"] is True
+    assert first["tool_direction_reversed"] is True
+    assert first["slow_down_for_corners"] is True
+    assert paths[1]["path_id"] == 4
+    assert paths[1]["path_number"] == 2
+
+
+def test_door_paths_passes_type_name(monkeypatch: pytest.MonkeyPatch) -> None:
+    run = _mock_run(monkeypatch, stdout="[]")
+    assert cdm_db.door_paths("L_B_10mm") == []
+    args, _ = run.call_args
+    assert "-TypeName" in args[0]
+    assert args[0][args[0].index("-TypeName") + 1] == "L_B_10mm"
+    assert args[0][args[0].index("-File") + 1].endswith("vdb5_door_paths.ps1")
+
+
+def test_door_paths_no_type_name(monkeypatch: pytest.MonkeyPatch) -> None:
+    run = _mock_run(monkeypatch, stdout="[]")
+    assert cdm_db.door_paths() == []
+    args, _ = run.call_args
+    assert "-TypeName" not in args[0]
+
+
+def test_door_paths_fallback(monkeypatch: pytest.MonkeyPatch) -> None:
+    _mock_run(monkeypatch).side_effect = FileNotFoundError("powershell")
+    assert cdm_db.door_paths() == []
+    _mock_run(monkeypatch, stdout="", returncode=1)
+    assert cdm_db.door_paths() == []
+    _mock_run(monkeypatch, stdout="not json")
+    assert cdm_db.door_paths() == []
+
+
+def test_door_paths_value_wrap(monkeypatch: pytest.MonkeyPatch) -> None:
+    _mock_run(monkeypatch, stdout=f'{{"value": [{_DOOR_PATH_ROW}]}}')
+    paths = cdm_db.door_paths()
+    assert len(paths) == 1
+    assert paths[0]["path_name"] == "Ryfle Ball 10mm"
