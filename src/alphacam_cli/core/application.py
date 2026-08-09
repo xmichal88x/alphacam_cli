@@ -1,13 +1,7 @@
 from __future__ import annotations
 
 import glob
-import io
-import json
 import os
-import re
-import subprocess
-import sys
-from csv import reader
 from typing import TYPE_CHECKING, Any, ClassVar
 
 if TYPE_CHECKING:
@@ -19,6 +13,7 @@ if TYPE_CHECKING:
     from alphacam_cli.core.tool import Tool
 
 from alphacam_cli.com.constants import MODULE_MILL, MODULE_ROUTER
+from alphacam_cli.core import cdm_db
 from alphacam_cli.core.drawing import Drawing
 from alphacam_cli.core.machining import MillData
 from alphacam_cli.core.nesting import Nesting
@@ -484,15 +479,47 @@ class Application:
         length: float = 300,
         quantity: int = 1,
         bypass_nest: bool = False,
+        material: str | None = None,
     ) -> dict[str, Any]:
         """Create a CDM job with a single order detail (headless, no dialogs)."""
+        job_name = job_name.strip()
+        if not job_name:
+            raise RuntimeError("cdm: job_name is required")  # noqa: TRY003
+        type_name = type_name.strip()
+        if not type_name:
+            raise RuntimeError("cdm: type_name is required")  # noqa: TRY003
+        if width <= 0:
+            raise RuntimeError("cdm: width must be positive")  # noqa: TRY003
+        if length <= 0:
+            raise RuntimeError("cdm: length must be positive")  # noqa: TRY003
+        if quantity <= 0:
+            raise RuntimeError("cdm: quantity must be positive")  # noqa: TRY003
         am = self.get_automation_manager_addin()
+        if cdm_db.find_cdm_job(am, job_name) is not None:
+            raise RuntimeError(f"cdm: job already exists: {job_name}")  # noqa: TRY003
+        material_name = (material or "").strip() or None
+        material_id: int | None = None
+        if material_name is not None:
+            material_id = cdm_db.sheet_materials().get(material_name)
+            if material_id is None:
+                raise RuntimeError(f"cdm: material not found: {material_name}")  # noqa: TRY003
+        else:
+            material_id = cdm_db.vdb5_job_defaults().get("material_id")
+        material_label: str | None = material_name
+        if material_label is None and material_id is not None:
+            material_label = next(
+                (n for n, mid in cdm_db.sheet_materials().items() if mid == material_id),
+                None,
+            )
         try:
             job = am.NewCDMJob()
             job.JobName = job_name
             job.SaveToDatabase()
         except Exception as e:
             raise RuntimeError(f"cdm: create job failed: {e}") from e  # noqa: TRY003
+        material_error: str | None = None
+        if material_id is not None and not cdm_db.set_job_material(job_name, material_id):
+            material_error = "failed to set material"
         try:
             detail = job.AddCDMOrderDetail(type_name)
         except Exception as e:
@@ -505,19 +532,23 @@ class Application:
             detail.SaveToDatabase()
         except Exception as e:
             raise RuntimeError(f"cdm: save order detail failed: {e}") from e  # noqa: TRY003
-        return {
+        result: dict[str, Any] = {
             "success": True,
             "job_name": job_name,
             "type_name": type_name,
             "width": width,
             "length": length,
             "quantity": quantity,
+            "material": material_label,
         }
+        if material_error is not None:
+            result["material_error"] = material_error
+        return result
 
     def cdm_types(self) -> dict[str, Any]:
-        """List CDM door types seen in existing jobs (headless-safe)."""
+        """List CDM door types from the vdb5 database + existing jobs (headless-safe)."""
         am = self.get_automation_manager_addin()
-        names: list[str] = []
+        com_names: list[str] = []
         seen: set[str] = set()
         try:
             jobs = am.Jobs
@@ -531,17 +562,13 @@ class Application:
                         name = str(details.Item(di).TypeName)
                     except Exception:
                         continue
-                    if name and name not in seen:
-                        seen.add(name)
-                        names.append(name)
+                    if name and name.casefold() not in seen:
+                        seen.add(name.casefold())
+                        com_names.append(name)
         except Exception as e:
             raise RuntimeError(f"cdm: read door types failed: {e}") from e  # noqa: TRY003
-        if not names:
-            return {
-                "types": [],
-                "note": "no CDM jobs with order details yet; door types unavailable headless",
-            }
-        return {"types": [{"id": i, "name": name} for i, name in enumerate(names, 1)]}
+        vdb5_names, vdb5_ok = cdm_db.vdb5_door_type_names()
+        return cdm_db.merge_door_types(com_names, vdb5_names, vdb5_ok)
 
     def cdm_jobs(self) -> dict[str, Any]:
         """List existing CDM jobs (headless-safe)."""
@@ -584,12 +611,10 @@ class Application:
         if not os.path.exists(csv):
             raise RuntimeError(f"cdm: csv file not found: {csv}")  # noqa: TRY003
         try:
-            with open(csv, encoding="utf-8", errors="replace") as fh:
-                text = fh.read()
-        except UnicodeDecodeError:
-            with open(csv, encoding="cp1250", errors="replace") as fh:
-                text = fh.read()
-        rows = list(reader(io.StringIO(text), delimiter=separator))
+            rows = cdm_db.read_cdm_csv(csv, separator)
+        except Exception as e:
+            raise RuntimeError(f"cdm: import csv failed: {e}") from e  # noqa: TRY003
+        details, errors = cdm_db.parse_cdm_rows(rows, has_header)
         material_name = (material or "").strip() or None
         if material_name is None:
             for n, row in enumerate(rows, start=1):
@@ -603,33 +628,33 @@ class Application:
         defaults: dict[str, Any] | None = None
         material_id: int | None = None
         if material_name:
-            material_id = self._sheet_materials().get(material_name)
+            material_id = cdm_db.sheet_materials().get(material_name)
             if material_id is None:
                 raise RuntimeError(  # noqa: TRY003
                     f"cdm: material not found: {material_name}"
                 )
         else:
-            defaults = self._vdb5_job_defaults()
+            defaults = cdm_db.vdb5_job_defaults()
             material_id = defaults.get("material_id")
         material_label: str | None = material_name
         if material_label is None and material_id is not None:
             material_label = next(
-                (n for n, mid in self._sheet_materials().items() if mid == material_id),
+                (n for n, mid in cdm_db.sheet_materials().items() if mid == material_id),
                 None,
             )
+        if not details:
+            return {
+                "success": False,
+                "job_name": job or "",
+                "items": 0,
+                "material": material_label,
+                "errors": errors,
+            }
         am = self.get_automation_manager_addin()
         cdm_job: Any = None
         if job:
             try:
-                jobs = am.Jobs
-                for i in range(1, int(jobs.Count) + 1):
-                    try:
-                        jj = jobs.Item(i)
-                    except Exception:
-                        continue
-                    if str(jj.JobName) == job:
-                        cdm_job = jj
-                        break
+                cdm_job = cdm_db.find_cdm_job(am, job)
             except Exception as e:
                 raise RuntimeError(f"cdm: import csv failed: {e}") from e  # noqa: TRY003
             if cdm_job is None:
@@ -639,7 +664,7 @@ class Application:
             config_name = (config or "").strip()
             if not config_name:
                 if defaults is None:
-                    defaults = self._vdb5_job_defaults()
+                    defaults = cdm_db.vdb5_job_defaults()
                 config_name = str(defaults.get("config_name") or "").strip()
                 if not config_name:
                     raise RuntimeError(  # noqa: TRY003
@@ -663,57 +688,30 @@ class Application:
                 cdm_job.SaveToDatabase()
             except Exception as e:
                 raise RuntimeError(f"cdm: create job failed: {e}") from e  # noqa: TRY003
-        errors: list[str] = []
         items = 0
-        for n, row in enumerate(rows, start=1):
-            if has_header and n == 1:
-                continue
-            if not any(str(cell).strip() for cell in row):
-                continue
-            if len(row) < 5:
-                errors.append(f"row {n}: expected at least 5 columns, got {len(row)}")
-                continue
-            style = str(row[0]).strip()
-            if not style:
-                errors.append(f"row {n}: style is required")
-                continue
+        for d in details:
             try:
-                quantity = int(str(row[1]).strip())
-            except ValueError:
-                errors.append(f"row {n}: invalid quantity: {row[1]!r}")
-                continue
-            try:
-                width = float(str(row[2]).strip())
-            except ValueError:
-                errors.append(f"row {n}: invalid width: {row[2]!r}")
-                continue
-            try:
-                length = float(str(row[3]).strip())
-            except ValueError:
-                errors.append(f"row {n}: invalid length: {row[3]!r}")
-                continue
-            design_dims = str(row[4]).strip()
-            try:
-                detail = cdm_job.AddCDMOrderDetail(style)
+                detail = cdm_job.AddCDMOrderDetail(d["style"])
             except Exception:
-                errors.append(f"row {n}: door type not found: {style}")
+                errors.append(f"row {d['row']}: door type not found: {d['style']}")
                 continue
-            detail.Width = width
-            detail.Length = length
-            detail.Quantity = quantity
+            detail.Width = d["width"]
+            detail.Length = d["length"]
+            detail.Quantity = d["quantity"]
+            design_dims = d["design_dims"]
             if design_dims:
                 parts = [p for p in design_dims.split(";") if p != ""]
-                if len(parts) < 50:
-                    parts += ["0"] * (50 - len(parts))
+                if len(parts) < cdm_db.DESIGN_DIMS_FIELDS:
+                    parts += ["0"] * (cdm_db.DESIGN_DIMS_FIELDS - len(parts))
                 detail.UserVariableString = ";".join(parts)
             try:
                 detail.SaveToDatabase()
             except Exception as e:
-                errors.append(f"row {n}: save order detail failed: {e}")
+                errors.append(f"row {d['row']}: save order detail failed: {e}")
                 continue
             items += 1
         if material_id is not None:
-            if not self._set_job_material(job_name, material_id):
+            if not cdm_db.set_job_material(job_name, material_id):
                 errors.append(f"job {job_name}: failed to set material")
         elif material_name is None:
             errors.append(f"job {job_name}: no material set (required for processing)")
@@ -725,150 +723,12 @@ class Application:
             "errors": errors,
         }
 
-    def _sheet_materials(self) -> dict[str, int]:
-        """Material name -> sheet/material ID from SQLite sheet database."""
-        script_path = os.path.join(
-            os.path.dirname(os.path.abspath(__file__)),
-            "..",
-            "..",
-            "..",
-            "scripts",
-            "sheet_materials.py",
-        )
-        try:
-            proc = subprocess.run(
-                [sys.executable, script_path],
-                capture_output=True,
-                text=True,
-                encoding="utf-8",
-                errors="replace",
-                timeout=20,
-                check=False,
-            )
-            if proc.returncode != 0 or not proc.stdout.strip():
-                return {}
-            data = json.loads(proc.stdout)
-        except Exception:
-            return {}
-        if isinstance(data, dict) and "value" in data:
-            data = data["value"]
-        if not isinstance(data, dict):
-            return {}
-        materials: dict[str, int] = {}
-        for key in ("sheets", "materials"):
-            rows = data.get(key)
-            if not isinstance(rows, list):
-                continue
-            for row in rows:
-                if not isinstance(row, dict):
-                    continue
-                name = row.get("name")
-                mid = row.get("id")
-                if not isinstance(name, str) or not name.strip():
-                    continue
-                if mid is None:
-                    continue
-                try:
-                    mid_int = int(mid)
-                except (TypeError, ValueError):
-                    continue
-                name_key = name.strip()
-                if name_key not in materials:
-                    materials[name_key] = mid_int
-        return materials
-
-    def _vdb5_job_defaults(self) -> dict[str, Any]:
-        """Read default config name and material id from the Automation Manager database."""
-        script_path = os.path.join(
-            os.path.dirname(os.path.abspath(__file__)),
-            "..",
-            "..",
-            "..",
-            "scripts",
-            "vdb5_job_defaults.ps1",
-        )
-        try:
-            proc = subprocess.run(
-                ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", script_path],
-                capture_output=True,
-                text=True,
-                encoding="utf-8",
-                errors="replace",
-                timeout=20,
-                check=False,
-            )
-            if proc.returncode != 0 or not proc.stdout.strip():
-                return {"config_name": None, "material_id": None}
-            data = json.loads(proc.stdout)
-        except Exception:
-            return {"config_name": None, "material_id": None}
-        if isinstance(data, dict) and "value" in data:
-            data = data["value"]
-        if not isinstance(data, dict):
-            return {"config_name": None, "material_id": None}
-        config_name = data.get("config_name")
-        material_id = data.get("material_id")
-        if not isinstance(config_name, str):
-            config_name = None
-        if material_id is not None:
-            try:
-                material_id = int(material_id)
-            except (TypeError, ValueError):
-                material_id = None
-        return {"config_name": config_name, "material_id": material_id}
-
-    def _set_job_material(self, job_name: str, material_id: int) -> bool:
-        """Set AM_JobDetails.fkMaterialID for a job by name; True when rows updated."""
-        script_path = os.path.join(
-            os.path.dirname(os.path.abspath(__file__)),
-            "..",
-            "..",
-            "..",
-            "scripts",
-            "vdb5_set_job_material.ps1",
-        )
-        try:
-            proc = subprocess.run(
-                [
-                    "powershell",
-                    "-NoProfile",
-                    "-ExecutionPolicy",
-                    "Bypass",
-                    "-File",
-                    script_path,
-                    "-JobName",
-                    job_name,
-                    "-MaterialID",
-                    str(material_id),
-                ],
-                capture_output=True,
-                text=True,
-                encoding="utf-8",
-                errors="replace",
-                timeout=20,
-                check=False,
-            )
-        except Exception:
-            return False
-        if proc.returncode != 0:
-            return False
-        match = re.search(r"rows:\s*(\d+)", proc.stdout)
-        return bool(match and int(match.group(1)) > 0)
-
     def delete_cdm_job(self, job_name: str) -> dict[str, Any]:
         """Delete a CDM job from the database (headless, no dialogs)."""
         am = self.get_automation_manager_addin()
         job: Any = None
         try:
-            jobs = am.Jobs
-            for i in range(1, int(jobs.Count) + 1):
-                try:
-                    jj = jobs.Item(i)
-                except Exception:
-                    continue
-                if str(jj.JobName) == job_name:
-                    job = jj
-                    break
+            job = cdm_db.find_cdm_job(am, job_name)
         except Exception as e:
             raise RuntimeError(f"cdm: delete job failed: {e}") from e  # noqa: TRY003
         if job is None:

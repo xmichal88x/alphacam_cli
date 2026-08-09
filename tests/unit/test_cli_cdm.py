@@ -23,8 +23,9 @@ def test_cdm_create_command() -> None:
                 "width": 500.0,
                 "length": 300.0,
                 "quantity": 2,
+                "material": None,
             },
-        ),
+        ) as mock_run_cdm,
     ):
         result = runner.invoke(
             app,
@@ -34,9 +35,18 @@ def test_cdm_create_command() -> None:
     assert "CDM job created: JOB-001" in result.stderr
     assert "Typ Frontu 1" in result.stderr
     assert "500.0x300.0" in result.stderr
+    mock_run_cdm.assert_called_once_with(
+        job_name="JOB-001",
+        type_name="Typ Frontu 1",
+        width=500.0,
+        length=300.0,
+        quantity=2,
+        bypass_nest=False,
+        material=None,
+    )
 
 
-def test_cdm_create_process_message() -> None:
+def test_cdm_create_command_material() -> None:
     from tests.unit.test_cli import _mock_com
 
     with (
@@ -50,12 +60,49 @@ def test_cdm_create_process_message() -> None:
                 "width": 400.0,
                 "length": 300.0,
                 "quantity": 1,
+                "material": "MDF_18",
+            },
+        ) as mock_run_cdm,
+    ):
+        result = runner.invoke(
+            app, ["cdm", "create", "JOB-001", "Typ Frontu 1", "--material", "MDF_18"]
+        )
+    assert result.exit_code == 0
+    assert "Material: MDF_18" in result.stderr
+    mock_run_cdm.assert_called_once_with(
+        job_name="JOB-001",
+        type_name="Typ Frontu 1",
+        width=400.0,
+        length=300.0,
+        quantity=1,
+        bypass_nest=False,
+        material="MDF_18",
+    )
+
+
+def test_cdm_create_command_material_error() -> None:
+    from tests.unit.test_cli import _mock_com
+
+    with (
+        _mock_com(),
+        patch(
+            "alphacam_cli.core.application.Application.run_cdm",
+            return_value={
+                "success": True,
+                "job_name": "JOB-001",
+                "type_name": "Typ Frontu 1",
+                "width": 400.0,
+                "length": 300.0,
+                "quantity": 1,
+                "material": "MDF_18",
+                "material_error": "failed to set material",
             },
         ),
     ):
-        result = runner.invoke(app, ["cdm", "create", "JOB-001", "Typ Frontu 1", "--process"])
+        result = runner.invoke(app, ["cdm", "create", "JOB-001", "Typ Frontu 1"])
     assert result.exit_code == 0
-    assert "wymaga GUI (Session 2)" in result.stderr
+    assert "WARNING" in result.stderr
+    assert "failed to set material" in result.stderr
 
 
 def test_cdm_create_error() -> None:

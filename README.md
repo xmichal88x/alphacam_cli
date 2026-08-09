@@ -714,7 +714,7 @@ alphacam nest list
 
 ### `alphacam cdm`
 
-Cabinet Door Manufacturing (CDM) operations via the Automation Manager add-in — create jobs, list door types and jobs.
+Cabinet Door Manufacturing (CDM) operations via the Automation Manager add-in — create jobs, import CSV orders, list door types and jobs. All commands run headless (Session 0) and can be executed remotely via the gateway (`--remote --host <ip>`).
 
 #### `create`
 
@@ -724,7 +724,7 @@ Create a CDM job with a single door position (headless, no dialogs).
 
 | Argument | Type | Description |
 |----------|------|-------------|
-| `job_name` | `str` | CDM job name (required) |
+| `job_name` | `str` | CDM job name (required, must not exist yet) |
 | `type_name` | `str` | Door type name (required, e.g. `Typ Frontu 1`) |
 
 **Options:**
@@ -735,9 +735,7 @@ Create a CDM job with a single door position (headless, no dialogs).
 | `--length`, `-l` | `float` | `300` | Door length (mm) |
 | `--quantity`, `-q` | `int` | `1` | Door quantity |
 | `--bypass-nest` | `bool` | `False` | Bypass nesting |
-| `--process` | `bool` | `False` | Request processing (requires GUI) |
-
-> **Note:** `--process` requires a GUI session (Session 2) — the job is saved to the database, but processing cannot run headless.
+| `--material` | `str` | `None` | Material name (`AM_Materials`); default from database |
 
 **Example:**
 
@@ -747,7 +745,7 @@ alphacam cdm create "Job 2026-01" "Typ Frontu 1" --width 400 --length 300 --quan
 
 #### `types`
 
-List CDM door types from the VistaDB database and seen in existing jobs.
+List CDM door types from the VistaDB database (`CDM_DoorTypes`) and existing jobs (merged, deduplicated). Falls back to job types only when the database is unreadable.
 
 **Example:**
 
@@ -767,9 +765,9 @@ alphacam cdm jobs
 
 #### `import`
 
-Import a CSV door order into a CDM job (create or update). The CSV columns must match the import configuration in the Automation Manager.
+Import a CSV door order into a CDM job (headless, no dialogs) — creates a new job or adds rows to an existing one.
 
-> **Note:** CSV import requires a GUI session (Session 2) — `ImportCSVToJob`/`CreateJobsFromCSVFile` show modal dialogs and hang in Session 0. In headless mode (Session 0) the command returns a clear error; create CDM jobs with `cdm create` or in the Automation Manager GUI.
+CSV columns: `Style,Quantity,Width,Height,DesignDimensions[,Material]`. The 6th (Material) column is optional and overrides the database default; `--material` overrides everything. UTF-8 with BOM (Excel) and CP1250 are detected automatically; the separator is a single character. All rows are validated before the job is created — if every row is invalid, the job is **not** created (exit 1).
 
 **Arguments:**
 
@@ -781,14 +779,23 @@ Import a CSV door order into a CDM job (create or update). The CSV columns must 
 
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|
-| `--job` | `str` | `None` | Existing CDM job name (default: new job from CSV filename) |
+| `--name` | `str` | `None` | Job name for a new job (default: CSV basename, max 60 chars) |
+| `--config` | `str` | `None` | Configuration name for a new job (default: from database) |
+| `--job` | `str` | `None` | Existing CDM job name (mutually exclusive with `--name`) |
 | `--separator` | `str` | `,` | CSV separator character |
-| `--no-header` | `bool` | `False` | CSV has no header row |
+| `--header` | `bool` | `False` | CSV has a header row |
+| `--material` | `str` | `None` | Material name (`AM_Materials`); overrides CSV column 6 |
 
 **Example:**
 
 ```bash
 alphacam cdm import order.csv --job "Job 2026-01" --separator ";"
+```
+
+**Production example** (remote, via gateway — material from CSV column 6 or the database default):
+
+```bash
+alphacam --remote --host 100.71.109.69 cdm import zamowienie.csv --name "Zamowienie X"
 ```
 
 #### `delete`

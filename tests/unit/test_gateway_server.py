@@ -1026,6 +1026,7 @@ def _mock_cdm_com(monkeypatch: pytest.MonkeyPatch) -> tuple[MagicMock, MagicMock
     monkeypatch.setitem(sys.modules, "win32com", win32com)
     monkeypatch.setitem(sys.modules, "win32com.client", client_mod)
     monkeypatch.setitem(sys.modules, "pythoncom", pythoncom)
+    am.Jobs.Count = 0
     return ai, addins, am
 
 
@@ -1043,6 +1044,10 @@ def test_run_cdm_handler(server_app: MagicMock, monkeypatch: pytest.MonkeyPatch)
     detail = MagicMock()
     am.NewCDMJob.return_value = job
     job.AddCDMOrderDetail.return_value = detail
+    monkeypatch.setattr(
+        "alphacam_cli.core.cdm_db.vdb5_job_defaults",
+        lambda: {"config_name": None, "material_id": None},
+    )
     gw = GatewayServer()
     result = gw._handler_run_cdm(
         {
@@ -1061,6 +1066,7 @@ def test_run_cdm_handler(server_app: MagicMock, monkeypatch: pytest.MonkeyPatch)
         "width": 500.0,
         "length": 320.0,
         "quantity": 2,
+        "material": None,
     }
     assert job.JobName == "JOB-001"
     job.SaveToDatabase.assert_called_once_with()
@@ -1078,12 +1084,117 @@ def test_run_cdm_handler_defaults(server_app: MagicMock, monkeypatch: pytest.Mon
     detail = MagicMock()
     am.NewCDMJob.return_value = job
     job.AddCDMOrderDetail.return_value = detail
+    monkeypatch.setattr(
+        "alphacam_cli.core.cdm_db.vdb5_job_defaults",
+        lambda: {"config_name": None, "material_id": None},
+    )
     gw = GatewayServer()
     result = gw._handler_run_cdm({"job_name": "JOB-001", "type_name": "Typ Frontu 1"})
     assert result["width"] == 400.0
     assert result["length"] == 300.0
     assert result["quantity"] == 1
+    assert result["material"] is None
     assert detail.ByPassNest is False
+
+
+def test_run_cdm_handler_width_zero(server_app: MagicMock) -> None:
+    gw = GatewayServer()
+    with pytest.raises(COMError, match="cdm: width must be positive"):
+        gw._handler_run_cdm({"job_name": "JOB-001", "type_name": "Typ Frontu 1", "width": 0})
+
+
+def test_run_cdm_handler_length_zero(server_app: MagicMock) -> None:
+    gw = GatewayServer()
+    with pytest.raises(COMError, match="cdm: length must be positive"):
+        gw._handler_run_cdm({"job_name": "JOB-001", "type_name": "Typ Frontu 1", "length": -10})
+
+
+def test_run_cdm_handler_quantity_negative(server_app: MagicMock) -> None:
+    gw = GatewayServer()
+    with pytest.raises(COMError, match="cdm: quantity must be positive"):
+        gw._handler_run_cdm({"job_name": "JOB-001", "type_name": "Typ Frontu 1", "quantity": -1})
+
+
+def test_run_cdm_handler_job_duplicate(
+    server_app: MagicMock, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _, _, am = _mock_cdm_com(monkeypatch)
+    monkeypatch.setattr("alphacam_cli.core.cdm_db.find_cdm_job", lambda am, name: MagicMock())
+    gw = GatewayServer()
+    with pytest.raises(COMError, match="cdm: job already exists: JOB-001"):
+        gw._handler_run_cdm({"job_name": "JOB-001", "type_name": "Typ Frontu 1"})
+    am.NewCDMJob.assert_not_called()
+
+
+def test_run_cdm_handler_material(server_app: MagicMock, monkeypatch: pytest.MonkeyPatch) -> None:
+    _, _, am = _mock_cdm_com(monkeypatch)
+    job = MagicMock()
+    detail = MagicMock()
+    am.NewCDMJob.return_value = job
+    job.AddCDMOrderDetail.return_value = detail
+    monkeypatch.setattr("alphacam_cli.core.cdm_db.sheet_materials", lambda: {"MDF_18": 2})
+    set_job_material = MagicMock(return_value=True)
+    monkeypatch.setattr("alphacam_cli.core.cdm_db.set_job_material", set_job_material)
+    gw = GatewayServer()
+    result = gw._handler_run_cdm(
+        {"job_name": "JOB-001", "type_name": "Typ Frontu 1", "material": "MDF_18"}
+    )
+    assert result["material"] == "MDF_18"
+    assert "material_error" not in result
+    set_job_material.assert_called_once_with("JOB-001", 2)
+
+
+def test_run_cdm_handler_material_not_found(
+    server_app: MagicMock, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _, _, am = _mock_cdm_com(monkeypatch)
+    monkeypatch.setattr("alphacam_cli.core.cdm_db.sheet_materials", lambda: {"MDF_18": 2})
+    gw = GatewayServer()
+    with pytest.raises(COMError, match="cdm: material not found: X"):
+        gw._handler_run_cdm({"job_name": "JOB-001", "type_name": "Typ Frontu 1", "material": "X"})
+    am.NewCDMJob.assert_not_called()
+
+
+def test_run_cdm_handler_material_set_failed(
+    server_app: MagicMock, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _, _, am = _mock_cdm_com(monkeypatch)
+    job = MagicMock()
+    am.NewCDMJob.return_value = job
+    monkeypatch.setattr("alphacam_cli.core.cdm_db.sheet_materials", lambda: {"MDF_18": 2})
+    monkeypatch.setattr("alphacam_cli.core.cdm_db.set_job_material", lambda job_name, mid: False)
+    gw = GatewayServer()
+    result = gw._handler_run_cdm(
+        {"job_name": "JOB-001", "type_name": "Typ Frontu 1", "material": "MDF_18"}
+    )
+    assert result["success"] is True
+    assert result["material"] == "MDF_18"
+    assert result["material_error"] == "failed to set material"
+
+
+def test_run_cdm_handler_default_material(
+    server_app: MagicMock, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _, _, am = _mock_cdm_com(monkeypatch)
+    job = MagicMock()
+    detail = MagicMock()
+    am.NewCDMJob.return_value = job
+    job.AddCDMOrderDetail.return_value = detail
+    monkeypatch.setattr(
+        "alphacam_cli.core.cdm_db.vdb5_job_defaults",
+        lambda: {"config_name": None, "material_id": 4},
+    )
+    monkeypatch.setattr(
+        "alphacam_cli.core.cdm_db.sheet_materials",
+        lambda: {"MDF18 - 2800 x 2070": 4},
+    )
+    set_job_material = MagicMock(return_value=True)
+    monkeypatch.setattr("alphacam_cli.core.cdm_db.set_job_material", set_job_material)
+    gw = GatewayServer()
+    result = gw._handler_run_cdm({"job_name": "JOB-001", "type_name": "Typ Frontu 1"})
+    assert result["material"] == "MDF18 - 2800 x 2070"
+    assert "material_error" not in result
+    set_job_material.assert_called_once_with("JOB-001", 4)
 
 
 def test_run_cdm_handler_missing_job_name(server_app: MagicMock) -> None:
@@ -1431,7 +1542,10 @@ def test_cdm_import_csv_handler_single_job(
     csv_file = tmp_path / "order.csv"
     csv_file.write_text("P003,1,500,500,1;18;0;0\n", encoding="utf-8")
     gw = GatewayServer()
-    gw._vdb5_job_defaults = lambda: {"config_name": "Fronty", "material_id": None}  # type: ignore[method-assign]
+    monkeypatch.setattr(
+        "alphacam_cli.core.cdm_db.vdb5_job_defaults",
+        lambda: {"config_name": "Fronty", "material_id": None},
+    )
     result = gw._handler_cdm_import_csv({"csv": str(csv_file)})
     assert result == {
         "success": True,
@@ -1461,7 +1575,10 @@ def test_cdm_import_csv_handler_auto_create_with_name(
     csv_file = tmp_path / "order.csv"
     csv_file.write_text("P003,1,500,500,1;18;0;0\n", encoding="utf-8")
     gw = GatewayServer()
-    gw._vdb5_job_defaults = lambda: {"config_name": "Fronty", "material_id": None}  # type: ignore[method-assign]
+    monkeypatch.setattr(
+        "alphacam_cli.core.cdm_db.vdb5_job_defaults",
+        lambda: {"config_name": "Fronty", "material_id": None},
+    )
     result = gw._handler_cdm_import_csv({"csv": str(csv_file), "name": "Zadanie 132"})
     assert result["success"] is True
     assert result["job_name"] == "Zadanie 132"
@@ -1477,7 +1594,10 @@ def test_cdm_import_csv_handler_auto_create_with_config(
     csv_file = tmp_path / "order.csv"
     csv_file.write_text("P003,1,500,500,1;18;0;0\n", encoding="utf-8")
     gw = GatewayServer()
-    gw._vdb5_job_defaults = lambda: {"config_name": "Fronty", "material_id": None}  # type: ignore[method-assign]
+    monkeypatch.setattr(
+        "alphacam_cli.core.cdm_db.vdb5_job_defaults",
+        lambda: {"config_name": "Fronty", "material_id": None},
+    )
     result = gw._handler_cdm_import_csv({"csv": str(csv_file), "config": "Fronty"})
     assert result["success"] is True
     am.ConfigurationSettings.GetByName.assert_called_once_with("Fronty")
@@ -1493,8 +1613,13 @@ def test_cdm_import_csv_handler_default_config(
     csv_file = tmp_path / "order.csv"
     csv_file.write_text("P003,1,500,500,1;18;0;0\n", encoding="utf-8")
     gw = GatewayServer()
-    gw._vdb5_job_defaults = lambda: {"config_name": "Fronty", "material_id": 4}  # type: ignore[method-assign]
-    gw._sheet_materials = lambda: {"MDF18 - 2800 x 2070": 4}  # type: ignore[method-assign]
+    monkeypatch.setattr(
+        "alphacam_cli.core.cdm_db.vdb5_job_defaults",
+        lambda: {"config_name": "Fronty", "material_id": 4},
+    )
+    monkeypatch.setattr(
+        "alphacam_cli.core.cdm_db.sheet_materials", lambda: {"MDF18 - 2800 x 2070": 4}
+    )
     run = _mock_vdb5_run(monkeypatch, stdout="rows: 1\ndetail_rows: 1")
     result = gw._handler_cdm_import_csv({"csv": str(csv_file)})
     assert result["success"] is True
@@ -1515,8 +1640,13 @@ def test_cdm_import_csv_handler_defaults_material(
     csv_file = tmp_path / "order.csv"
     csv_file.write_text("P003,1,500,500,1;18;0;0\n", encoding="utf-8")
     gw = GatewayServer()
-    gw._vdb5_job_defaults = lambda: {"config_name": "Fronty", "material_id": 4}  # type: ignore[method-assign]
-    gw._sheet_materials = lambda: {"MDF18 - 2800 x 2070": 4}  # type: ignore[method-assign]
+    monkeypatch.setattr(
+        "alphacam_cli.core.cdm_db.vdb5_job_defaults",
+        lambda: {"config_name": "Fronty", "material_id": 4},
+    )
+    monkeypatch.setattr(
+        "alphacam_cli.core.cdm_db.sheet_materials", lambda: {"MDF18 - 2800 x 2070": 4}
+    )
     run = _mock_vdb5_run(monkeypatch, stdout="rows: 1\ndetail_rows: 1")
     result = gw._handler_cdm_import_csv({"csv": str(csv_file)})
     assert result["success"] is True
@@ -1538,7 +1668,10 @@ def test_cdm_import_csv_handler_no_defaults(
     csv_file = tmp_path / "order.csv"
     csv_file.write_text("P003,1,500,500,1;18;0;0\n", encoding="utf-8")
     gw = GatewayServer()
-    gw._vdb5_job_defaults = lambda: {"config_name": None, "material_id": None}  # type: ignore[method-assign]
+    monkeypatch.setattr(
+        "alphacam_cli.core.cdm_db.vdb5_job_defaults",
+        lambda: {"config_name": None, "material_id": None},
+    )
     with pytest.raises(COMError, match="cdm: no default configuration found"):
         gw._handler_cdm_import_csv({"csv": str(csv_file)})
 
@@ -1552,9 +1685,9 @@ def test_cdm_import_csv_handler_config_flag_overrides_default(
     csv_file = tmp_path / "order.csv"
     csv_file.write_text("P003,1,500,500,1;18;0;0,MDF_18\n", encoding="utf-8")
     gw = GatewayServer()
-    gw._sheet_materials = lambda: {"MDF_18": 3}  # type: ignore[method-assign]
+    monkeypatch.setattr("alphacam_cli.core.cdm_db.sheet_materials", lambda: {"MDF_18": 3})
     defaults = MagicMock(return_value={"config_name": "Fronty", "material_id": 4})
-    gw._vdb5_job_defaults = defaults  # type: ignore[method-assign]
+    monkeypatch.setattr("alphacam_cli.core.cdm_db.vdb5_job_defaults", defaults)
     _mock_vdb5_run(monkeypatch, stdout="rows: 1\ndetail_rows: 1")
     result = gw._handler_cdm_import_csv({"csv": str(csv_file), "config": "Custom"})
     assert result["success"] is True
@@ -1577,7 +1710,10 @@ def test_cdm_import_csv_handler_job_lookup(
     csv_file = tmp_path / "order.csv"
     csv_file.write_text("P003,1,500,500,1;18;0;0\n", encoding="utf-8")
     gw = GatewayServer()
-    gw._vdb5_job_defaults = lambda: {"config_name": "Fronty", "material_id": None}  # type: ignore[method-assign]
+    monkeypatch.setattr(
+        "alphacam_cli.core.cdm_db.vdb5_job_defaults",
+        lambda: {"config_name": "Fronty", "material_id": None},
+    )
     result = gw._handler_cdm_import_csv({"csv": str(csv_file), "job": "X"})
     assert result == {
         "success": True,
@@ -1602,7 +1738,10 @@ def test_cdm_import_csv_handler_job_not_found(
     csv_file = tmp_path / "order.csv"
     csv_file.write_text("P003,1,500,500,1;18;0;0\n", encoding="utf-8")
     gw = GatewayServer()
-    gw._vdb5_job_defaults = lambda: {"config_name": "Fronty", "material_id": None}  # type: ignore[method-assign]
+    monkeypatch.setattr(
+        "alphacam_cli.core.cdm_db.vdb5_job_defaults",
+        lambda: {"config_name": "Fronty", "material_id": None},
+    )
     with pytest.raises(COMError, match="cdm: job not found: X"):
         gw._handler_cdm_import_csv({"csv": str(csv_file), "job": "X"})
 
@@ -1630,7 +1769,10 @@ def test_cdm_import_csv_handler_multi_row_single_job(
         encoding="utf-8",
     )
     gw = GatewayServer()
-    gw._vdb5_job_defaults = lambda: {"config_name": "Fronty", "material_id": None}  # type: ignore[method-assign]
+    monkeypatch.setattr(
+        "alphacam_cli.core.cdm_db.vdb5_job_defaults",
+        lambda: {"config_name": "Fronty", "material_id": None},
+    )
     result = gw._handler_cdm_import_csv({"csv": str(csv_file)})
     assert result["success"] is True
     assert result["job_name"] == "order"
@@ -1654,8 +1796,11 @@ def test_cdm_import_csv_handler_extra_columns_ignored(
     csv_file = tmp_path / "order.csv"
     csv_file.write_text("P003,1,500,500,1;18;0;0,MDF_18,ImportE2E 001,Fronty\n", encoding="utf-8")
     gw = GatewayServer()
-    gw._vdb5_job_defaults = lambda: {"config_name": "Fronty", "material_id": None}  # type: ignore[method-assign]
-    gw._sheet_materials = lambda: {"MDF_18": 3}  # type: ignore[method-assign]
+    monkeypatch.setattr(
+        "alphacam_cli.core.cdm_db.vdb5_job_defaults",
+        lambda: {"config_name": "Fronty", "material_id": None},
+    )
+    monkeypatch.setattr("alphacam_cli.core.cdm_db.sheet_materials", lambda: {"MDF_18": 3})
     _mock_vdb5_run(monkeypatch, stdout="rows: 1\ndetail_rows: 1")
     result = gw._handler_cdm_import_csv({"csv": str(csv_file)})
     assert result["success"] is True
@@ -1677,11 +1822,34 @@ def test_cdm_import_csv_handler_bad_type(
     csv_file = tmp_path / "order.csv"
     csv_file.write_text("XYZ,1,500,500,1;2;3\n", encoding="utf-8")
     gw = GatewayServer()
-    gw._vdb5_job_defaults = lambda: {"config_name": "Fronty", "material_id": None}  # type: ignore[method-assign]
+    monkeypatch.setattr(
+        "alphacam_cli.core.cdm_db.vdb5_job_defaults",
+        lambda: {"config_name": "Fronty", "material_id": None},
+    )
     result = gw._handler_cdm_import_csv({"csv": str(csv_file)})
     assert result["success"] is False
     assert result["items"] == 0
     assert any("door type not found: XYZ" in e for e in result["errors"])
+
+
+def test_cdm_import_csv_handler_all_rows_invalid(
+    server_app: MagicMock, monkeypatch: pytest.MonkeyPatch, tmp_path: pathlib.Path
+) -> None:
+    _, _, am = _mock_cdm_com(monkeypatch)
+    csv_file = tmp_path / "order.csv"
+    csv_file.write_text("P003,1\nP004,abc,400,300,0\n", encoding="utf-8")
+    gw = GatewayServer()
+    monkeypatch.setattr(
+        "alphacam_cli.core.cdm_db.vdb5_job_defaults",
+        lambda: {"config_name": "Fronty", "material_id": None},
+    )
+    result = gw._handler_cdm_import_csv({"csv": str(csv_file)})
+    assert result["success"] is False
+    assert result["items"] == 0
+    assert result["job_name"] == ""
+    assert any("expected at least 5 columns" in e for e in result["errors"])
+    assert any("invalid quantity" in e for e in result["errors"])
+    am.NewCDMJob.assert_not_called()
 
 
 def test_cdm_import_csv_handler_file_not_found(server_app: MagicMock) -> None:
@@ -1702,7 +1870,10 @@ def test_cdm_import_csv_handler_header(
         encoding="utf-8",
     )
     gw = GatewayServer()
-    gw._vdb5_job_defaults = lambda: {"config_name": "Fronty", "material_id": None}  # type: ignore[method-assign]
+    monkeypatch.setattr(
+        "alphacam_cli.core.cdm_db.vdb5_job_defaults",
+        lambda: {"config_name": "Fronty", "material_id": None},
+    )
     result = gw._handler_cdm_import_csv({"csv": str(csv_file), "has_header": True})
     assert result["success"] is True
     assert result["job_name"] == "order"
@@ -1722,8 +1893,11 @@ def test_cdm_import_csv_handler_short_row(
         encoding="utf-8",
     )
     gw = GatewayServer()
-    gw._vdb5_job_defaults = lambda: {"config_name": "Fronty", "material_id": None}  # type: ignore[method-assign]
-    gw._sheet_materials = lambda: {"MDF": 7}  # type: ignore[method-assign]
+    monkeypatch.setattr(
+        "alphacam_cli.core.cdm_db.vdb5_job_defaults",
+        lambda: {"config_name": "Fronty", "material_id": None},
+    )
+    monkeypatch.setattr("alphacam_cli.core.cdm_db.sheet_materials", lambda: {"MDF": 7})
     _mock_vdb5_run(monkeypatch, stdout="rows: 1\ndetail_rows: 1")
     result = gw._handler_cdm_import_csv({"csv": str(csv_file)})
     assert result["success"] is True
@@ -1745,8 +1919,11 @@ def test_cdm_import_csv_handler_material_from_csv(
         "P003,1,500,500,1;18;0;0,MDF_18\nP004,2,600,400,1;0,MDF_18\n", encoding="utf-8"
     )
     gw = GatewayServer()
-    gw._vdb5_job_defaults = lambda: {"config_name": "Fronty", "material_id": None}  # type: ignore[method-assign]
-    gw._sheet_materials = lambda: {"MDF_18": 2}  # type: ignore[method-assign]
+    monkeypatch.setattr(
+        "alphacam_cli.core.cdm_db.vdb5_job_defaults",
+        lambda: {"config_name": "Fronty", "material_id": None},
+    )
+    monkeypatch.setattr("alphacam_cli.core.cdm_db.sheet_materials", lambda: {"MDF_18": 2})
     run = _mock_vdb5_run(monkeypatch, stdout="rows: 1\ndetail_rows: 1")
     result = gw._handler_cdm_import_csv({"csv": str(csv_file)})
     assert result["success"] is True
@@ -1773,8 +1950,14 @@ def test_cdm_import_csv_handler_material_cli_overrides(
     csv_file = tmp_path / "order.csv"
     csv_file.write_text("P003,1,500,500,1;18;0;0,MDF_18\n", encoding="utf-8")
     gw = GatewayServer()
-    gw._vdb5_job_defaults = lambda: {"config_name": "Fronty", "material_id": None}  # type: ignore[method-assign]
-    gw._sheet_materials = lambda: {"MDF_18": 3, "Material 3 - 2440 x 1220": 5}  # type: ignore[method-assign]
+    monkeypatch.setattr(
+        "alphacam_cli.core.cdm_db.vdb5_job_defaults",
+        lambda: {"config_name": "Fronty", "material_id": None},
+    )
+    monkeypatch.setattr(
+        "alphacam_cli.core.cdm_db.sheet_materials",
+        lambda: {"MDF_18": 3, "Material 3 - 2440 x 1220": 5},
+    )
     run = _mock_vdb5_run(monkeypatch, stdout="rows: 1\ndetail_rows: 1")
     result = gw._handler_cdm_import_csv(
         {"csv": str(csv_file), "material": "Material 3 - 2440 x 1220"}
@@ -1795,7 +1978,7 @@ def test_cdm_import_csv_handler_material_not_found(
     csv_file = tmp_path / "order.csv"
     csv_file.write_text("P003,1,500,500,1;18;0;0\n", encoding="utf-8")
     gw = GatewayServer()
-    gw._sheet_materials = lambda: {}  # type: ignore[method-assign]
+    monkeypatch.setattr("alphacam_cli.core.cdm_db.sheet_materials", lambda: {})
     with pytest.raises(COMError, match="cdm: material not found: MDF_18"):
         gw._handler_cdm_import_csv({"csv": str(csv_file), "material": "MDF_18"})
 
@@ -1809,7 +1992,10 @@ def test_cdm_import_csv_handler_material_warning(
     csv_file = tmp_path / "order.csv"
     csv_file.write_text("P003,1,500,500,1;18;0;0\n", encoding="utf-8")
     gw = GatewayServer()
-    gw._vdb5_job_defaults = lambda: {"config_name": "Fronty", "material_id": None}  # type: ignore[method-assign]
+    monkeypatch.setattr(
+        "alphacam_cli.core.cdm_db.vdb5_job_defaults",
+        lambda: {"config_name": "Fronty", "material_id": None},
+    )
     result = gw._handler_cdm_import_csv({"csv": str(csv_file)})
     assert result["success"] is True
     assert result["material"] is None

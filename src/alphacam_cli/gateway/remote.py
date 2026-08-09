@@ -272,6 +272,7 @@ class RemoteApplication:
         length: float = 300,
         quantity: int = 1,
         bypass_nest: bool = False,
+        material: str | None = None,
     ) -> dict[str, Any]:
         return self._session.run_cdm(  # type: ignore[no-any-return]
             job_name=job_name,
@@ -280,6 +281,7 @@ class RemoteApplication:
             length=length,
             quantity=quantity,
             bypass_nest=bypass_nest,
+            material=material,
         )
 
     def cdm_types(self) -> dict[str, Any]:

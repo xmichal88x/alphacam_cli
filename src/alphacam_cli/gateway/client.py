@@ -314,18 +314,19 @@ class RemoteSession:
         length: float = 300,
         quantity: int = 1,
         bypass_nest: bool = False,
+        material: str | None = None,
     ) -> dict[str, Any]:
-        return self._call(  # type: ignore[no-any-return]
-            "run_cdm",
-            {
-                "job_name": job_name,
-                "type_name": type_name,
-                "width": width,
-                "length": length,
-                "quantity": quantity,
-                "bypass_nest": bypass_nest,
-            },
-        )
+        params: dict[str, Any] = {
+            "job_name": job_name,
+            "type_name": type_name,
+            "width": width,
+            "length": length,
+            "quantity": quantity,
+            "bypass_nest": bypass_nest,
+        }
+        if material is not None:
+            params["material"] = material
+        return self._call("run_cdm", params)  # type: ignore[no-any-return]
 
     def cdm_types(self) -> dict[str, Any]:
         return self._call("cdm_types")  # type: ignore[no-any-return]

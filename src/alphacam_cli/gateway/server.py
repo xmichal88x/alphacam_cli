@@ -3,21 +3,16 @@
 from __future__ import annotations
 
 import contextlib
-import csv
 import glob as glob_module
-import io
-import json
 import logging
 import os
 import queue
-import re
 import socket
-import subprocess
-import sys
 import threading
 from collections.abc import Callable
 from typing import Any, cast
 
+from alphacam_cli.core import cdm_db
 from alphacam_cli.gateway.protocol import (
     COM_ERROR,
     INTERNAL_ERROR,
@@ -719,8 +714,8 @@ class GatewayServer:
                         types.add(str(details.Item(di).TypeName))
                     except Exception:
                         continue
-        except Exception:
-            pass
+        except Exception as e:
+            self._logger.warning("cdm door types: read failed: %r", e)
         return types
 
     def _handler_run_cdm(self, params: dict[str, Any]) -> dict[str, Any]:
@@ -731,19 +726,44 @@ class GatewayServer:
         if not type_name:
             raise COMError("cdm: type_name is required")
         width = float(params.get("width", 400))
+        if width <= 0:
+            raise COMError("cdm: width must be positive")
         length = float(params.get("length", 300))
+        if length <= 0:
+            raise COMError("cdm: length must be positive")
         quantity = int(params.get("quantity", 1))
+        if quantity <= 0:
+            raise COMError("cdm: quantity must be positive")
         bypass_nest = bool(params.get("bypass_nest", False))
+        material_name = str(params.get("material", "")).strip() or None
         try:
             am = self._cdm_automation_manager()
         except Exception as e:
             raise COMError(f"cdm: automation manager unavailable: {e}") from e
+        if cdm_db.find_cdm_job(am, job_name) is not None:
+            raise COMError(f"cdm: job already exists: {job_name}")
+        material_id: int | None = None
+        if material_name is not None:
+            material_id = cdm_db.sheet_materials().get(material_name)
+            if material_id is None:
+                raise COMError(f"cdm: material not found: {material_name}")
+        else:
+            material_id = cdm_db.vdb5_job_defaults().get("material_id")
+        material_label: str | None = material_name
+        if material_label is None and material_id is not None:
+            material_label = next(
+                (n for n, mid in cdm_db.sheet_materials().items() if mid == material_id),
+                None,
+            )
         try:
             job = am.NewCDMJob()
             job.JobName = job_name
             job.SaveToDatabase()
         except Exception as e:
             raise COMError(f"cdm: create job failed: {e}") from e
+        material_error: str | None = None
+        if material_id is not None and not cdm_db.set_job_material(job_name, material_id):
+            material_error = "failed to set material"
         try:
             detail = job.AddCDMOrderDetail(type_name)
         except Exception as e:
@@ -758,65 +778,18 @@ class GatewayServer:
             detail.SaveToDatabase()
         except Exception as e:
             raise COMError(f"cdm: save order detail failed: {e}") from e
-        return {
+        result: dict[str, Any] = {
             "success": True,
             "job_name": job_name,
             "type_name": type_name,
             "width": width,
             "length": length,
             "quantity": quantity,
+            "material": material_label,
         }
-
-    def _door_type_name(self, row: dict[str, Any]) -> str:
-        for key in ("TypeName", "Name", "DoorTypeName"):
-            value = row.get(key)
-            if isinstance(value, str) and value.strip():
-                return value.strip()
-        for value in row.values():
-            if isinstance(value, str) and value.strip():
-                return value.strip()
-        return ""
-
-    def _vdb5_door_type_names(self) -> tuple[list[str], bool]:
-        script_path = os.path.join(
-            os.path.dirname(os.path.abspath(__file__)),
-            "..",
-            "..",
-            "..",
-            "scripts",
-            "vdb5_door_types.ps1",
-        )
-        try:
-            proc = subprocess.run(
-                ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", script_path],
-                capture_output=True,
-                text=True,
-                encoding="utf-8",
-                errors="replace",
-                timeout=20,
-                check=False,
-            )
-            if proc.returncode != 0 or not proc.stdout.strip():
-                return [], False
-            rows = json.loads(proc.stdout)
-        except Exception as e:
-            self._logger.warning("cdm types: vdb5 read failed: %r", e)
-            return [], False
-        if not isinstance(rows, list):
-            if isinstance(rows, dict) and isinstance(rows.get("value"), list):
-                rows = rows["value"]
-            elif isinstance(rows, dict):
-                rows = [rows]
-            else:
-                return [], False
-        names: list[str] = []
-        for row in rows:
-            if not isinstance(row, dict):
-                continue
-            name = self._door_type_name(row)
-            if name and "do not delete" not in name.lower():
-                names.append(name)
-        return names, True
+        if material_error is not None:
+            result["material_error"] = material_error
+        return result
 
     def _handler_cdm_types(self, params: dict[str, Any]) -> dict[str, Any]:
         try:
@@ -842,27 +815,8 @@ class GatewayServer:
                         com_names.append(name)
         except Exception as e:
             raise COMError(f"cdm: read door types failed: {e}") from e
-        vdb5_names, vdb5_ok = self._vdb5_door_type_names()
-        if not vdb5_ok:
-            if not com_names:
-                return {"types": [], "note": "no CDM door types found"}
-            return {
-                "types": [{"id": i, "name": name} for i, name in enumerate(com_names, 1)],
-                "note": "vdb5 read failed; types from jobs only",
-                "source": "com",
-            }
-        merged: list[str] = []
-        merged_seen: set[str] = set()
-        for name in [*vdb5_names, *com_names]:
-            if name and name.casefold() not in merged_seen:
-                merged_seen.add(name.casefold())
-                merged.append(name)
-        if not merged:
-            return {"types": [], "note": "no CDM door types found"}
-        return {
-            "types": [{"id": i, "name": name} for i, name in enumerate(merged, 1)],
-            "source": "vdb5+com",
-        }
+        vdb5_names, vdb5_ok = cdm_db.vdb5_door_type_names()
+        return cdm_db.merge_door_types(com_names, vdb5_names, vdb5_ok)
 
     def _handler_cdm_jobs(self, params: dict[str, Any]) -> dict[str, Any]:
         try:
@@ -882,140 +836,6 @@ class GatewayServer:
             raise COMError(f"cdm: list jobs failed: {e}") from e
         return {"jobs": jobs_out}
 
-    def _sheet_materials(self) -> dict[str, int]:
-        """Material name -> sheet/material ID from SQLite sheet database."""
-        script_path = os.path.join(
-            os.path.dirname(os.path.abspath(__file__)),
-            "..",
-            "..",
-            "..",
-            "scripts",
-            "sheet_materials.py",
-        )
-        try:
-            proc = subprocess.run(
-                [sys.executable, script_path],
-                capture_output=True,
-                text=True,
-                encoding="utf-8",
-                errors="replace",
-                timeout=20,
-                check=False,
-            )
-            if proc.returncode != 0 or not proc.stdout.strip():
-                return {}
-            data = json.loads(proc.stdout)
-        except Exception as e:
-            self._logger.warning("cdm materials: sheet db read failed: %r", e)
-            return {}
-        if isinstance(data, dict) and "value" in data:
-            data = data["value"]
-        if not isinstance(data, dict):
-            return {}
-        materials: dict[str, int] = {}
-        for key in ("sheets", "materials"):
-            rows = data.get(key)
-            if not isinstance(rows, list):
-                continue
-            for row in rows:
-                if not isinstance(row, dict):
-                    continue
-                name = row.get("name")
-                mid = row.get("id")
-                if not isinstance(name, str) or not name.strip():
-                    continue
-                if mid is None:
-                    continue
-                try:
-                    mid_int = int(mid)
-                except (TypeError, ValueError):
-                    continue
-                name_key = name.strip()
-                if name_key not in materials:
-                    materials[name_key] = mid_int
-        return materials
-
-    def _vdb5_set_job_material(self, job_name: str, material_id: int) -> bool:
-        """Set AM_JobDetails.fkMaterialID for a job by name; True when rows updated."""
-        script_path = os.path.join(
-            os.path.dirname(os.path.abspath(__file__)),
-            "..",
-            "..",
-            "..",
-            "scripts",
-            "vdb5_set_job_material.ps1",
-        )
-        try:
-            proc = subprocess.run(
-                [
-                    "powershell",
-                    "-NoProfile",
-                    "-ExecutionPolicy",
-                    "Bypass",
-                    "-File",
-                    script_path,
-                    "-JobName",
-                    job_name,
-                    "-MaterialID",
-                    str(material_id),
-                ],
-                capture_output=True,
-                text=True,
-                encoding="utf-8",
-                errors="replace",
-                timeout=20,
-                check=False,
-            )
-        except Exception as e:
-            self._logger.warning("cdm material: vdb5 update failed: %r", e)
-            return False
-        if proc.returncode != 0:
-            self._logger.warning("cdm material: vdb5 update failed: %s", proc.stdout.strip())
-            return False
-        match = re.search(r"rows:\s*(\d+)", proc.stdout)
-        return bool(match and int(match.group(1)) > 0)
-
-    def _vdb5_job_defaults(self) -> dict[str, Any]:
-        """Read default config name and material id from the Automation Manager database."""
-        script_path = os.path.join(
-            os.path.dirname(os.path.abspath(__file__)),
-            "..",
-            "..",
-            "..",
-            "scripts",
-            "vdb5_job_defaults.ps1",
-        )
-        try:
-            proc = subprocess.run(
-                ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", script_path],
-                capture_output=True,
-                text=True,
-                encoding="utf-8",
-                errors="replace",
-                timeout=20,
-                check=False,
-            )
-            if proc.returncode != 0 or not proc.stdout.strip():
-                return {"config_name": None, "material_id": None}
-            data = json.loads(proc.stdout)
-        except Exception as e:
-            self._logger.warning("cdm defaults: vdb5 read failed: %r", e)
-            return {"config_name": None, "material_id": None}
-        if isinstance(data, dict) and "value" in data:
-            data = data["value"]
-        if not isinstance(data, dict):
-            return {"config_name": None, "material_id": None}
-        config_name = data.get("config_name")
-        material_id = data.get("material_id")
-        if not isinstance(config_name, str):
-            config_name = None
-        if material_id is not None:
-            try:
-                material_id = int(material_id)
-            except (TypeError, ValueError):
-                material_id = None
-        return {"config_name": config_name, "material_id": material_id}
-
     def _handler_cdm_import_csv(self, params: dict[str, Any]) -> dict[str, Any]:
         csv_path = str(params.get("csv", "")).strip()
         if not csv_path:
@@ -1031,12 +851,10 @@ class GatewayServer:
         if not os.path.exists(csv_path):
             raise COMError(f"cdm: csv file not found: {csv_path}")
         try:
-            with open(csv_path, encoding="utf-8", errors="replace") as fh:
-                text = fh.read()
-        except UnicodeDecodeError:
-            with open(csv_path, encoding="cp1250", errors="replace") as fh:
-                text = fh.read()
-        rows = list(csv.reader(io.StringIO(text), delimiter=separator))
+            rows = cdm_db.read_cdm_csv(csv_path, separator)
+        except Exception as e:
+            raise COMError(f"cdm: import csv failed: {e}") from e
+        details, errors = cdm_db.parse_cdm_rows(rows, has_header)
         material_name = material_param
         if material_name is None:
             for n, row in enumerate(rows, start=1):
@@ -1050,18 +868,26 @@ class GatewayServer:
         defaults: dict[str, Any] | None = None
         material_id: int | None = None
         if material_name:
-            material_id = self._sheet_materials().get(material_name)
+            material_id = cdm_db.sheet_materials().get(material_name)
             if material_id is None:
                 raise COMError(f"cdm: material not found: {material_name}")
         else:
-            defaults = self._vdb5_job_defaults()
+            defaults = cdm_db.vdb5_job_defaults()
             material_id = defaults.get("material_id")
         material_label: str | None = material_name
         if material_label is None and material_id is not None:
             material_label = next(
-                (n for n, mid in self._sheet_materials().items() if mid == material_id),
+                (n for n, mid in cdm_db.sheet_materials().items() if mid == material_id),
                 None,
             )
+        if not details:
+            return {
+                "success": False,
+                "job_name": job_param or "",
+                "items": 0,
+                "material": material_label,
+                "errors": errors,
+            }
         try:
             am = self._cdm_automation_manager()
         except Exception as e:
@@ -1069,15 +895,7 @@ class GatewayServer:
         job: Any = None
         if job_param:
             try:
-                jobs = am.Jobs
-                for i in range(1, int(jobs.Count) + 1):
-                    try:
-                        jj = jobs.Item(i)
-                    except Exception:
-                        continue
-                    if str(jj.JobName) == job_param:
-                        job = jj
-                        break
+                job = cdm_db.find_cdm_job(am, job_param)
             except Exception as e:
                 raise COMError(f"cdm: import csv failed: {e}") from e
             if job is None:
@@ -1087,7 +905,7 @@ class GatewayServer:
             config_name = config_param
             if not config_name:
                 if defaults is None:
-                    defaults = self._vdb5_job_defaults()
+                    defaults = cdm_db.vdb5_job_defaults()
                 config_name = str(defaults.get("config_name") or "").strip()
                 if not config_name:
                     raise COMError("cdm: no default configuration found")
@@ -1107,57 +925,30 @@ class GatewayServer:
                 job.SaveToDatabase()
             except Exception as e:
                 raise COMError(f"cdm: create job failed: {e}") from e
-        errors: list[str] = []
         items = 0
-        for n, row in enumerate(rows, start=1):
-            if has_header and n == 1:
-                continue
-            if not any(str(cell).strip() for cell in row):
-                continue
-            if len(row) < 5:
-                errors.append(f"row {n}: expected at least 5 columns, got {len(row)}")
-                continue
-            style = str(row[0]).strip()
-            if not style:
-                errors.append(f"row {n}: style is required")
-                continue
+        for d in details:
             try:
-                quantity = int(str(row[1]).strip())
-            except ValueError:
-                errors.append(f"row {n}: invalid quantity: {row[1]!r}")
-                continue
-            try:
-                width = float(str(row[2]).strip())
-            except ValueError:
-                errors.append(f"row {n}: invalid width: {row[2]!r}")
-                continue
-            try:
-                length = float(str(row[3]).strip())
-            except ValueError:
-                errors.append(f"row {n}: invalid length: {row[3]!r}")
-                continue
-            design_dims = str(row[4]).strip()
-            try:
-                detail = job.AddCDMOrderDetail(style)
+                detail = job.AddCDMOrderDetail(d["style"])
             except Exception:
-                errors.append(f"row {n}: door type not found: {style}")
+                errors.append(f"row {d['row']}: door type not found: {d['style']}")
                 continue
-            detail.Width = width
-            detail.Length = length
-            detail.Quantity = quantity
+            detail.Width = d["width"]
+            detail.Length = d["length"]
+            detail.Quantity = d["quantity"]
+            design_dims = d["design_dims"]
             if design_dims:
                 parts = [p for p in design_dims.split(";") if p != ""]
-                if len(parts) < 50:
-                    parts += ["0"] * (50 - len(parts))
+                if len(parts) < cdm_db.DESIGN_DIMS_FIELDS:
+                    parts += ["0"] * (cdm_db.DESIGN_DIMS_FIELDS - len(parts))
                 detail.UserVariableString = ";".join(parts)
             try:
                 detail.SaveToDatabase()
             except Exception as e:
-                errors.append(f"row {n}: save order detail failed: {e}")
+                errors.append(f"row {d['row']}: save order detail failed: {e}")
                 continue
             items += 1
         if material_id is not None:
-            if not self._vdb5_set_job_material(job_name, material_id):
+            if not cdm_db.set_job_material(job_name, material_id):
                 errors.append(f"job {job_name}: failed to set material")
         elif material_name is None:
             errors.append(f"job {job_name}: no material set (required for processing)")
@@ -1179,15 +970,7 @@ class GatewayServer:
             raise COMError(f"cdm: automation manager unavailable: {e}") from e
         job: Any = None
         try:
-            jobs = am.Jobs
-            for i in range(1, int(jobs.Count) + 1):
-                try:
-                    jj = jobs.Item(i)
-                except Exception:
-                    continue
-                if str(jj.JobName) == job_name:
-                    job = jj
-                    break
+            job = cdm_db.find_cdm_job(am, job_name)
         except Exception as e:
             raise COMError(f"cdm: delete job failed: {e}") from e
         if job is None:

@@ -24,7 +24,9 @@ def create(
     length: float = typer.Option(300, "--length", "-l", help="Door length (mm)"),
     quantity: int = typer.Option(1, "--quantity", "-q", help="Door quantity"),
     bypass_nest: bool = typer.Option(False, "--bypass-nest", help="Bypass nesting"),
-    process: bool = typer.Option(False, "--process", help="Request processing (requires GUI)"),
+    material: str | None = typer.Option(
+        None, "--material", help="Material name (AM_Materials) for the job; default from database"
+    ),
 ) -> None:
     """Create a CDM job with a single order detail (headless, no dialogs)."""
     require_platform()
@@ -37,16 +39,17 @@ def create(
             length=length,
             quantity=quantity,
             bypass_nest=bypass_nest,
+            material=material,
         )
         console.print(f"[green]OK:[/green] CDM job created: {result['job_name']}")
         console.print(f"     Door type: {result['type_name']}")
         console.print(
             f"     Size: {result['width']}x{result['length']}, quantity: {result['quantity']}"
         )
-        if process:
-            console.print(
-                "[yellow]cdm: Process() wymaga GUI (Session 2) — job zapisany w bazie[/yellow]"
-            )
+        if result.get("material"):
+            console.print(f"     Material: {result['material']}")
+        if result.get("material_error"):
+            console.print(f"[yellow]WARNING:[/yellow] {result['material_error']}")
 
 
 @app.command("types")

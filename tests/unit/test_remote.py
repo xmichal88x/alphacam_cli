@@ -292,6 +292,7 @@ def test_remote_run_cdm() -> None:
         length=300,
         quantity=2,
         bypass_nest=True,
+        material=None,
     )
 
 
@@ -307,6 +308,32 @@ def test_remote_run_cdm_defaults() -> None:
         length=300,
         quantity=1,
         bypass_nest=False,
+        material=None,
+    )
+
+
+def test_remote_run_cdm_material() -> None:
+    session = MagicMock()
+    session.run_cdm.return_value = {
+        "success": True,
+        "job_name": "JOB-001",
+        "type_name": "Typ Frontu 1",
+        "width": 400.0,
+        "length": 300.0,
+        "quantity": 1,
+        "material": "MDF_18",
+    }
+    app = RemoteApplication(session)
+    result = app.run_cdm(job_name="JOB-001", type_name="Typ Frontu 1", material="MDF_18")
+    assert result["material"] == "MDF_18"
+    session.run_cdm.assert_called_once_with(
+        job_name="JOB-001",
+        type_name="Typ Frontu 1",
+        width=400,
+        length=300,
+        quantity=1,
+        bypass_nest=False,
+        material="MDF_18",
     )
 
 

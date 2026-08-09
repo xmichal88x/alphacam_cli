@@ -1,0 +1,184 @@
+from __future__ import annotations
+
+from unittest.mock import MagicMock
+
+import pytest
+
+from alphacam_cli.core import cdm_db
+from alphacam_cli.core.application import Application
+
+
+def _am_with_details(am: MagicMock, *type_names: str) -> MagicMock:
+    details = MagicMock()
+    details.Count = len(type_names)
+    details.Item.side_effect = [MagicMock(TypeName=n) for n in type_names]
+    job = MagicMock()
+    job.CDMOrderDetails = details
+    jobs = MagicMock()
+    jobs.Count = 1
+    jobs.Item.return_value = job
+    am.Jobs = jobs
+    return am
+
+
+def _app_with_am(am: MagicMock) -> Application:
+    app = Application(MagicMock())
+    app.get_automation_manager_addin = lambda: am  # type: ignore[method-assign]
+    return app
+
+
+# --- merge_door_types (pure) ---
+
+
+def test_merge_door_types_vdb5_and_com() -> None:
+    result = cdm_db.merge_door_types(
+        ["M_01", "Typ Frontu 47"],
+        ["Typ Frontu 1", "m_01"],
+        True,
+    )
+    assert result == {
+        "types": [
+            {"id": 1, "name": "Typ Frontu 1"},
+            {"id": 2, "name": "m_01"},
+            {"id": 3, "name": "Typ Frontu 47"},
+        ],
+        "source": "vdb5+com",
+    }
+
+
+def test_merge_door_types_com_only_fallback() -> None:
+    result = cdm_db.merge_door_types(["Typ Frontu 47"], [], False)
+    assert result == {
+        "types": [{"id": 1, "name": "Typ Frontu 47"}],
+        "note": "vdb5 read failed; types from jobs only",
+        "source": "com",
+    }
+
+
+def test_merge_door_types_empty_vdb5_ok() -> None:
+    assert cdm_db.merge_door_types([], [], True) == {
+        "types": [],
+        "note": "no CDM door types found",
+    }
+
+
+def test_merge_door_types_empty_vdb5_fail() -> None:
+    assert cdm_db.merge_door_types([], [], False) == {
+        "types": [],
+        "note": "no CDM door types found",
+    }
+
+
+# --- Application.cdm_types ---
+
+
+def test_cdm_types_merge_vdb5_and_com(monkeypatch: pytest.MonkeyPatch) -> None:
+    am = _am_with_details(MagicMock(), "Typ Frontu 47", "m_01")
+    monkeypatch.setattr(
+        "alphacam_cli.core.cdm_db.vdb5_door_type_names",
+        lambda: (["Typ Frontu 1", "M_01"], True),
+    )
+    result = _app_with_am(am).cdm_types()
+    assert result == {
+        "types": [
+            {"id": 1, "name": "Typ Frontu 1"},
+            {"id": 2, "name": "M_01"},
+            {"id": 3, "name": "Typ Frontu 47"},
+        ],
+        "source": "vdb5+com",
+    }
+
+
+def test_cdm_types_dedup_casefold(monkeypatch: pytest.MonkeyPatch) -> None:
+    am = _am_with_details(MagicMock(), "M_01", "m_01")
+    monkeypatch.setattr(
+        "alphacam_cli.core.cdm_db.vdb5_door_type_names",
+        lambda: (["m_01", "Typ Frontu 1"], True),
+    )
+    result = _app_with_am(am).cdm_types()
+    assert result == {
+        "types": [
+            {"id": 1, "name": "m_01"},
+            {"id": 2, "name": "Typ Frontu 1"},
+        ],
+        "source": "vdb5+com",
+    }
+
+
+def test_cdm_types_empty(monkeypatch: pytest.MonkeyPatch) -> None:
+    am = MagicMock()
+    am.Jobs.Count = 0
+    monkeypatch.setattr(
+        "alphacam_cli.core.cdm_db.vdb5_door_type_names",
+        lambda: ([], True),
+    )
+    result = _app_with_am(am).cdm_types()
+    assert result == {"types": [], "note": "no CDM door types found"}
+
+
+def test_cdm_types_vdb5_fail_fallback(monkeypatch: pytest.MonkeyPatch) -> None:
+    am = _am_with_details(MagicMock(), "Typ Frontu 47")
+    monkeypatch.setattr(
+        "alphacam_cli.core.cdm_db.vdb5_door_type_names",
+        lambda: ([], False),
+    )
+    result = _app_with_am(am).cdm_types()
+    assert result == {
+        "types": [{"id": 1, "name": "Typ Frontu 47"}],
+        "note": "vdb5 read failed; types from jobs only",
+        "source": "com",
+    }
+
+
+def test_cdm_types_vdb5_fail_no_com(monkeypatch: pytest.MonkeyPatch) -> None:
+    am = MagicMock()
+    am.Jobs.Count = 0
+    monkeypatch.setattr(
+        "alphacam_cli.core.cdm_db.vdb5_door_type_names",
+        lambda: ([], False),
+    )
+    result = _app_with_am(am).cdm_types()
+    assert result == {"types": [], "note": "no CDM door types found"}
+
+
+def test_cdm_types_skips_broken_items(monkeypatch: pytest.MonkeyPatch) -> None:
+    am = MagicMock()
+
+    class _BadJob:
+        @property
+        def CDMOrderDetails(self) -> MagicMock:  # noqa: N802 - mimics COM
+            raise RuntimeError("broken")  # noqa: TRY003
+
+    good = MagicMock()
+    good.TypeName = "OK_Type"
+    details = MagicMock()
+    details.Count = 1
+    details.Item.return_value = good
+    good_job = MagicMock()
+    good_job.CDMOrderDetails = details
+    jobs = MagicMock()
+    jobs.Count = 2
+    jobs.Item.side_effect = [_BadJob(), good_job]
+    am.Jobs = jobs
+    monkeypatch.setattr(
+        "alphacam_cli.core.cdm_db.vdb5_door_type_names",
+        lambda: ([], True),
+    )
+    result = _app_with_am(am).cdm_types()
+    assert result == {
+        "types": [{"id": 1, "name": "OK_Type"}],
+        "source": "vdb5+com",
+    }
+
+
+def test_cdm_types_com_read_failure(monkeypatch: pytest.MonkeyPatch) -> None:
+    am = MagicMock()
+
+    class _BoomJobs:
+        @property
+        def Count(self) -> int:  # noqa: N802 - mimics COM Jobs.Count
+            raise RuntimeError("db locked")  # noqa: TRY003
+
+    am.Jobs = _BoomJobs()
+    with pytest.raises(RuntimeError, match="cdm: read door types failed: db locked"):
+        _app_with_am(am).cdm_types()
