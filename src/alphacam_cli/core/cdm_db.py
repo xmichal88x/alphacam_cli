@@ -400,6 +400,7 @@ def cleanup_created_job(
     return False, "failed"
 
 
+# 268-270, 273 removed from the vendor enum; 271=rotation_method, 272=rotation_angle, 274=nest_priority  # noqa: E501
 IMPORT_FIELD_NAMES: dict[int, str] = {
     256: "door_type",
     257: "door_width",
@@ -471,7 +472,7 @@ _MAPPED_DETAIL_KEYS = (
     "job_material_id",
 )
 
-_MAPPED_FIELD_TARGETS: dict[str, str] = {
+MAPPED_FIELD_TARGETS: dict[str, str] = {
     "door_type": "style",
     "door_quantity": "quantity",
     "door_width": "width",
@@ -681,7 +682,7 @@ def parse_cdm_rows_mapped(
                 if not ok:
                     invalid = f"row {n}: invalid value for {name}: {raw}"
                     break
-                detail[_MAPPED_FIELD_TARGETS[name]] = bool_value
+                detail[MAPPED_FIELD_TARGETS[name]] = bool_value
             elif name == "door_rotation_angle":
                 if not raw:
                     continue
@@ -699,12 +700,12 @@ def parse_cdm_rows_mapped(
                 except ValueError:
                     invalid = f"row {n}: invalid value for {name}: {raw}"
                     break
-                detail[_MAPPED_FIELD_TARGETS[name]] = parsed_int
+                detail[MAPPED_FIELD_TARGETS[name]] = parsed_int
             elif name.startswith("door_custom_field_"):
                 if raw:
                     detail["custom_fields"][name.removeprefix("door_custom_field_")] = raw
             else:
-                target = _MAPPED_FIELD_TARGETS.get(name)
+                target = MAPPED_FIELD_TARGETS.get(name)
                 if target is not None:
                     if raw:
                         detail[target] = raw

@@ -1081,7 +1081,7 @@ _FIELD_SETTERS: dict[str, str] = {
 }
 _FIELD_SETTERS.update({f"door_custom_field_{n}": f"CustomField{n}" for n in range(1, 26)})
 
-_DETAIL_VALUE_KEYS: dict[str, str] = dict(cdm_db._MAPPED_FIELD_TARGETS)
+_DETAIL_VALUE_KEYS: dict[str, str] = dict(cdm_db.MAPPED_FIELD_TARGETS)
 
 
 def _resolve_import_setting(import_setting: str | int | None) -> dict[str, Any]:
@@ -1104,6 +1104,11 @@ def _detail_field_value(detail: dict[str, Any], field: str) -> Any:
 
 
 def _cdm_material_name(details: list[dict[str, Any]], material: str | None) -> str | None:
+    """Material name from the explicit arg, detail material, or job_material_id (524).
+
+    job_material_id (524) carries the material NAME (like door_material),
+    not the database id.
+    """
     name = (material or "").strip() or None
     if name is not None:
         return name
