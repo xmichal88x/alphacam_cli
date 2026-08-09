@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import Any
+
 import typer
 from rich.table import Table
 
@@ -109,16 +111,42 @@ def import_csv(
         None, "--config", help="Configuration name for a new CDM job (default: from database)"
     ),
     job: str | None = typer.Option(None, "--job", help="Import into an existing CDM job by name"),
-    separator: str = typer.Option(",", "--separator", help="CSV separator character"),
+    separator: str | None = typer.Option(
+        None, "--separator", help="CSV separator character (default: from import settings or ,)"
+    ),
     header: bool = typer.Option(False, "--header", help="CSV has a header row"),
     material: str | None = typer.Option(
         None, "--material", help="Material name (AM_Materials) for the job; overrides CSV column 6"
     ),
+    import_setting: str | None = typer.Option(
+        None,
+        "--import-setting",
+        help="Import setting id or name from the database (defines column map, separator)",
+    ),
+    preview: bool = typer.Option(False, "--preview", help="Dry run preview without creating a job"),
 ) -> None:
     """Import a CSV door order into a single CDM job (headless, no dialogs)."""
     require_platform()
+    import_setting_key: str | int | None = (
+        int(import_setting)
+        if import_setting is not None and import_setting.isdigit()
+        else import_setting
+    )
     with alphacam_context(visible=get_visible()) as raw:
         ac = resolve_app(raw)
+        if preview:
+            result = ac.import_cdm_preview(
+                csv=csv,
+                import_setting=import_setting_key,
+                separator=separator,
+                has_header=header,
+                job=job,
+                name=name,
+                config=config,
+                material=material,
+            )
+            _print_import_preview(result)
+            return
         result = ac.import_cdm_csv(
             csv=csv,
             job=job,
@@ -127,6 +155,7 @@ def import_csv(
             separator=separator,
             has_header=header,
             material=material,
+            import_setting=import_setting_key,
         )
         if not result.get("success"):
             for err in result.get("errors", []):
@@ -154,3 +183,111 @@ def delete_job(
         ac = resolve_app(raw)
         result = ac.delete_cdm_job(job_name=job_name)
         console.print(f"[green]OK:[/green] CDM job deleted: {result['job_name']}")
+
+
+import_settings_app = typer.Typer(help="CDM import settings")
+
+
+@import_settings_app.command("list")
+@handle_com_errors
+def import_settings_list() -> None:
+    """List CDM import settings from the database."""
+    require_platform()
+    with alphacam_context(visible=get_visible()) as raw:
+        ac = resolve_app(raw)
+        result = ac.cdm_import_settings()
+        settings = result.get("settings", [])
+        if not settings:
+            console.print("[yellow]No CDM import settings found[/yellow]")
+            return
+        t = Table(title="CDM Import Settings")
+        t.add_column("ID", style="cyan")
+        t.add_column("Name", style="green")
+        t.add_column("Selected")
+        t.add_column("CreateJob")
+        t.add_column("Delimiter")
+        t.add_column("Kolumny")
+        t.add_column("Count", justify="right")
+        for setting in settings:
+            t.add_row(
+                str(setting.get("id", "")),
+                str(setting.get("name", "")),
+                "Yes" if setting.get("selected") else "No",
+                "Yes" if setting.get("create_job") else "No",
+                str(setting.get("delimiter_char", "") or ""),
+                str(setting.get("fields", "") or ""),
+                str(setting.get("fields_count", 0)),
+            )
+        console.print(t)
+
+
+app.add_typer(import_settings_app, name="import-settings")
+
+
+def _print_import_preview(result: dict[str, Any]) -> None:
+    console.print("[cyan]PREVIEW (dry run, no changes)[/cyan]")
+    setting = result.get("setting")
+    if setting:
+        console.print(
+            f"Import settings: {setting.get('name')} "
+            f"(id={setting.get('id')}, delimiter={setting.get('delimiter_char') or ''}, "
+            f"create_job={setting.get('create_job') or False})"
+        )
+    field_map = result.get("field_map", [])
+    if field_map:
+        t = Table(title="Field mapping")
+        t.add_column("Kol", style="cyan")
+        t.add_column("Pole", style="green")
+        t.add_column("Wymagane", style="yellow")
+        for mapping in field_map:
+            t.add_row(
+                str(mapping.get("column", "")),
+                str(mapping.get("field", "")),
+                "Yes" if mapping.get("required") else "No",
+            )
+        console.print(t)
+    console.print(f"Job: {result.get('job_name', '')}")
+    console.print(f"Config: {result.get('config') or '-'}")
+    console.print(f"Material: {result.get('material') or '-'}")
+    console.print(f"Items: {result.get('items', 0)}")
+    rows = result.get("rows", [])
+    if rows:
+        t = Table(title="Rows")
+        t.add_column("Row", style="cyan")
+        t.add_column("Style", style="green")
+        t.add_column("Qty", justify="right")
+        t.add_column("W x L", justify="right")
+        t.add_column("Material")
+        t.add_column("Klient")
+        t.add_column("Nr zamowienia")
+        t.add_column("Komentarz")
+        t.add_column("Custom")
+        t.add_column("JobName")
+        for row in rows:
+            custom = "; ".join(
+                f"{key}={value}" for key, value in sorted((row.get("custom_fields") or {}).items())
+            )
+            job_ref = (
+                row.get("job_name") or row.get("job_config_id") or row.get("job_material_id") or ""
+            )
+            t.add_row(
+                str(row.get("row", "")),
+                str(row.get("style", "") or ""),
+                str(row.get("quantity", "") or ""),
+                f"{row.get('width', '') or ''} x {row.get('length', '') or ''}",
+                str(row.get("material", "") or ""),
+                str(row.get("customer_name", "") or ""),
+                str(row.get("order_number", "") or ""),
+                str(row.get("production_comment", "") or ""),
+                custom,
+                str(job_ref),
+            )
+        console.print(t)
+    for err in result.get("errors", []):
+        console.print(f"[yellow]WARNING:[/yellow] {err}")
+    if not result.get("success"):
+        console.print("[red]ERROR:[/red] Preview failed")
+        raise typer.Exit(code=1)
+    if result.get("items", 0) == 0:
+        console.print("[red]ERROR:[/red] No items to import")
+        raise typer.Exit(code=1)
