@@ -975,13 +975,54 @@ class GatewayServer:
         match = re.search(r"rows:\s*(\d+)", proc.stdout)
         return bool(match and int(match.group(1)) > 0)
 
+    def _vdb5_job_defaults(self) -> dict[str, Any]:
+        """Read default config name and material id from the Automation Manager database."""
+        script_path = os.path.join(
+            os.path.dirname(os.path.abspath(__file__)),
+            "..",
+            "..",
+            "..",
+            "scripts",
+            "vdb5_job_defaults.ps1",
+        )
+        try:
+            proc = subprocess.run(
+                ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", script_path],
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+                timeout=20,
+                check=False,
+            )
+            if proc.returncode != 0 or not proc.stdout.strip():
+                return {"config_name": None, "material_id": None}
+            data = json.loads(proc.stdout)
+        except Exception as e:
+            self._logger.warning("cdm defaults: vdb5 read failed: %r", e)
+            return {"config_name": None, "material_id": None}
+        if isinstance(data, dict) and "value" in data:
+            data = data["value"]
+        if not isinstance(data, dict):
+            return {"config_name": None, "material_id": None}
+        config_name = data.get("config_name")
+        material_id = data.get("material_id")
+        if not isinstance(config_name, str):
+            config_name = None
+        if material_id is not None:
+            try:
+                material_id = int(material_id)
+            except (TypeError, ValueError):
+                material_id = None
+        return {"config_name": config_name, "material_id": material_id}
+
     def _handler_cdm_import_csv(self, params: dict[str, Any]) -> dict[str, Any]:
         csv_path = str(params.get("csv", "")).strip()
         if not csv_path:
             raise COMError("cdm: csv path is required")
         job_param = str(params.get("job", "")).strip() or None
         name_param = str(params.get("name", "")).strip() or None
-        config_param = str(params.get("config") or "Fronty").strip()
+        config_param = str(params.get("config") or "").strip()
         material_param = str(params.get("material", "")).strip() or None
         if job_param and name_param:
             raise COMError("cdm: --name and --job are mutually exclusive")
@@ -1006,13 +1047,21 @@ class GatewayServer:
                 if len(row) > 5 and str(row[5]).strip():
                     material_name = str(row[5]).strip()
                     break
-        materials: dict[str, int] = {}
+        defaults: dict[str, Any] | None = None
         material_id: int | None = None
         if material_name:
-            materials = self._sheet_materials()
-            material_id = materials.get(material_name)
+            material_id = self._sheet_materials().get(material_name)
             if material_id is None:
                 raise COMError(f"cdm: material not found: {material_name}")
+        else:
+            defaults = self._vdb5_job_defaults()
+            material_id = defaults.get("material_id")
+        material_label: str | None = material_name
+        if material_label is None and material_id is not None:
+            material_label = next(
+                (n for n, mid in self._sheet_materials().items() if mid == material_id),
+                None,
+            )
         try:
             am = self._cdm_automation_manager()
         except Exception as e:
@@ -1035,6 +1084,13 @@ class GatewayServer:
                 raise COMError(f"cdm: job not found: {job_param}")
             job_name = job_param
         else:
+            config_name = config_param
+            if not config_name:
+                if defaults is None:
+                    defaults = self._vdb5_job_defaults()
+                config_name = str(defaults.get("config_name") or "").strip()
+                if not config_name:
+                    raise COMError("cdm: no default configuration found")
             default_job_name = os.path.splitext(os.path.basename(csv_path))[0]
             job_name = (name_param or default_job_name)[:60]
             try:
@@ -1042,11 +1098,11 @@ class GatewayServer:
             except Exception as e:
                 raise COMError(f"cdm: create job failed: {e}") from e
             job.JobName = job_name
-            if config_param:
+            if config_name:
                 try:
-                    job.ConfigurationSetting = am.ConfigurationSettings.GetByName(config_param)
+                    job.ConfigurationSetting = am.ConfigurationSettings.GetByName(config_name)
                 except Exception as e:
-                    raise COMError(f"cdm: config not found: {config_param}") from e
+                    raise COMError(f"cdm: config not found: {config_name}") from e
             try:
                 job.SaveToDatabase()
             except Exception as e:
@@ -1100,19 +1156,16 @@ class GatewayServer:
                 errors.append(f"row {n}: save order detail failed: {e}")
                 continue
             items += 1
-        if (
-            material_name
-            and material_id is not None
-            and not self._vdb5_set_job_material(job_name, material_id)
-        ):
-            errors.append(f"job {job_name}: failed to set material")
-        if material_name is None:
+        if material_id is not None:
+            if not self._vdb5_set_job_material(job_name, material_id):
+                errors.append(f"job {job_name}: failed to set material")
+        elif material_name is None:
             errors.append(f"job {job_name}: no material set (required for processing)")
         return {
             "success": items > 0,
             "job_name": job_name,
             "items": items,
-            "material": material_name,
+            "material": material_label,
             "errors": errors,
         }
 

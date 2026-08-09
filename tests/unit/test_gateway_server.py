@@ -1431,6 +1431,7 @@ def test_cdm_import_csv_handler_single_job(
     csv_file = tmp_path / "order.csv"
     csv_file.write_text("P003,1,500,500,1;18;0;0\n", encoding="utf-8")
     gw = GatewayServer()
+    gw._vdb5_job_defaults = lambda: {"config_name": "Fronty", "material_id": None}  # type: ignore[method-assign]
     result = gw._handler_cdm_import_csv({"csv": str(csv_file)})
     assert result == {
         "success": True,
@@ -1460,6 +1461,7 @@ def test_cdm_import_csv_handler_auto_create_with_name(
     csv_file = tmp_path / "order.csv"
     csv_file.write_text("P003,1,500,500,1;18;0;0\n", encoding="utf-8")
     gw = GatewayServer()
+    gw._vdb5_job_defaults = lambda: {"config_name": "Fronty", "material_id": None}  # type: ignore[method-assign]
     result = gw._handler_cdm_import_csv({"csv": str(csv_file), "name": "Zadanie 132"})
     assert result["success"] is True
     assert result["job_name"] == "Zadanie 132"
@@ -1475,6 +1477,7 @@ def test_cdm_import_csv_handler_auto_create_with_config(
     csv_file = tmp_path / "order.csv"
     csv_file.write_text("P003,1,500,500,1;18;0;0\n", encoding="utf-8")
     gw = GatewayServer()
+    gw._vdb5_job_defaults = lambda: {"config_name": "Fronty", "material_id": None}  # type: ignore[method-assign]
     result = gw._handler_cdm_import_csv({"csv": str(csv_file), "config": "Fronty"})
     assert result["success"] is True
     am.ConfigurationSettings.GetByName.assert_called_once_with("Fronty")
@@ -1490,10 +1493,73 @@ def test_cdm_import_csv_handler_default_config(
     csv_file = tmp_path / "order.csv"
     csv_file.write_text("P003,1,500,500,1;18;0;0\n", encoding="utf-8")
     gw = GatewayServer()
+    gw._vdb5_job_defaults = lambda: {"config_name": "Fronty", "material_id": 4}  # type: ignore[method-assign]
+    gw._sheet_materials = lambda: {"MDF18 - 2800 x 2070": 4}  # type: ignore[method-assign]
+    run = _mock_vdb5_run(monkeypatch, stdout="rows: 1\ndetail_rows: 1")
     result = gw._handler_cdm_import_csv({"csv": str(csv_file)})
     assert result["success"] is True
     am.ConfigurationSettings.GetByName.assert_called_once_with("Fronty")
     assert job.ConfigurationSetting == am.ConfigurationSettings.GetByName.return_value
+    assert run.call_count == 1
+    args, _ = run.call_args
+    assert args[0][args[0].index("-JobName") + 1] == "order"
+    assert args[0][args[0].index("-MaterialID") + 1] == "4"
+
+
+def test_cdm_import_csv_handler_defaults_material(
+    server_app: MagicMock, monkeypatch: pytest.MonkeyPatch, tmp_path: pathlib.Path
+) -> None:
+    _, _, am = _mock_cdm_com(monkeypatch)
+    job = MagicMock()
+    am.NewCDMJob.return_value = job
+    csv_file = tmp_path / "order.csv"
+    csv_file.write_text("P003,1,500,500,1;18;0;0\n", encoding="utf-8")
+    gw = GatewayServer()
+    gw._vdb5_job_defaults = lambda: {"config_name": "Fronty", "material_id": 4}  # type: ignore[method-assign]
+    gw._sheet_materials = lambda: {"MDF18 - 2800 x 2070": 4}  # type: ignore[method-assign]
+    run = _mock_vdb5_run(monkeypatch, stdout="rows: 1\ndetail_rows: 1")
+    result = gw._handler_cdm_import_csv({"csv": str(csv_file)})
+    assert result["success"] is True
+    assert result["material"] == "MDF18 - 2800 x 2070"
+    assert result["errors"] == []
+    am.ConfigurationSettings.GetByName.assert_called_once_with("Fronty")
+    assert run.call_count == 1
+    args, _ = run.call_args
+    assert args[0][args[0].index("-JobName") + 1] == "order"
+    assert args[0][args[0].index("-MaterialID") + 1] == "4"
+
+
+def test_cdm_import_csv_handler_no_defaults(
+    server_app: MagicMock, monkeypatch: pytest.MonkeyPatch, tmp_path: pathlib.Path
+) -> None:
+    _, _, am = _mock_cdm_com(monkeypatch)
+    job = MagicMock()
+    am.NewCDMJob.return_value = job
+    csv_file = tmp_path / "order.csv"
+    csv_file.write_text("P003,1,500,500,1;18;0;0\n", encoding="utf-8")
+    gw = GatewayServer()
+    gw._vdb5_job_defaults = lambda: {"config_name": None, "material_id": None}  # type: ignore[method-assign]
+    with pytest.raises(COMError, match="cdm: no default configuration found"):
+        gw._handler_cdm_import_csv({"csv": str(csv_file)})
+
+
+def test_cdm_import_csv_handler_config_flag_overrides_default(
+    server_app: MagicMock, monkeypatch: pytest.MonkeyPatch, tmp_path: pathlib.Path
+) -> None:
+    _, _, am = _mock_cdm_com(monkeypatch)
+    job = MagicMock()
+    am.NewCDMJob.return_value = job
+    csv_file = tmp_path / "order.csv"
+    csv_file.write_text("P003,1,500,500,1;18;0;0,MDF_18\n", encoding="utf-8")
+    gw = GatewayServer()
+    gw._sheet_materials = lambda: {"MDF_18": 3}  # type: ignore[method-assign]
+    defaults = MagicMock(return_value={"config_name": "Fronty", "material_id": 4})
+    gw._vdb5_job_defaults = defaults  # type: ignore[method-assign]
+    _mock_vdb5_run(monkeypatch, stdout="rows: 1\ndetail_rows: 1")
+    result = gw._handler_cdm_import_csv({"csv": str(csv_file), "config": "Custom"})
+    assert result["success"] is True
+    am.ConfigurationSettings.GetByName.assert_called_once_with("Custom")
+    defaults.assert_not_called()
 
 
 def test_cdm_import_csv_handler_job_lookup(
@@ -1511,6 +1577,7 @@ def test_cdm_import_csv_handler_job_lookup(
     csv_file = tmp_path / "order.csv"
     csv_file.write_text("P003,1,500,500,1;18;0;0\n", encoding="utf-8")
     gw = GatewayServer()
+    gw._vdb5_job_defaults = lambda: {"config_name": "Fronty", "material_id": None}  # type: ignore[method-assign]
     result = gw._handler_cdm_import_csv({"csv": str(csv_file), "job": "X"})
     assert result == {
         "success": True,
@@ -1535,6 +1602,7 @@ def test_cdm_import_csv_handler_job_not_found(
     csv_file = tmp_path / "order.csv"
     csv_file.write_text("P003,1,500,500,1;18;0;0\n", encoding="utf-8")
     gw = GatewayServer()
+    gw._vdb5_job_defaults = lambda: {"config_name": "Fronty", "material_id": None}  # type: ignore[method-assign]
     with pytest.raises(COMError, match="cdm: job not found: X"):
         gw._handler_cdm_import_csv({"csv": str(csv_file), "job": "X"})
 
@@ -1562,6 +1630,7 @@ def test_cdm_import_csv_handler_multi_row_single_job(
         encoding="utf-8",
     )
     gw = GatewayServer()
+    gw._vdb5_job_defaults = lambda: {"config_name": "Fronty", "material_id": None}  # type: ignore[method-assign]
     result = gw._handler_cdm_import_csv({"csv": str(csv_file)})
     assert result["success"] is True
     assert result["job_name"] == "order"
@@ -1585,6 +1654,7 @@ def test_cdm_import_csv_handler_extra_columns_ignored(
     csv_file = tmp_path / "order.csv"
     csv_file.write_text("P003,1,500,500,1;18;0;0,MDF_18,ImportE2E 001,Fronty\n", encoding="utf-8")
     gw = GatewayServer()
+    gw._vdb5_job_defaults = lambda: {"config_name": "Fronty", "material_id": None}  # type: ignore[method-assign]
     gw._sheet_materials = lambda: {"MDF_18": 3}  # type: ignore[method-assign]
     _mock_vdb5_run(monkeypatch, stdout="rows: 1\ndetail_rows: 1")
     result = gw._handler_cdm_import_csv({"csv": str(csv_file)})
@@ -1607,6 +1677,7 @@ def test_cdm_import_csv_handler_bad_type(
     csv_file = tmp_path / "order.csv"
     csv_file.write_text("XYZ,1,500,500,1;2;3\n", encoding="utf-8")
     gw = GatewayServer()
+    gw._vdb5_job_defaults = lambda: {"config_name": "Fronty", "material_id": None}  # type: ignore[method-assign]
     result = gw._handler_cdm_import_csv({"csv": str(csv_file)})
     assert result["success"] is False
     assert result["items"] == 0
@@ -1631,6 +1702,7 @@ def test_cdm_import_csv_handler_header(
         encoding="utf-8",
     )
     gw = GatewayServer()
+    gw._vdb5_job_defaults = lambda: {"config_name": "Fronty", "material_id": None}  # type: ignore[method-assign]
     result = gw._handler_cdm_import_csv({"csv": str(csv_file), "has_header": True})
     assert result["success"] is True
     assert result["job_name"] == "order"
@@ -1650,6 +1722,7 @@ def test_cdm_import_csv_handler_short_row(
         encoding="utf-8",
     )
     gw = GatewayServer()
+    gw._vdb5_job_defaults = lambda: {"config_name": "Fronty", "material_id": None}  # type: ignore[method-assign]
     gw._sheet_materials = lambda: {"MDF": 7}  # type: ignore[method-assign]
     _mock_vdb5_run(monkeypatch, stdout="rows: 1\ndetail_rows: 1")
     result = gw._handler_cdm_import_csv({"csv": str(csv_file)})
@@ -1672,6 +1745,7 @@ def test_cdm_import_csv_handler_material_from_csv(
         "P003,1,500,500,1;18;0;0,MDF_18\nP004,2,600,400,1;0,MDF_18\n", encoding="utf-8"
     )
     gw = GatewayServer()
+    gw._vdb5_job_defaults = lambda: {"config_name": "Fronty", "material_id": None}  # type: ignore[method-assign]
     gw._sheet_materials = lambda: {"MDF_18": 2}  # type: ignore[method-assign]
     run = _mock_vdb5_run(monkeypatch, stdout="rows: 1\ndetail_rows: 1")
     result = gw._handler_cdm_import_csv({"csv": str(csv_file)})
@@ -1699,6 +1773,7 @@ def test_cdm_import_csv_handler_material_cli_overrides(
     csv_file = tmp_path / "order.csv"
     csv_file.write_text("P003,1,500,500,1;18;0;0,MDF_18\n", encoding="utf-8")
     gw = GatewayServer()
+    gw._vdb5_job_defaults = lambda: {"config_name": "Fronty", "material_id": None}  # type: ignore[method-assign]
     gw._sheet_materials = lambda: {"MDF_18": 3, "Material 3 - 2440 x 1220": 5}  # type: ignore[method-assign]
     run = _mock_vdb5_run(monkeypatch, stdout="rows: 1\ndetail_rows: 1")
     result = gw._handler_cdm_import_csv(
@@ -1734,6 +1809,7 @@ def test_cdm_import_csv_handler_material_warning(
     csv_file = tmp_path / "order.csv"
     csv_file.write_text("P003,1,500,500,1;18;0;0\n", encoding="utf-8")
     gw = GatewayServer()
+    gw._vdb5_job_defaults = lambda: {"config_name": "Fronty", "material_id": None}  # type: ignore[method-assign]
     result = gw._handler_cdm_import_csv({"csv": str(csv_file)})
     assert result["success"] is True
     assert result["material"] is None
