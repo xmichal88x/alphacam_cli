@@ -642,6 +642,8 @@ def parse_cdm_rows_mapped(
                 break
             raw = str(row[column - 1]).strip()
             name = field_map[column]
+            if name.startswith("unknown_"):
+                continue
             if name == "door_type":
                 if not raw:
                     invalid = f"row {n}: style is required"
