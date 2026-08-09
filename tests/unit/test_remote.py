@@ -375,9 +375,11 @@ def test_remote_import_cdm_csv() -> None:
         job="JOB-001",
         name=None,
         config=None,
-        separator=",",
+        separator=None,
         has_header=False,
         material=None,
+        import_setting=None,
+        preview=False,
     )
 
 
@@ -398,9 +400,11 @@ def test_remote_import_cdm_csv_material() -> None:
         job=None,
         name=None,
         config=None,
-        separator=",",
+        separator=None,
         has_header=False,
         material="MDF_18",
+        import_setting=None,
+        preview=False,
     )
 
 
@@ -429,9 +433,11 @@ def test_remote_import_cdm_csv_defaults() -> None:
         job=None,
         name=None,
         config=None,
-        separator=",",
+        separator=None,
         has_header=False,
         material=None,
+        import_setting=None,
+        preview=False,
     )
 
 
@@ -451,7 +457,96 @@ def test_remote_import_cdm_csv_name_config() -> None:
         job=None,
         name="Zadanie 132",
         config="Fronty",
-        separator=",",
+        separator=None,
         has_header=False,
         material=None,
+        import_setting=None,
+        preview=False,
     )
+
+
+def test_remote_import_cdm_csv_mapped() -> None:
+    session = MagicMock()
+    session.import_cdm_csv.return_value = {
+        "success": True,
+        "job_name": "Zadanie-7",
+        "items": 1,
+        "material": "MDF_18",
+        "errors": [],
+        "import_setting": "Fronty CSV",
+    }
+    app = RemoteApplication(session)
+    result = app.import_cdm_csv(
+        r"C:\temp\order.csv", separator=";", import_setting=3, has_header=True
+    )
+    assert result["job_name"] == "Zadanie-7"
+    session.import_cdm_csv.assert_called_once_with(
+        csv=r"C:\temp\order.csv",
+        job=None,
+        name=None,
+        config=None,
+        separator=";",
+        has_header=True,
+        material=None,
+        import_setting=3,
+        preview=False,
+    )
+
+
+def test_remote_import_cdm_csv_preview() -> None:
+    session = MagicMock()
+    session.import_cdm_csv.return_value = {
+        "success": True,
+        "job_name": "Zadanie-7",
+        "items": 1,
+        "errors": [],
+    }
+    app = RemoteApplication(session)
+    result = app.import_cdm_csv(r"C:\temp\order.csv", import_setting=3, preview=True)
+    assert result["items"] == 1
+    session.import_cdm_csv.assert_called_once_with(
+        csv=r"C:\temp\order.csv",
+        job=None,
+        name=None,
+        config=None,
+        separator=None,
+        has_header=False,
+        material=None,
+        import_setting=3,
+        preview=True,
+    )
+
+
+def test_remote_import_cdm_preview() -> None:
+    session = MagicMock()
+    session.import_cdm_preview.return_value = {
+        "success": True,
+        "job_name": "Zadanie-7",
+        "items": 1,
+        "rows": [],
+        "errors": [],
+    }
+    app = RemoteApplication(session)
+    result = app.import_cdm_preview(r"C:\temp\order.csv", import_setting=3)
+    assert result["items"] == 1
+    session.import_cdm_preview.assert_called_once_with(
+        csv=r"C:\temp\order.csv",
+        import_setting=3,
+        separator=None,
+        has_header=False,
+        job=None,
+        name=None,
+        config=None,
+        material=None,
+    )
+
+
+def test_remote_cdm_import_settings() -> None:
+    session = MagicMock()
+    session.cdm_import_settings.return_value = {
+        "settings": [{"id": 3, "name": "Fronty CSV", "fields_count": 2}]
+    }
+    app = RemoteApplication(session)
+    result = app.cdm_import_settings()
+    assert result["settings"][0]["name"] == "Fronty CSV"
+    session.cdm_import_settings.assert_called_once_with()

@@ -296,9 +296,11 @@ class RemoteApplication:
         job: str | None = None,
         name: str | None = None,
         config: str | None = None,
-        separator: str = ",",
+        separator: str | None = None,
         has_header: bool = False,
         material: str | None = None,
+        import_setting: str | int | None = None,
+        preview: bool = False,
     ) -> dict[str, Any]:
         return self._session.import_cdm_csv(  # type: ignore[no-any-return]
             csv=csv,
@@ -308,7 +310,34 @@ class RemoteApplication:
             separator=separator,
             has_header=has_header,
             material=material,
+            import_setting=import_setting,
+            preview=preview,
         )
+
+    def import_cdm_preview(
+        self,
+        csv: str,
+        import_setting: str | int | None = None,
+        separator: str | None = None,
+        has_header: bool = False,
+        job: str | None = None,
+        name: str | None = None,
+        config: str | None = None,
+        material: str | None = None,
+    ) -> dict[str, Any]:
+        return self._session.import_cdm_preview(  # type: ignore[no-any-return]
+            csv=csv,
+            import_setting=import_setting,
+            separator=separator,
+            has_header=has_header,
+            job=job,
+            name=name,
+            config=config,
+            material=material,
+        )
+
+    def cdm_import_settings(self) -> dict[str, Any]:
+        return self._session.cdm_import_settings()  # type: ignore[no-any-return]
 
     def delete_cdm_job(self, job_name: str) -> dict[str, Any]:
         return self._session.delete_cdm_job(job_name=job_name)  # type: ignore[no-any-return]

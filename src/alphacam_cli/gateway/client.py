@@ -340,11 +340,15 @@ class RemoteSession:
         job: str | None = None,
         name: str | None = None,
         config: str | None = None,
-        separator: str = ",",
+        separator: str | None = None,
         has_header: bool = False,
         material: str | None = None,
+        import_setting: str | int | None = None,
+        preview: bool = False,
     ) -> dict[str, Any]:
-        params: dict[str, Any] = {"csv": csv, "separator": separator, "has_header": has_header}
+        params: dict[str, Any] = {"csv": csv, "has_header": has_header}
+        if separator is not None:
+            params["separator"] = separator
         if job is not None:
             params["job"] = job
         if name is not None:
@@ -353,7 +357,40 @@ class RemoteSession:
             params["config"] = config
         if material is not None:
             params["material"] = material
+        if import_setting is not None:
+            params["import_setting"] = import_setting
+        if preview:
+            params["preview"] = True
         return self._call("cdm_import_csv", params)  # type: ignore[no-any-return]
+
+    def import_cdm_preview(
+        self,
+        csv: str,
+        import_setting: str | int | None = None,
+        separator: str | None = None,
+        has_header: bool = False,
+        job: str | None = None,
+        name: str | None = None,
+        config: str | None = None,
+        material: str | None = None,
+    ) -> dict[str, Any]:
+        params: dict[str, Any] = {"csv": csv, "has_header": has_header}
+        if import_setting is not None:
+            params["import_setting"] = import_setting
+        if separator is not None:
+            params["separator"] = separator
+        if job is not None:
+            params["job"] = job
+        if name is not None:
+            params["name"] = name
+        if config is not None:
+            params["config"] = config
+        if material is not None:
+            params["material"] = material
+        return self._call("cdm_import_preview", params)  # type: ignore[no-any-return]
+
+    def cdm_import_settings(self) -> dict[str, Any]:
+        return self._call("cdm_import_settings")  # type: ignore[no-any-return]
 
     def delete_cdm_job(self, job_name: str) -> dict[str, Any]:
         return self._call("cdm_delete_job", {"job_name": job_name})  # type: ignore[no-any-return]

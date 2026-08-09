@@ -3,6 +3,7 @@ from __future__ import annotations
 import pathlib
 import sys
 import types
+from typing import Any
 from unittest import mock
 from unittest.mock import MagicMock
 
@@ -2329,3 +2330,223 @@ def test_cdm_delete_job_handler_no_delete_method(
     gw = GatewayServer()
     with pytest.raises(COMError, match="cdm: DeleteFromDB unavailable on job"):
         gw._handler_cdm_delete_job({"job_name": "JOB-001"})
+
+
+def _fake_import_setting() -> dict[str, Any]:
+    return {
+        "id": 3,
+        "name": "Fronty CSV",
+        "delimiter_char": ",",
+        "sub_delimiter_char": ";",
+        "create_job": True,
+        "selected": False,
+        "ignore_header": False,
+        "fields": [
+            {"column_number": 1, "parameter_type": 256},
+            {"column_number": 2, "parameter_type": 259},
+            {"column_number": 3, "parameter_type": 257},
+            {"column_number": 4, "parameter_type": 258},
+            {"column_number": 5, "parameter_type": 264},
+            {"column_number": 6, "parameter_type": 524},
+            {"column_number": 7, "parameter_type": 512},
+            {"column_number": 8, "parameter_type": 513},
+            {"column_number": 9, "parameter_type": 261},
+            {"column_number": 10, "parameter_type": 266},
+            {"column_number": 11, "parameter_type": 267},
+            {"column_number": 12, "parameter_type": 275},
+        ],
+    }
+
+
+_MAPPED_CSV_ROW = "P003,1,500,500,1;2;3,MDF_18,Zadanie-7,Fronty,Klient A,CF1,CF2,CF3"
+
+
+def test_cdm_import_csv_handler_mapped_setting(
+    server_app: MagicMock, monkeypatch: pytest.MonkeyPatch, tmp_path: pathlib.Path
+) -> None:
+    _, _, am = _mock_cdm_com(monkeypatch)
+    job = MagicMock()
+    detail = MagicMock()
+    am.NewCDMJob.return_value = job
+    job.AddCDMOrderDetail.return_value = detail
+    csv_file = tmp_path / "order.csv"
+    csv_file.write_text(_MAPPED_CSV_ROW + "\n", encoding="utf-8")
+    gw = GatewayServer()
+    monkeypatch.setattr(
+        "alphacam_cli.core.cdm_db.import_settings", lambda: [_fake_import_setting()]
+    )
+    monkeypatch.setattr("alphacam_cli.core.cdm_db.sheet_materials", lambda: {"MDF_18": 2})
+    monkeypatch.setattr("alphacam_cli.core.cdm_db.set_job_material", lambda job_name, mid: True)
+    result = gw._handler_cdm_import_csv({"csv": str(csv_file), "import_setting": 3})
+    assert result == {
+        "success": True,
+        "job_name": "Zadanie-7",
+        "items": 1,
+        "material": "MDF_18",
+        "errors": [],
+        "import_setting": "Fronty CSV",
+    }
+    assert job.JobName == "Zadanie-7"
+    job.SaveToDatabase.assert_called_once_with()
+    am.ConfigurationSettings.GetByName.assert_called_once_with("Fronty")
+    job.AddCDMOrderDetail.assert_called_once_with("P003")
+    assert detail.Width == 500.0
+    assert detail.Length == 500.0
+    assert detail.Quantity == 1
+    assert detail.UserVariableString == ";".join(["1", "2", "3"] + ["0"] * 47)
+    assert detail.CSV_CustomerName == "Klient A"
+    assert detail.CustomField1 == "CF1"
+    assert detail.CustomField2 == "CF2"
+    assert detail.CustomField3 == "CF3"
+    detail.SaveToDatabase.assert_called_once_with()
+
+
+def test_cdm_import_csv_handler_preview(
+    server_app: MagicMock, monkeypatch: pytest.MonkeyPatch, tmp_path: pathlib.Path
+) -> None:
+    _, _, am = _mock_cdm_com(monkeypatch)
+    csv_file = tmp_path / "order.csv"
+    csv_file.write_text(_MAPPED_CSV_ROW + "\n", encoding="utf-8")
+    gw = GatewayServer()
+    monkeypatch.setattr(
+        "alphacam_cli.core.cdm_db.import_settings", lambda: [_fake_import_setting()]
+    )
+    monkeypatch.setattr(
+        "alphacam_cli.core.cdm_db.vdb5_job_defaults",
+        lambda: {"config_name": "Fronty", "material_id": None},
+    )
+    am_getter = MagicMock()
+    monkeypatch.setattr(gw, "_cdm_automation_manager", am_getter)
+    result = gw._handler_cdm_import_csv(
+        {"csv": str(csv_file), "import_setting": 3, "preview": True}
+    )
+    assert result["success"] is True
+    assert result["items"] == 1
+    assert result["setting"]["id"] == 3
+    assert result["setting"]["name"] == "Fronty CSV"
+    assert result["setting"]["delimiter_char"] == ","
+    assert result["job_name"] == "Zadanie-7"
+    assert result["config"] == "Fronty"
+    assert result["material"] == "MDF_18"
+    assert result["rows"][0]["customer_name"] == "Klient A"
+    assert result["errors"] == []
+    am_getter.assert_not_called()
+    assert am.NewCDMJob.call_count == 0
+
+
+def test_cdm_import_preview_handler(
+    server_app: MagicMock, monkeypatch: pytest.MonkeyPatch, tmp_path: pathlib.Path
+) -> None:
+    _, _, am = _mock_cdm_com(monkeypatch)
+    csv_file = tmp_path / "order.csv"
+    csv_file.write_text(_MAPPED_CSV_ROW + "\n", encoding="utf-8")
+    gw = GatewayServer()
+    monkeypatch.setattr(
+        "alphacam_cli.core.cdm_db.import_settings", lambda: [_fake_import_setting()]
+    )
+    monkeypatch.setattr(
+        "alphacam_cli.core.cdm_db.vdb5_job_defaults",
+        lambda: {"config_name": "Fronty", "material_id": None},
+    )
+    am_getter = MagicMock()
+    monkeypatch.setattr(gw, "_cdm_automation_manager", am_getter)
+    result = gw._handler_cdm_import_preview({"csv": str(csv_file), "import_setting": "Fronty CSV"})
+    assert result["success"] is True
+    assert result["items"] == 1
+    assert result["job_name"] == "Zadanie-7"
+    assert result["config"] == "Fronty"
+    assert result["material"] == "MDF_18"
+    assert result["field_map"][0] == {"column": 1, "field": "door_type", "required": True}
+    assert result["rows"][0]["custom_fields"] == {"1": "CF1", "2": "CF2", "3": "CF3"}
+    assert result["errors"] == []
+    am_getter.assert_not_called()
+    assert am.NewCDMJob.call_count == 0
+
+
+def test_cdm_import_settings_handler(
+    server_app: MagicMock, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(
+        "alphacam_cli.core.cdm_db.import_settings", lambda: [_fake_import_setting()]
+    )
+    gw = GatewayServer()
+    result = gw._handler_cdm_import_settings({})
+    settings = result["settings"]
+    assert len(settings) == 1
+    setting = settings[0]
+    assert setting["id"] == 3
+    assert setting["name"] == "Fronty CSV"
+    assert setting["delimiter_char"] == ","
+    assert setting["create_job"] is True
+    assert setting["fields_count"] == 12
+    assert setting["fields"] == (
+        "1→door_type, 2→door_quantity, 3→door_width, 4→door_height, "
+        "5→door_design_dimensions, 6→job_material_id, 7→job_name, "
+        "8→job_config_id, 9→door_customer_name, 10→door_custom_field_1, "
+        "11→door_custom_field_2, 12→door_custom_field_3"
+    )
+
+
+def test_cdm_import_csv_handler_setting_not_found(
+    server_app: MagicMock, monkeypatch: pytest.MonkeyPatch, tmp_path: pathlib.Path
+) -> None:
+    _, _, am = _mock_cdm_com(monkeypatch)
+    csv_file = tmp_path / "order.csv"
+    csv_file.write_text("P003;1;500;500\n", encoding="utf-8")
+    gw = GatewayServer()
+    monkeypatch.setattr("alphacam_cli.core.cdm_db.import_settings", lambda: [])
+    with pytest.raises(COMError, match="cdm: import settings not found: 3"):
+        gw._handler_cdm_import_csv({"csv": str(csv_file), "import_setting": 3})
+
+
+def test_cdm_import_csv_handler_mapped_job_lookup(
+    server_app: MagicMock, monkeypatch: pytest.MonkeyPatch, tmp_path: pathlib.Path
+) -> None:
+    _, _, am = _mock_cdm_com(monkeypatch)
+    job = MagicMock()
+    detail = MagicMock()
+    am.Jobs.Count = 0
+    monkeypatch.setattr(
+        "alphacam_cli.core.cdm_db.find_cdm_job", lambda am, name: job if name == "X" else None
+    )
+    job.AddCDMOrderDetail.return_value = detail
+    csv_file = tmp_path / "order.csv"
+    csv_file.write_text(_MAPPED_CSV_ROW + "\n", encoding="utf-8")
+    gw = GatewayServer()
+    monkeypatch.setattr(
+        "alphacam_cli.core.cdm_db.import_settings", lambda: [_fake_import_setting()]
+    )
+    monkeypatch.setattr("alphacam_cli.core.cdm_db.sheet_materials", lambda: {"MDF_18": 2})
+    monkeypatch.setattr("alphacam_cli.core.cdm_db.set_job_material", lambda job_name, mid: True)
+    result = gw._handler_cdm_import_csv({"csv": str(csv_file), "job": "X", "import_setting": 3})
+    assert result["success"] is True
+    assert result["job_name"] == "X"
+    assert result["items"] == 1
+    assert result["import_setting"] == "Fronty CSV"
+    am.NewCDMJob.assert_not_called()
+    job.AddCDMOrderDetail.assert_called_once_with("P003")
+    assert detail.CSV_CustomerName == "Klient A"
+
+
+def test_cdm_import_csv_handler_setter_warning_keeps_detail(
+    server_app: MagicMock, monkeypatch: pytest.MonkeyPatch, tmp_path: pathlib.Path
+) -> None:
+    _, _, am = _mock_cdm_com(monkeypatch)
+    job = MagicMock()
+    detail = MagicMock()
+    am.NewCDMJob.return_value = job
+    job.AddCDMOrderDetail.return_value = detail
+    type(detail).CSV_CustomerName = mock.PropertyMock(side_effect=RuntimeError("boom"))
+    csv_file = tmp_path / "order.csv"
+    csv_file.write_text(_MAPPED_CSV_ROW + "\n", encoding="utf-8")
+    gw = GatewayServer()
+    monkeypatch.setattr(
+        "alphacam_cli.core.cdm_db.import_settings", lambda: [_fake_import_setting()]
+    )
+    monkeypatch.setattr("alphacam_cli.core.cdm_db.sheet_materials", lambda: {"MDF_18": 2})
+    monkeypatch.setattr("alphacam_cli.core.cdm_db.set_job_material", lambda job_name, mid: True)
+    result = gw._handler_cdm_import_csv({"csv": str(csv_file), "import_setting": 3})
+    assert result["success"] is True
+    assert result["items"] == 1
+    assert any("CSV_CustomerName failed: boom" in e for e in result["errors"])
+    detail.SaveToDatabase.assert_called_once_with()
