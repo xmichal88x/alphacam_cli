@@ -1212,3 +1212,159 @@ def test_configs_cdm_duplicate_merge(monkeypatch: pytest.MonkeyPatch) -> None:
     assert cdm["part_recovery_x"] == 20.0
     assert cdm["part_recovery_ignore_grain"] is False
     assert cdm["preview_material_thickness"] == 19.0
+
+
+# --- lookups ---
+
+_SETUP_ROW_1 = (
+    '{"id": 1, "name": "None", "fe_what_to_extract": 0, "fe_use_panel_alignment": true,'
+    ' "fe_chord_tolerance": 0.01, "fe_z_level_step": 1.0, "fe_use_open_air_pocket_method": false,'
+    ' "fe_limit_through_holes": false, "fe_max_dia_drilled_holes": 10.0,'
+    ' "fe_extract_all_faces": true,'
+    ' "geometry_query": "", "geometry_auto_query": "", "fe_contour_extraction_mode": 1,'
+    ' "fe_drillable_holes_extraction_mode": 0, "imp_project_3d_to_2d": false,'
+    ' "imp_step_length": 0.5,'
+    ' "imp_common_line_removal": true, "imp_join_resulting_geos": false,'
+    ' "imp_convert_spline": false,'
+    ' "imp_delete_original": false, "imp_join_resulting_lines_or_arcs": true,'
+    ' "imp_set_element_z_levels": true, "setup_seq_num": 1}'
+)
+
+_SETUP_ROW_93 = (
+    _SETUP_ROW_1.replace('"id": 1', '"id": 93')
+    .replace('"name": "None"', '"name": "Nowe Ustawienia 1"')
+    .replace('"fe_use_panel_alignment": true', '"fe_use_panel_alignment": false')
+    .replace('"fe_chord_tolerance": 0.01', '"fe_chord_tolerance": 0.05')
+    .replace('"setup_seq_num": 1', '"setup_seq_num": 2')
+)
+
+_CUSTOMER_ROW_1 = (
+    '{"id": 1, "name": "Not Selected", "address_line_1": "", "address_line_2": "",'
+    ' "city": "", "country": "", "post_zip_code": "", "contact_name": "",'
+    ' "telephone_number": "", "email_address": "", "website_address": ""}'
+)
+
+_MACHINING_ORDER_ROW = (
+    '{"tool_order_id": 1, "fk_tool_order_list_id": 19, "machining_style_name": "BALL 2MM 2F:0:0",'
+    ' "layer_name": "@@_MachiningStyleListTool", "seq_num": 1, "is_multidrill": false,'
+    ' "list_name": "Narzędzia 19"}'
+)
+
+_DOORSTYLE_ROW = (
+    '{"id": 1, "full_file_name": "C:\\\\Styles\\\\front.ary", "vba_project_name": "fronts"}'
+)
+
+_MULTIDRILL_ROW = (
+    '{"id": 1, "name": "Głowica 1", "selected": true, "feed_rate": 1500.0,'
+    ' "spindle_speed": 12000.0, "safe_rapid_distance": 5.0, "rapid_down_to": 2.0,'
+    ' "material_top": 0.0, "bottom_of_hole": -19.0}'
+)
+
+_FITTING_ROW = '{"id": 1, "fk_job_file_id": 0, "fitting_type": "sys", "fitting_file": ""}'
+
+_LAYER_MAPPING_ROW = (
+    '{"layer_mapping_id": 1, "fk_setup_id": 1, "layer_name": "Okucia",'
+    ' "machining_style_name": "BALL 2MM 2F:0:0", "machining_order": 1, "is_feature_layer": false,'
+    ' "tool_side_closed_geo": 0, "tool_side_open_geo": 0, "tool_direction_closed_geo": 0,'
+    ' "tool_direction_open_geo": 0, "start_point": 0, "layer_order": 1,'
+    ' "apply_individually_to_each_geometry": false, "setup_name": "None"}'
+)
+
+
+def test_lookups_parses(monkeypatch: pytest.MonkeyPatch) -> None:
+    stdout = (
+        f'{{"setups": [{_SETUP_ROW_1},{_SETUP_ROW_93}],'
+        f' "customers": [{_CUSTOMER_ROW_1}],'
+        f' "machining_orders": [{_MACHINING_ORDER_ROW}]}}'
+    )
+    _mock_run(monkeypatch, stdout=stdout)
+    data = cdm_db.lookups()
+    assert len(data["setups"]) == 2
+    setup = data["setups"][0]
+    assert setup["id"] == 1
+    assert setup["name"] == "None"
+    assert setup["fe_use_panel_alignment"] is True
+    assert setup["fe_chord_tolerance"] == 0.01
+    assert setup["fe_contour_extraction_mode"] == 1
+    assert setup["imp_join_resulting_lines_or_arcs"] is True
+    assert setup["setup_seq_num"] == 1
+    assert data["setups"][1]["name"] == "Nowe Ustawienia 1"
+    assert data["setups"][1]["fe_use_panel_alignment"] is False
+    assert data["setups"][1]["fe_chord_tolerance"] == 0.05
+    assert len(data["customers"]) == 1
+    assert data["customers"][0]["id"] == 1
+    assert data["customers"][0]["name"] == "Not Selected"
+    assert data["customers"][0]["email_address"] == ""
+    assert len(data["machining_orders"]) == 1
+    order = data["machining_orders"][0]
+    assert order["tool_order_id"] == 1
+    assert order["fk_tool_order_list_id"] == 19
+    assert order["machining_style_name"] == "BALL 2MM 2F:0:0"
+    assert order["layer_name"] == "@@_MachiningStyleListTool"
+    assert order["seq_num"] == 1
+    assert order["is_multidrill"] is False
+    assert order["list_name"] == "Narzędzia 19"
+    for key in ("doorstyles", "multidrill", "fittings", "layers_mapping"):
+        assert data[key] == []
+
+
+def test_lookups_full(monkeypatch: pytest.MonkeyPatch) -> None:
+    stdout = (
+        f'{{"setups": [{_SETUP_ROW_1}], "customers": [{_CUSTOMER_ROW_1}],'
+        f' "machining_orders": [{_MACHINING_ORDER_ROW}], "doorstyles": [{_DOORSTYLE_ROW}],'
+        f' "multidrill": [{_MULTIDRILL_ROW}], "fittings": [{_FITTING_ROW}],'
+        f' "layers_mapping": [{_LAYER_MAPPING_ROW}]}}'
+    )
+    _mock_run(monkeypatch, stdout=stdout)
+    data = cdm_db.lookups()
+    assert set(data) == set(cdm_db.LOOKUP_KEYS)
+    assert len(data["setups"]) == 1
+    assert len(data["customers"]) == 1
+    assert len(data["machining_orders"]) == 1
+    assert data["doorstyles"][0]["full_file_name"] == r"C:\Styles\front.ary"
+    assert data["doorstyles"][0]["vba_project_name"] == "fronts"
+    assert data["multidrill"][0]["id"] == 1
+    assert data["multidrill"][0]["name"] == "Głowica 1"
+    assert data["multidrill"][0]["selected"] is True
+    assert data["multidrill"][0]["spindle_speed"] == 12000.0
+    assert data["multidrill"][0]["bottom_of_hole"] == -19.0
+    assert data["fittings"][0] == {
+        "id": 1,
+        "fk_job_file_id": 0,
+        "fitting_type": "sys",
+        "fitting_file": "",
+    }
+    layer = data["layers_mapping"][0]
+    assert layer["layer_mapping_id"] == 1
+    assert layer["fk_setup_id"] == 1
+    assert layer["machining_order"] == 1
+    assert layer["is_feature_layer"] is False
+    assert layer["tool_side_closed_geo"] == 0
+    assert layer["apply_individually_to_each_geometry"] is False
+    assert layer["setup_name"] == "None"
+
+
+def test_lookups_missing_section(monkeypatch: pytest.MonkeyPatch) -> None:
+    stdout = f'{{"setups": [{_SETUP_ROW_1}], "customers": [{_CUSTOMER_ROW_1}]}}'
+    _mock_run(monkeypatch, stdout=stdout)
+    data = cdm_db.lookups()
+    assert data["fittings"] == []
+    assert data["machining_orders"] == []
+    assert len(data["setups"]) == 1
+
+
+def test_lookups_fallback(monkeypatch: pytest.MonkeyPatch) -> None:
+    expected = {key: [] for key in cdm_db.LOOKUP_KEYS}
+    _mock_run(monkeypatch).side_effect = FileNotFoundError("powershell")
+    assert cdm_db.lookups() == expected
+    _mock_run(monkeypatch, stdout="", returncode=1)
+    assert cdm_db.lookups() == expected
+    _mock_run(monkeypatch, stdout="not json")
+    assert cdm_db.lookups() == expected
+
+
+def test_lookups_skips_malformed_rows(monkeypatch: pytest.MonkeyPatch) -> None:
+    _mock_run(monkeypatch, stdout=f'{{"setups": [{_SETUP_ROW_1}, "nope", 42]}}')
+    data = cdm_db.lookups()
+    assert len(data["setups"]) == 1
+    assert data["setups"][0]["id"] == 1
