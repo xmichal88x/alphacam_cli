@@ -4,7 +4,6 @@ import csv
 import os
 import sys
 import tempfile
-import time
 
 import pytest
 
@@ -15,18 +14,6 @@ def _test_dir() -> str:
     """Return writable temp dir, configurable via ALPHACAM_TEST_DIR.
     Uses C:\temp as fallback if system temp is problematic."""
     return os.environ.get("ALPHACAM_TEST_DIR") or "C:\\temp"
-
-
-def _remove_with_retry(path: str, attempts: int = 120, delay: float = 0.5) -> None:
-    """Remove a file, retrying while Acam.exe still holds the handle."""
-    for _ in range(attempts):
-        try:
-            os.remove(path)
-        except OSError:
-            time.sleep(delay)
-        else:
-            return
-    raise RuntimeError(f"Cannot remove {path}: file handle still held")  # noqa: TRY003
 
 
 @pytest.mark.skipif(sys.platform != "win32", reason="Requires Windows + AlphaCAM")
@@ -40,6 +27,8 @@ class TestProductionWorkflows:
     (e.g. D:\\temp if C: is full).
     """
 
+    _nc_dir: str | None = None
+
     def setup_method(self, _method: object) -> None:
         from alphacam_cli.com.manager import alphacam_context
         from alphacam_cli.core.application import Application
@@ -47,6 +36,14 @@ class TestProductionWorkflows:
         self._ctx = alphacam_context(visible=False, keep_alive=True)
         self._raw = self._ctx.__enter__()
         self.ac = Application(self._raw)
+        type(self)._nc_dir = tempfile.mkdtemp(dir=self._write_dir(), prefix="alphacam_nc_")
+
+    @classmethod
+    def teardown_class(cls) -> None:
+        import shutil
+
+        if cls._nc_dir:
+            shutil.rmtree(cls._nc_dir, ignore_errors=True)
 
     def teardown_method(self, _method: object) -> None:
         self._ctx.__exit__(None, None, None)
@@ -118,17 +115,16 @@ class TestProductionWorkflows:
         md.rough_finish()
         assert drw.tool_paths_count > 0, "No toolpaths generated"
 
-        # Output NC to writable dir
-        nc_path = os.path.join(self._write_dir(), "alphacam_test_workflow.nc")
-        try:
-            drw.output_nc(nc_path)
-            assert os.path.exists(nc_path)
-            with open(nc_path, encoding="utf-8", errors="replace") as f:
-                content = f.read()
-            assert len(content.strip()) > 0, "NC file is empty"
-        finally:
-            if os.path.exists(nc_path):
-                _remove_with_retry(nc_path)
+        # Output NC to unique dir (cleaned up best-effort in teardown_class —
+        # Acam.exe may hold the file handle long after OutputNC)
+        nc_dir = self._nc_dir
+        assert nc_dir is not None
+        nc_path = os.path.join(nc_dir, "alphacam_test_workflow.nc")
+        drw.output_nc(nc_path)
+        assert os.path.exists(nc_path)
+        with open(nc_path, encoding="utf-8", errors="replace") as f:
+            content = f.read()
+        assert len(content.strip()) > 0, "NC file is empty"
 
     def test_batch_processing(self) -> None:
         """Process multiple .amd files in batch mode."""
@@ -212,6 +208,9 @@ class TestProductionWorkflows:
                 assert drw is not None
                 drw.create_rectangle(0, 0, w, h)
                 drw.select_all_geometries()
+                # Select tool per drawing — each part is a new drawing, so the
+                # tool selected before the loop is not active for this one
+                self.ac.select_tool(tool_files[0])
                 md = self.ac.create_mill_data()
                 md.safe_rapid_level = 10
                 md.rapid_down_to = 2
