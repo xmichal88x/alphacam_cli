@@ -594,17 +594,26 @@ class Application:
         job: str | None = None,
         name: str | None = None,
         config: str | None = None,
-        separator: str = ",",
+        separator: str | None = None,
         has_header: bool = False,
         material: str | None = None,
+        import_setting: str | int | None = None,
+        preview: bool = False,
     ) -> dict[str, Any]:
         """Import a CSV door order into a single CDM job (headless, no dialogs).
 
-        CSV columns: Style,Quantity,Width,Height,DesignDimensions,Material. The
-        Material column (6th) or the ``material`` argument sets the job's material
-        via AM_JobDetails.fkMaterialID; columns beyond 6 are ignored silently. With
-        --job the rows are added to an existing job; otherwise a new job is created
-        (name from --name or the CSV basename, max 60 chars).
+        Without ``import_setting`` the CSV columns are
+        Style,Quantity,Width,Height,DesignDimensions,Material. The Material column
+        (6th) or the ``material`` argument sets the job's material via
+        AM_JobDetails.fkMaterialID; columns beyond 6 are ignored silently. With
+        ``import_setting`` the column map comes from AM_ImportSettings (separator
+        and header flag from the setting unless given explicitly), extra detail
+        fields (customer/order/item/comment/rotation/custom fields) are set on
+        each order detail, and the job name/config/material may come from mapped
+        job columns. With ``preview`` nothing touches COM: the result is the
+        import preview. With --job the rows are added to an existing job;
+        otherwise a new job is created (name from --name, the mapped job name or
+        the CSV basename, max 60 chars).
         """
         if job and name:
             raise RuntimeError("cdm: --name and --job are mutually exclusive")  # noqa: TRY003
@@ -612,8 +621,30 @@ class Application:
             raise RuntimeError("cdm: csv path is required")  # noqa: TRY003
         if not os.path.exists(csv):
             raise RuntimeError(f"cdm: csv file not found: {csv}")  # noqa: TRY003
+        if preview:
+            return self.import_cdm_preview(
+                csv=csv,
+                import_setting=import_setting,
+                separator=separator,
+                has_header=has_header,
+                job=job,
+                name=name,
+                config=config,
+                material=material,
+            )
+        if import_setting is not None:
+            return self._import_cdm_csv_mapped(
+                csv=csv,
+                job=job,
+                name=name,
+                config=config,
+                separator=separator,
+                has_header=has_header,
+                material=material,
+                import_setting=import_setting,
+            )
         try:
-            rows = cdm_db.read_cdm_csv(csv, separator)
+            rows = cdm_db.read_cdm_csv(csv, separator or ",")
         except Exception as e:
             raise RuntimeError(f"cdm: import csv failed: {e}") from e  # noqa: TRY003
         details, errors = cdm_db.parse_cdm_rows(rows, has_header)
@@ -733,6 +764,231 @@ class Application:
             "errors": errors,
         }
 
+    def _import_cdm_csv_mapped(
+        self,
+        csv: str,
+        job: str | None,
+        name: str | None,
+        config: str | None,
+        separator: str | None,
+        has_header: bool,
+        material: str | None,
+        import_setting: str | int,
+    ) -> dict[str, Any]:
+        setting = _resolve_import_setting(import_setting)
+        eff_separator = (
+            separator if separator is not None else str(setting.get("delimiter_char") or ",")
+        )
+        try:
+            rows = cdm_db.read_cdm_csv(csv, eff_separator)
+        except Exception as e:
+            raise RuntimeError(f"cdm: import csv failed: {e}") from e  # noqa: TRY003
+        field_map = cdm_db.field_map_from_setting(setting)
+        details, errors = cdm_db.parse_cdm_rows_mapped(
+            rows, field_map, has_header or bool(setting.get("ignore_header", False))
+        )
+        material_name = _cdm_material_name(details, material)
+        defaults: dict[str, Any] | None = None
+        material_id: int | None = None
+        if material_name:
+            material_id = cdm_db.sheet_materials().get(material_name)
+            if material_id is None:
+                raise RuntimeError(f"cdm: material not found: {material_name}")  # noqa: TRY003
+        else:
+            defaults = cdm_db.vdb5_job_defaults()
+            material_id = defaults.get("material_id")
+        material_label: str | None = material_name
+        if material_label is None and material_id is not None:
+            material_label = next(
+                (n for n, mid in cdm_db.sheet_materials().items() if mid == material_id),
+                None,
+            )
+        setting_name = str(setting.get("name") or "")
+        if not details:
+            return {
+                "success": False,
+                "job_name": job or "",
+                "items": 0,
+                "material": material_label,
+                "errors": errors,
+                "import_setting": setting_name,
+            }
+        am = self.get_automation_manager_addin()
+        cdm_job: Any = None
+        if job:
+            try:
+                cdm_job = cdm_db.find_cdm_job(am, job)
+            except Exception as e:
+                raise RuntimeError(f"cdm: job lookup failed: {e}") from e  # noqa: TRY003
+            if cdm_job is None:
+                raise RuntimeError(f"cdm: job not found: {job}")  # noqa: TRY003
+            job_name = job
+        else:
+            config_name = _cdm_config_name(details, config)
+            if not config_name:
+                if defaults is None:
+                    defaults = cdm_db.vdb5_job_defaults()
+                config_name = str(defaults.get("config_name") or "").strip()
+                if not config_name:
+                    raise RuntimeError("cdm: no default configuration found")  # noqa: TRY003
+            job_name = _cdm_job_name(details, name, csv)
+            try:
+                cdm_job = am.NewCDMJob()
+            except Exception as e:
+                raise RuntimeError(f"cdm: create job failed: {e}") from e  # noqa: TRY003
+            cdm_job.JobName = job_name
+            if config_name:
+                try:
+                    cdm_job.ConfigurationSetting = am.ConfigurationSettings.GetByName(config_name)
+                except Exception as e:
+                    raise RuntimeError(f"cdm: config not found: {config_name}") from e  # noqa: TRY003
+            try:
+                cdm_job.SaveToDatabase()
+            except Exception as e:
+                raise RuntimeError(f"cdm: create job failed: {e}") from e  # noqa: TRY003
+        items = 0
+        for d in details:
+            try:
+                detail = cdm_job.AddCDMOrderDetail(d["style"])
+            except Exception:
+                errors.append(f"row {d['row']}: door type not found: {d['style']}")
+                continue
+            try:
+                detail.Width = d["width"]
+                detail.Length = d["length"]
+                detail.Quantity = d["quantity"]
+                design_dims = d.get("design_dims")
+                if design_dims:
+                    parts = [p for p in str(design_dims).split(";") if p != ""]
+                    if len(parts) < cdm_db.DESIGN_DIMS_FIELDS:
+                        parts += ["0"] * (cdm_db.DESIGN_DIMS_FIELDS - len(parts))
+                    detail.UserVariableString = ";".join(parts)
+            except Exception as e:
+                errors.append(f"row {d['row']}: save order detail failed: {e}")
+                continue
+            for field, setter in _FIELD_SETTERS.items():
+                value = _detail_field_value(d, field)
+                if value is None:
+                    continue
+                try:
+                    setattr(detail, setter, value)
+                except Exception as e:
+                    errors.append(f"row {d['row']}: {field} failed: {e}")
+                    break
+            else:
+                try:
+                    detail.SaveToDatabase()
+                except Exception as e:
+                    errors.append(f"row {d['row']}: save order detail failed: {e}")
+                    continue
+                items += 1
+        if material_id is not None:
+            if not cdm_db.set_job_material(job_name, material_id):
+                errors.append(f"job {job_name}: failed to set material")
+        elif material_name is None:
+            errors.append(f"job {job_name}: no material set (required for processing)")
+        if items == 0 and not job:
+            deleted, reason = cdm_db.cleanup_created_job(am, cdm_job, job_name)
+            if deleted:
+                errors.append(f"job {job_name}: no valid order details, deleted")
+            elif reason == "failed":
+                errors.append(f"job {job_name}: no valid order details, cleanup failed")
+            else:
+                errors.append(f"job {job_name}: no valid order details, cleanup unverified")
+        return {
+            "success": items > 0,
+            "job_name": job_name,
+            "items": items,
+            "material": material_label,
+            "errors": errors,
+            "import_setting": setting_name,
+        }
+
+    def import_cdm_preview(
+        self,
+        csv: str,
+        import_setting: str | int | None = None,
+        separator: str | None = None,
+        has_header: bool = False,
+        job: str | None = None,
+        name: str | None = None,
+        config: str | None = None,
+        material: str | None = None,
+    ) -> dict[str, Any]:
+        """Dry-run import preview without touching COM (read, parse, map only)."""
+        if job and name:
+            raise RuntimeError("cdm: --name and --job are mutually exclusive")  # noqa: TRY003
+        if not csv.strip():
+            raise RuntimeError("cdm: csv path is required")  # noqa: TRY003
+        if not os.path.exists(csv):
+            raise RuntimeError(f"cdm: csv file not found: {csv}")  # noqa: TRY003
+        setting = _resolve_import_setting(import_setting)
+        eff_separator = (
+            separator if separator is not None else str(setting.get("delimiter_char") or ",")
+        )
+        try:
+            rows = cdm_db.read_cdm_csv(csv, eff_separator)
+        except Exception as e:
+            raise RuntimeError(f"cdm: import csv failed: {e}") from e  # noqa: TRY003
+        field_map = cdm_db.field_map_from_setting(setting)
+        details, errors = cdm_db.parse_cdm_rows_mapped(
+            rows, field_map, has_header or bool(setting.get("ignore_header", False))
+        )
+        defaults = cdm_db.vdb5_job_defaults()
+        material_name = _cdm_material_name(details, material)
+        if material_name is None and defaults.get("material_id") is not None:
+            material_name = next(
+                (
+                    n
+                    for n, mid in cdm_db.sheet_materials().items()
+                    if mid == defaults.get("material_id")
+                ),
+                None,
+            )
+        config_name = _cdm_config_name(details, config)
+        if not config_name:
+            config_name = str(defaults.get("config_name") or "").strip() or None
+        return {
+            "success": bool(details),
+            "setting": {
+                "id": setting.get("id"),
+                "name": setting.get("name"),
+                "delimiter_char": setting.get("delimiter_char"),
+                "sub_delimiter_char": setting.get("sub_delimiter_char"),
+                "create_job": setting.get("create_job"),
+                "selected": setting.get("selected"),
+            },
+            "field_map": cdm_db.field_map_descriptions(field_map),
+            "job_name": _cdm_job_name(details, name, csv),
+            "config": config_name,
+            "material": material_name,
+            "items": len(details),
+            "rows": details,
+            "errors": errors,
+            "job": job,
+        }
+
+    def cdm_import_settings(self) -> dict[str, Any]:
+        """List CDM import settings from the vdb5 database (headless-safe)."""
+        settings = cdm_db.import_settings()
+        out: list[dict[str, Any]] = []
+        for setting in settings:
+            field_map = cdm_db.field_map_from_setting(setting)
+            out.append(
+                {
+                    "id": setting.get("id"),
+                    "name": setting.get("name"),
+                    "selected": setting.get("selected"),
+                    "create_job": setting.get("create_job"),
+                    "delimiter_char": setting.get("delimiter_char"),
+                    "fields": ", ".join(
+                        f"{column}→{name}" for column, name in sorted(field_map.items())
+                    ),
+                    "fields_count": len(field_map),
+                }
+            )
+        return {"settings": out}
+
     def delete_cdm_job(self, job_name: str) -> dict[str, Any]:
         """Delete a CDM job from the database (headless, no dialogs)."""
         am = self.get_automation_manager_addin()
@@ -794,6 +1050,78 @@ class Application:
             "geometries_count": drw.geometries_count,
             "tool_paths_count": drw.tool_paths_count,
         }
+
+
+_FIELD_SETTERS: dict[str, str] = {
+    "door_customer_name": "CSV_CustomerName",
+    "door_order_number": "CSV_OrderNumber",
+    "door_item_number": "CSV_ItemNumber",
+    "door_production_comment": "ProductionComment",
+    "door_rotation_method": "RotationMethod",
+    "door_rotation_angle": "RotationAngle",
+    "door_nest_priority": "NestingPriority",
+    "door_drilling": "HasDrilling",
+    "door_small_nest": "SmallNestPart",
+}
+_FIELD_SETTERS.update({f"door_custom_field_{n}": f"CustomField{n}" for n in range(1, 26)})
+
+_DETAIL_VALUE_KEYS: dict[str, str] = dict(cdm_db._MAPPED_FIELD_TARGETS)
+
+
+def _resolve_import_setting(import_setting: str | int | None) -> dict[str, Any]:
+    settings = cdm_db.import_settings()
+    setting = (
+        cdm_db.find_import_setting(settings, import_setting) if import_setting is not None else None
+    )
+    if setting is None:
+        raise RuntimeError(f"cdm: import settings not found: {import_setting}")  # noqa: TRY003
+    return setting
+
+
+def _detail_field_value(detail: dict[str, Any], field: str) -> Any:
+    if field.startswith("door_custom_field_"):
+        return detail.get("custom_fields", {}).get(field.removeprefix("door_custom_field_"))
+    key = _DETAIL_VALUE_KEYS.get(field)
+    if key is None:
+        return None
+    return detail.get(key)
+
+
+def _cdm_material_name(details: list[dict[str, Any]], material: str | None) -> str | None:
+    name = (material or "").strip() or None
+    if name is not None:
+        return name
+    for detail in details:
+        raw = detail.get("material")
+        if isinstance(raw, str) and raw.strip():
+            return raw.strip()
+    for detail in details:
+        raw = detail.get("job_material_id")
+        if isinstance(raw, str) and raw.strip():
+            return raw.strip()
+    return None
+
+
+def _cdm_job_name(details: list[dict[str, Any]], name: str | None, csv: str) -> str:
+    explicit = (name or "").strip()
+    if explicit:
+        return explicit[:60]
+    for detail in details:
+        raw = detail.get("job_name")
+        if isinstance(raw, str) and raw.strip():
+            return raw.strip()[:60]
+    return os.path.splitext(os.path.basename(csv))[0][:60]
+
+
+def _cdm_config_name(details: list[dict[str, Any]], config: str | None) -> str | None:
+    explicit = (config or "").strip()
+    if explicit:
+        return explicit
+    for detail in details:
+        raw = detail.get("job_config_id")
+        if isinstance(raw, str) and raw.strip():
+            return raw.strip()
+    return None
 
 
 def _parse_layer_map(layer_map: str) -> dict[str, list[int]]:
