@@ -634,6 +634,77 @@ def materials() -> list[dict[str, Any]]:
     return [item for item in data if isinstance(item, dict)]
 
 
+def configs(show: str | None = None) -> list[dict[str, Any]]:
+    """Read AM_ConfigurationSettings with merged CDM_ConfigurationSettings per config.
+
+    Each config gets a ``cdm`` dict key (merged CDM rows by
+    ``fk_configuration_setting_id``, last row wins on conflicts; ``{}`` when
+    none). ``show`` filters by config name (casefold); no match -> [].
+    """
+    script_path = os.path.join(_scripts_dir(), "vdb5_configs.ps1")
+    try:
+        proc = subprocess.run(
+            ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", script_path],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=20,
+            check=False,
+        )
+        if proc.returncode != 0 or not proc.stdout.strip():
+            return []
+        data = json.loads(proc.stdout)
+    except Exception as e:
+        logger.warning("cdm configs: vdb5 read failed: %r", e)
+        return []
+    if isinstance(data, dict) and "value" in data:
+        data = data["value"]
+    if not isinstance(data, dict):
+        return []
+    rows = data.get("configs")
+    if not isinstance(rows, list):
+        return []
+    cdm_by_fk: dict[int, dict[str, Any]] = {}
+    cdm_rows = data.get("cdm")
+    if isinstance(cdm_rows, list):
+        for item in cdm_rows:
+            if not isinstance(item, dict):
+                continue
+            fk_raw = item.get("fk_configuration_setting_id")
+            if fk_raw is None:
+                continue
+            try:
+                fk_id = int(fk_raw)
+            except (TypeError, ValueError):
+                continue
+            merged = dict(cdm_by_fk.get(fk_id, {}))
+            merged.update(item)
+            cdm_by_fk[fk_id] = merged
+    result: list[dict[str, Any]] = []
+    for item in rows:
+        if not isinstance(item, dict):
+            continue
+        cfg_id = item.get("id")
+        if cfg_id is not None:
+            try:
+                cfg_id = int(cfg_id)
+            except (TypeError, ValueError):
+                cfg_id = None
+        merged = dict(item)
+        merged["cdm"] = cdm_by_fk.get(cfg_id, {}) if cfg_id is not None else {}
+        result.append(merged)
+    if show:
+        wanted = show.strip().casefold()
+        if wanted:
+            result = [
+                cfg
+                for cfg in result
+                if isinstance(cfg.get("name"), str) and cfg["name"].strip().casefold() == wanted
+            ]
+    return result
+
+
 def find_import_setting(settings: list[dict[str, Any]], key: str | int) -> dict[str, Any] | None:
     """Find an import setting by id (int) or name (str, casefold); None when absent."""
     if isinstance(key, int):

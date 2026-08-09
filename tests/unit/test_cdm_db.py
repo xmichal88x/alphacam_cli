@@ -1093,3 +1093,122 @@ def test_materials_value_wrap(monkeypatch: pytest.MonkeyPatch) -> None:
     materials = cdm_db.materials()
     assert len(materials) == 4
     assert materials[0]["name"] == "Not Selected"
+
+
+# --- configs ---
+
+_CONFIG_40 = (
+    '{"id": 40, "name": "CDM_Materiał 17mm", "post_processor": "Fanuc",'
+    ' "drawing_output_location": "C:\\\\out", "nc_output_location": "C:\\\\nc",'
+    ' "report_output_location": "", "nc_extension": "nc", "custom_vba_macro": "",'
+    ' "compiled_file_name": "", "compiled_base_name": "",'
+    ' "replace_space_with_underscore": false, "disable_screen_updates": true,'
+    ' "clear_output_folders": false, "generate_nc": true, "generate_reports": false,'
+    ' "create_default_material": false, "save_generated_autostyles": true,'
+    ' "read_file_information_on_import": false, "show_material_selector_after_import": false,'
+    ' "nesting_method": 0, "nesting_pack_to": 1, "nesting_gap_between_paths": 2.0,'
+    ' "nesting_gap_at_sheet_edge": 0.0, "nesting_extra_gap_at_lead_start": 0.0,'
+    ' "nesting_time_per_sheet": 30, "nesting_optimisation_level": 3,'
+    ' "nesting_search_resolution": 0.5, "nesting_cut_small_parts_first": true,'
+    ' "nesting_total_time": 0.0, "nesting_sheet_order_type": 0,'
+    ' "nesting_sheet_alignment": 0, "nesting_alignment_z_level": 0.0,'
+    ' "nesting_join_saw_cuts_tolerance": 0.0, "nesting_inactivity_timeout": 0.0}'
+)
+
+_CONFIG_41 = _CONFIG_40.replace('"id": 40', '"id": 41').replace(
+    '"name": "CDM_Materiał 17mm"', '"name": "Fronty"'
+)
+
+_CDM_ROW_A = (
+    '{"cdm_configuration_setting_id": 5, "fk_configuration_setting_id": 41,'
+    ' "part_recovery_x": 10.5, "part_recovery_y": 0.0, "part_recovery_ignore_grain": false,'
+    ' "capture_nested_part_positions": true, "disable_nesting": false,'
+    ' "disable_nesting_oversize_x": 0.0, "disable_nesting_oversize_y": 0.0,'
+    ' "use_default_press": false, "press_group_by_material_thickness": true,'
+    ' "custom_macro": "", "use_data_from_tool_file": false, "use_same_start_point": false,'
+    ' "use_drawing_extents_for_inserted_drawing_operations": false,'
+    ' "generate_nc_for_parts": true, "z_depth_tolerance": 0.0,'
+    ' "preview_material_thickness": 19.0}'
+)
+
+_CDM_ROW_B = _CDM_ROW_A.replace(
+    '"cdm_configuration_setting_id": 5', '"cdm_configuration_setting_id": 6'
+)
+
+
+def test_configs_parses_and_merges(monkeypatch: pytest.MonkeyPatch) -> None:
+    stdout = f'{{"configs": [{_CONFIG_40},{_CONFIG_41}], "cdm": [{_CDM_ROW_A},{_CDM_ROW_B}]}}'
+    _mock_run(monkeypatch, stdout=stdout)
+    configs = cdm_db.configs()
+    assert len(configs) == 2
+    cfg40 = configs[0]
+    assert cfg40["id"] == 40
+    assert cfg40["name"] == "CDM_Materiał 17mm"
+    assert cfg40["post_processor"] == "Fanuc"
+    assert cfg40["generate_nc"] is True
+    assert cfg40["nesting_method"] == 0
+    assert cfg40["nesting_gap_between_paths"] == 2.0
+    assert cfg40["nesting_cut_small_parts_first"] is True
+    assert cfg40["cdm"] == {}
+    cfg41 = configs[1]
+    assert cfg41["id"] == 41
+    assert cfg41["name"] == "Fronty"
+    assert cfg41["cdm"]["disable_nesting"] is False
+    assert cfg41["cdm"]["capture_nested_part_positions"] is True
+    assert cfg41["cdm"]["part_recovery_x"] == 10.5
+    assert cfg41["cdm"]["press_group_by_material_thickness"] is True
+    assert cfg41["cdm"]["preview_material_thickness"] == 19.0
+    assert cfg41["cdm"]["fk_configuration_setting_id"] == 41
+
+
+def test_configs_show_filter(monkeypatch: pytest.MonkeyPatch) -> None:
+    stdout = f'{{"configs": [{_CONFIG_40},{_CONFIG_41}], "cdm": [{_CDM_ROW_A}]}}'
+    _mock_run(monkeypatch, stdout=stdout)
+    assert [cfg["id"] for cfg in cdm_db.configs("FRONTY")] == [41]
+    assert cdm_db.configs("NIE MA") == []
+    assert [cfg["id"] for cfg in cdm_db.configs("  ")] == [40, 41]
+
+
+def test_configs_fallback(monkeypatch: pytest.MonkeyPatch) -> None:
+    _mock_run(monkeypatch).side_effect = FileNotFoundError("powershell")
+    assert cdm_db.configs() == []
+    _mock_run(monkeypatch, stdout="", returncode=1)
+    assert cdm_db.configs() == []
+    _mock_run(monkeypatch, stdout="not json")
+    assert cdm_db.configs() == []
+
+
+def test_configs_missing_sections(monkeypatch: pytest.MonkeyPatch) -> None:
+    _mock_run(monkeypatch, stdout='{"configs": "nope"}')
+    assert cdm_db.configs() == []
+    _mock_run(monkeypatch, stdout='{"configs": [{"id": 1, "name": "X"}], "cdm": "nope"}')
+    configs = cdm_db.configs()
+    assert len(configs) == 1
+    assert configs[0]["cdm"] == {}
+
+
+def test_configs_value_wrap(monkeypatch: pytest.MonkeyPatch) -> None:
+    stdout = f'{{"value": {{"configs": [{_CONFIG_41}], "cdm": [{_CDM_ROW_A}]}}}}'
+    _mock_run(monkeypatch, stdout=stdout)
+    configs = cdm_db.configs()
+    assert len(configs) == 1
+    assert configs[0]["name"] == "Fronty"
+    assert configs[0]["cdm"]["disable_nesting"] is False
+
+
+def test_configs_cdm_duplicate_merge(monkeypatch: pytest.MonkeyPatch) -> None:
+    second = (
+        _CDM_ROW_A.replace('"disable_nesting": false', '"disable_nesting": true')
+        .replace('"part_recovery_x": 10.5', '"part_recovery_x": 20.0')
+        .replace('"cdm_configuration_setting_id": 5', '"cdm_configuration_setting_id": 7')
+    )
+    stdout = f'{{"configs": [{_CONFIG_41}], "cdm": [{_CDM_ROW_A},{second}]}}'
+    _mock_run(monkeypatch, stdout=stdout)
+    configs = cdm_db.configs()
+    assert len(configs) == 1
+    cdm = configs[0]["cdm"]
+    assert cdm["cdm_configuration_setting_id"] == 7
+    assert cdm["disable_nesting"] is True
+    assert cdm["part_recovery_x"] == 20.0
+    assert cdm["part_recovery_ignore_grain"] is False
+    assert cdm["preview_material_thickness"] == 19.0
