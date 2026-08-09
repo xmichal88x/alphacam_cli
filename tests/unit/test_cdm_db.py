@@ -857,3 +857,79 @@ def test_field_map_descriptions() -> None:
         {"column": 5, "field": "job_name", "required": False},
         {"column": 9, "field": "unknown_999", "required": False},
     ]
+
+
+# --- order_details ---
+
+_ORDER_DETAIL_ROW = (
+    '{"job_name": "Zamowienie X", "style_name": "P003",'
+    ' "csv_customer_name": "Jan Kowalski", "csv_order_number": "ORD-1",'
+    ' "csv_item_number": "ITEM-1", "production_comment": "komentarz",'
+    ' "user_variable_string": "1;18", "user_description_string": "opis",'
+    ' "user_value_0": "a", "user_value_1": "b", "user_value_2": "c",'
+    ' "user_value_3": "d", "user_value_4": "e", "user_value_5": "f",'
+    ' "user_value_6": "g", "style_number": 3, "quantity": 2, "material_id": 4,'
+    ' "rotation_method": 1, "nesting_priority": 5, "fk_type_id": 7,'
+    ' "cdm_pk": 10, "cdm_order_id": 20, "fk_parent_order_detail_id": 0,'
+    ' "width": 400.5, "length": 300.5, "corner_radius": 8.0,'
+    ' "oversize_x": 0.0, "oversize_y": 0.0, "rotation_angle": 90.0,'
+    ' "ignore_outer_geometry": true, "small_nest_part": false,'
+    ' "has_drilling": true, "bypass_nest": false, "active_in_process": true,'
+    ' "custom_fields": {"1": "cf1", "25": "cf25"}}'
+)
+
+
+def test_order_details_parses(monkeypatch: pytest.MonkeyPatch) -> None:
+    second = _ORDER_DETAIL_ROW.replace("P003", "P004").replace('"quantity": 2', '"quantity": 1')
+    _mock_run(monkeypatch, stdout=f"[{_ORDER_DETAIL_ROW},{second}]")
+    details = cdm_db.order_details()
+    assert len(details) == 2
+    first = details[0]
+    assert first["style_name"] == "P003"
+    assert first["quantity"] == 2
+    assert first["width"] == 400.5
+    assert first["length"] == 300.5
+    assert first["material_id"] == 4
+    assert first["cdm_pk"] == 10
+    assert first["cdm_order_id"] == 20
+    assert first["fk_type_id"] == 7
+    assert first["fk_parent_order_detail_id"] == 0
+    assert first["active_in_process"] is True
+    assert first["has_drilling"] is True
+    assert first["user_value_0"] == "a"
+    assert first["user_value_6"] == "g"
+    assert first["custom_fields"] == {"1": "cf1", "25": "cf25"}
+    assert details[1]["style_name"] == "P004"
+    assert details[1]["quantity"] == 1
+
+
+def test_order_details_passes_job_name(monkeypatch: pytest.MonkeyPatch) -> None:
+    run = _mock_run(monkeypatch, stdout="[]")
+    assert cdm_db.order_details("Zamowienie X") == []
+    args, _ = run.call_args
+    assert "-JobName" in args[0]
+    assert args[0][args[0].index("-JobName") + 1] == "Zamowienie X"
+    assert args[0][args[0].index("-File") + 1].endswith("vdb5_order_details.ps1")
+
+
+def test_order_details_no_job_name(monkeypatch: pytest.MonkeyPatch) -> None:
+    run = _mock_run(monkeypatch, stdout="[]")
+    assert cdm_db.order_details() == []
+    args, _ = run.call_args
+    assert "-JobName" not in args[0]
+
+
+def test_order_details_fallback(monkeypatch: pytest.MonkeyPatch) -> None:
+    _mock_run(monkeypatch).side_effect = FileNotFoundError("powershell")
+    assert cdm_db.order_details() == []
+    _mock_run(monkeypatch, stdout="", returncode=1)
+    assert cdm_db.order_details() == []
+    _mock_run(monkeypatch, stdout="not json")
+    assert cdm_db.order_details() == []
+
+
+def test_order_details_value_wrap(monkeypatch: pytest.MonkeyPatch) -> None:
+    _mock_run(monkeypatch, stdout=f'{{"value": [{_ORDER_DETAIL_ROW}]}}')
+    details = cdm_db.order_details()
+    assert len(details) == 1
+    assert details[0]["style_name"] == "P003"

@@ -40,12 +40,19 @@ $strFields = @{
     'UserVariableString' = 'user_variable_string'
     'UserDescriptionString' = 'user_description_string'
 }
+for ($n = 0; $n -le 6; $n++) {
+    $strFields["UserValue_$n"] = "user_value_$n"
+}
 $intFields = @{
     'StyleNumber' = 'style_number'
     'Quantity' = 'quantity'
     'fkMaterialID' = 'material_id'
     'RotationMethod' = 'rotation_method'
     'NestingPriority' = 'nesting_priority'
+    'fkTypeID' = 'fk_type_id'
+    'CDM_PK' = 'cdm_pk'
+    'CDM_OrderID' = 'cdm_order_id'
+    'fkParentOrderDetailID' = 'fk_parent_order_detail_id'
 }
 $dblFields = @{
     'OrderDetailDoorWidth' = 'width'
@@ -60,6 +67,7 @@ $boolFields = @{
     'SmallNestPart' = 'small_nest_part'
     'HasDrilling' = 'has_drilling'
     'ByPassNest' = 'bypass_nest'
+    'ActiveInProcess' = 'active_in_process'
 }
 
 try {
