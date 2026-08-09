@@ -17,7 +17,7 @@ def _test_dir() -> str:
     return os.environ.get("ALPHACAM_TEST_DIR") or "C:\\temp"
 
 
-def _remove_with_retry(path: str, attempts: int = 20, delay: float = 0.5) -> None:
+def _remove_with_retry(path: str, attempts: int = 120, delay: float = 0.5) -> None:
     """Remove a file, retrying while Acam.exe still holds the handle."""
     for _ in range(attempts):
         try:
@@ -182,6 +182,31 @@ class TestProductionWorkflows:
                 ("part_a.amd", 100, 50),
                 ("part_b.amd", 80, 40),
             ]
+            # Select a tool once for the session — required by RoughFinish
+            import glob as _glob
+
+            tool_files = (
+                self.ac.find_tool_files("*.amt")
+                or self.ac.find_tool_files("*.tool")
+                or self.ac.find_tool_files("*.art")
+            )
+            if not tool_files:
+                tool_files = sorted(
+                    _glob.glob(os.path.join(self.ac.licomdat_path, "**", "*.art"), recursive=True)
+                )
+            if not tool_files:
+                tool_files = sorted(
+                    _glob.glob(os.path.join(self.ac.licomdat_path, "**", "*.tool"), recursive=True)
+                )
+            if not tool_files:
+                tool_files = sorted(
+                    _glob.glob(os.path.join(self.ac.licomdat_path, "**", "*.amt"), recursive=True)
+                )
+            if not tool_files:
+                pytest.skip(f"No tool files found in {self.ac.licomdat_path}")
+
+            self.ac.select_tool(tool_files[0])
+
             for fname, w, h in part_specs:
                 drw = self.ac.create_temp_drawing()
                 assert drw is not None
