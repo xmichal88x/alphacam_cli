@@ -364,3 +364,323 @@ def cleanup_created_job(
     if count is None:
         return False, "unverified"
     return False, "failed"
+
+
+IMPORT_FIELD_NAMES: dict[int, str] = {
+    256: "door_type",
+    257: "door_width",
+    258: "door_height",
+    259: "door_quantity",
+    260: "door_material",
+    261: "door_customer_name",
+    262: "door_order_number",
+    263: "door_item_number",
+    264: "door_design_dimensions",
+    265: "door_production_comment",
+    266: "door_custom_field_1",
+    267: "door_custom_field_2",
+    271: "door_rotation_method",
+    272: "door_rotation_angle",
+    274: "door_nest_priority",
+    298: "door_drilling",
+    299: "door_small_nest",
+    512: "job_name",
+    513: "job_config_id",
+    514: "job_setup_id",
+    515: "job_tool_order_id",
+    516: "job_purchase_order_number",
+    517: "job_work_order_number",
+    518: "job_description",
+    519: "job_programmer_name",
+    520: "job_order_date",
+    521: "job_due_date",
+    522: "job_customer",
+    523: "job_parent_job",
+    524: "job_material_id",
+}
+IMPORT_FIELD_NAMES.update({n: f"door_custom_field_{n - 272}" for n in range(275, 298)})
+
+REQUIRED_IMPORT_FIELDS = ("door_type", "door_quantity", "door_width", "door_height")
+
+_MAPPED_DETAIL_KEYS = (
+    "style",
+    "quantity",
+    "width",
+    "length",
+    "design_dims",
+    "material",
+    "customer_name",
+    "order_number",
+    "item_number",
+    "production_comment",
+    "oversize_x",
+    "oversize_y",
+    "corner_radius",
+    "rotation_method",
+    "rotation_angle",
+    "nest_priority",
+    "ignore_outer_geometry",
+    "small_nest_part",
+    "has_drilling",
+    "job_name",
+    "job_config_id",
+    "job_setup_id",
+    "job_tool_order_id",
+    "job_purchase_order_number",
+    "job_work_order_number",
+    "job_description",
+    "job_programmer_name",
+    "job_order_date",
+    "job_due_date",
+    "job_customer",
+    "job_parent_job",
+    "job_material_id",
+)
+
+_MAPPED_FIELD_TARGETS: dict[str, str] = {
+    "door_type": "style",
+    "door_quantity": "quantity",
+    "door_width": "width",
+    "door_height": "length",
+    "door_design_dimensions": "design_dims",
+    "door_material": "material",
+    "door_customer_name": "customer_name",
+    "door_order_number": "order_number",
+    "door_item_number": "item_number",
+    "door_production_comment": "production_comment",
+    "door_rotation_method": "rotation_method",
+    "door_rotation_angle": "rotation_angle",
+    "door_nest_priority": "nest_priority",
+    "door_drilling": "has_drilling",
+    "door_small_nest": "small_nest_part",
+    "job_name": "job_name",
+    "job_config_id": "job_config_id",
+    "job_setup_id": "job_setup_id",
+    "job_tool_order_id": "job_tool_order_id",
+    "job_purchase_order_number": "job_purchase_order_number",
+    "job_work_order_number": "job_work_order_number",
+    "job_description": "job_description",
+    "job_programmer_name": "job_programmer_name",
+    "job_order_date": "job_order_date",
+    "job_due_date": "job_due_date",
+    "job_customer": "job_customer",
+    "job_parent_job": "job_parent_job",
+    "job_material_id": "job_material_id",
+}
+
+
+def import_field_name(parameter_type: int) -> str | None:
+    """Field name for an AM_ImportSettingsParameter type; None when unknown."""
+    return IMPORT_FIELD_NAMES.get(parameter_type)
+
+
+def import_settings() -> list[dict[str, Any]]:
+    """Read AM_ImportSettings (id/name/delimiters/flags/fields) from the vdb5 database."""
+    script_path = os.path.join(_scripts_dir(), "vdb5_import_settings.ps1")
+    try:
+        proc = subprocess.run(
+            ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", script_path],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=20,
+            check=False,
+        )
+        if proc.returncode != 0 or not proc.stdout.strip():
+            return []
+        data = json.loads(proc.stdout)
+    except Exception as e:
+        logger.warning("cdm import settings: vdb5 read failed: %r", e)
+        return []
+    if isinstance(data, dict) and "value" in data:
+        data = data["value"]
+    if not isinstance(data, list):
+        return []
+    settings: list[dict[str, Any]] = []
+    for item in data:
+        if not isinstance(item, dict):
+            continue
+        if not all(key in item for key in ("id", "name", "delimiter_char", "fields")):
+            continue
+        fields = item.get("fields")
+        if not isinstance(fields, list):
+            continue
+        item["fields"] = [
+            field
+            for field in fields
+            if isinstance(field, dict) and "column_number" in field and "parameter_type" in field
+        ]
+        settings.append(item)
+    return settings
+
+
+def find_import_setting(settings: list[dict[str, Any]], key: str | int) -> dict[str, Any] | None:
+    """Find an import setting by id (int) or name (str, casefold); None when absent."""
+    if isinstance(key, int):
+        for setting in settings:
+            raw_id = setting.get("id")
+            if raw_id is None:
+                continue
+            try:
+                if int(raw_id) == key:
+                    return setting
+            except (TypeError, ValueError):
+                continue
+        return None
+    wanted = key.strip().casefold()
+    for setting in settings:
+        name = setting.get("name")
+        if isinstance(name, str) and name.strip().casefold() == wanted:
+            return setting
+    return None
+
+
+def field_map_from_setting(setting: dict[str, Any]) -> dict[int, str]:
+    """Column number -> field name from an import setting's fields list."""
+    fields = setting.get("fields")
+    if not isinstance(fields, list):
+        return {}
+    entries: list[tuple[int, str]] = []
+    for field in fields:
+        if not isinstance(field, dict):
+            continue
+        parameter_type = field.get("parameter_type")
+        column_raw = field.get("column_number")
+        if parameter_type is None or column_raw is None:
+            continue
+        try:
+            ptype = int(parameter_type)
+            column = int(column_raw)
+        except (TypeError, ValueError):
+            continue
+        if ptype in (0, 1):
+            continue
+        entries.append((column, IMPORT_FIELD_NAMES.get(ptype, f"unknown_{ptype}")))
+    entries.sort(key=lambda entry: entry[0])
+    return dict(entries)
+
+
+def _parse_bool_value(raw: str) -> tuple[bool | None, bool]:
+    """Parse a CSV bool-ish string into (value, ok); empty -> (None, True)."""
+    value = raw.casefold()
+    if value in ("1", "true", "yes"):
+        return True, True
+    if value in ("0", "false", "no"):
+        return False, True
+    if not value:
+        return None, True
+    return None, False
+
+
+def parse_cdm_rows_mapped(
+    rows: list[list[str]],
+    field_map: dict[int, str],
+    has_header: bool,
+) -> tuple[list[dict[str, Any]], list[str]]:
+    """Parse CSV rows into (details, errors) using an import settings column map.
+
+    Every row without all required fields mapped raises an error; only valid
+    rows become details. Values are converted by field type (bool/int/float).
+    """
+    details: list[dict[str, Any]] = []
+    errors: list[str] = []
+    missing_required = [name for name in REQUIRED_IMPORT_FIELDS if name not in field_map.values()]
+    for n, row in enumerate(rows, start=1):
+        if has_header and n == 1:
+            continue
+        if not any(str(cell).strip() for cell in row):
+            continue
+        if missing_required:
+            for name in missing_required:
+                errors.append(f"row {n}: import settings map is missing required field {name}")
+            continue
+        detail: dict[str, Any] = {key: None for key in _MAPPED_DETAIL_KEYS}
+        detail["row"] = n
+        detail["custom_fields"] = {}
+        invalid: str | None = None
+        for column in sorted(field_map):
+            if column < 1:
+                continue
+            if column - 1 >= len(row):
+                invalid = f"row {n}: expected at least {column} columns, got {len(row)}"
+                break
+            raw = str(row[column - 1]).strip()
+            name = field_map[column]
+            if name == "door_type":
+                if not raw:
+                    invalid = f"row {n}: style is required"
+                    break
+                detail["style"] = raw
+            elif name == "door_quantity":
+                try:
+                    quantity = int(raw)
+                except ValueError:
+                    invalid = f"row {n}: invalid quantity: {row[column - 1]!r}"
+                    break
+                if quantity <= 0:
+                    invalid = f"row {n}: quantity must be positive"
+                    break
+                detail["quantity"] = quantity
+            elif name == "door_width":
+                try:
+                    width = float(raw)
+                except ValueError:
+                    invalid = f"row {n}: invalid width: {row[column - 1]!r}"
+                    break
+                if width <= 0:
+                    invalid = f"row {n}: width must be positive"
+                    break
+                detail["width"] = width
+            elif name == "door_height":
+                try:
+                    length = float(raw)
+                except ValueError:
+                    invalid = f"row {n}: invalid length: {row[column - 1]!r}"
+                    break
+                if length <= 0:
+                    invalid = f"row {n}: length must be positive"
+                    break
+                detail["length"] = length
+            elif name in ("door_drilling", "door_small_nest"):
+                bool_value, ok = _parse_bool_value(raw)
+                if not ok:
+                    invalid = f"row {n}: invalid value for {name}: {raw}"
+                    break
+                detail[_MAPPED_FIELD_TARGETS[name]] = bool_value
+            elif name == "door_rotation_angle":
+                if not raw:
+                    continue
+                try:
+                    angle = float(raw)
+                except ValueError:
+                    invalid = f"row {n}: invalid value for {name}: {raw}"
+                    break
+                detail["rotation_angle"] = angle
+            elif name.startswith("door_custom_field_"):
+                if raw:
+                    detail["custom_fields"][name.removeprefix("door_custom_field_")] = raw
+            else:
+                target = _MAPPED_FIELD_TARGETS.get(name)
+                if target is not None:
+                    if raw:
+                        detail[target] = raw
+                elif raw:
+                    detail[name] = raw
+        if invalid is not None:
+            errors.append(invalid)
+            continue
+        details.append(detail)
+    return details, errors
+
+
+def field_map_descriptions(field_map: dict[int, str]) -> list[dict[str, Any]]:
+    """Human-readable descriptions of a column map for preview/CLI output."""
+    return [
+        {
+            "column": column,
+            "field": name,
+            "required": name in REQUIRED_IMPORT_FIELDS,
+        }
+        for column, name in sorted(field_map.items())
+    ]
