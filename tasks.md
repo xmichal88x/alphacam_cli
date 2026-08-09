@@ -491,3 +491,32 @@ detail.Width=600; detail.Length=400; detail.Quantity=2; detail.SaveToDatabase()
 - [ ] Kaizen: `_handler_cdm_delete_job` lookup po nazwie — kandydat na helper (duplikacja zmalała po gatingu importu).
 - [ ] Gateway bez autoryzacji (port 8721) — świadome, do rozważenia przy produkcji.
 - [ ] Odczyt vdb5 (scripts/vdb5_door_types.ps1) ma twarde ścieżki maszynowe (VistaDB dll, vdb5) — ograniczenie instalacji, udokumentować.
+
+### ✅ CDM IMPORT CSV — FINALNY WNIOSEK (2026-08-09, sesja z użytkownikiem)
+
+**Import CSV z tworzeniem zadania NIE DZIAŁA headless w Session 0 — wymaga GUI (Session 2). Potwierdzone wielokrotnie na żywej maszynie (probe w osobnym procesie schtasks /ru SYSTEM):**
+
+| Metoda | CreateJob=0 | CreateJob=1 |
+|---|---|---|
+| `job.ImportCSVToJob(csv, None)` | — | **WISI** (dialog wyboru settings) |
+| `job.ImportCSVToJob(csv, settings)` | — | UserInteractive (wyjątek) lub **WISI** |
+| `am.CreateJobsFromCSVFile(csv, settings)` | zwraca PUSTE (0 jobów, nie tworzy) | **WISI ZAWSZE** — nawet z poprawnym CSV (8 kolumn wg usera: `P003,1,500,500,1;18;0;0;30;45;40;90;50;3;0,<materiał>,<nazwa>,Fronty`), poprawną konfiguracją (sklep CSV z polami job), Selected=True; job NIE powstaje |
+
+**Enuma pól importu (odczytany z AcamAddIns.dll przez reflection — `AutomationManagerImportSettingFieldType`):**
+- CDM: 256=cdmDoorType, 257=cdmDoorWidth, 258=cdmDoorHeight, 259=cdmDoorQuantity, 260=cdmDoorMaterial, 261=cdmDoorCustomerName, 262=cdmDoorOrderNumber, 263=cdmDoorItemNumber, 264=cdmDoorDesignDimensions, 265=cdmDoorProductionComment, 266+=cdmDoorCustomField1..25, 271=rotation, 272=angle, 274=nest priority, 298=drilling, 299=small nest
+- JOB: 512=jobName, 513=jobfkConfigID, 514=jobfkSetupID, 515=jobfkToolOrderID, 516=jobPurchaseOrderNumber, 517=jobWorkOrderNumber, 518=jobDescription, 519=jobProgrammerName, 520=jobOrderDate, 521=jobDueDate, 522=jobCustomer, 523=jobParentJob, 524=jobFkMaterialID
+- GUI nazwy "Zadanie: ..." ↔ enum: Nazwa=512, Klient=522, Nazwa konfiguracji=513, Lista kolejności narzędzi=515, Nazwa zadania nadrzędnego=523, Nazwisko przygotowującego=519, Numer zamówienia=516, Numer zlecenia=517, Opis=518, Data zamówienia=520, Termin realizacji=521 (+ setup 514, materiał 524; "Nazwa konfiguracji odwzorowania warstw" — BRAK w enumie)
+
+**Stan konfiguracji (laptop-monika, po sesji):**
+- "sklep CSV" (ID3): 8 pól — 256,259,257,258,264 + col6=524 (materiał), col7=512 (nazwa), col8=513 (config "Fronty"); IgnoreHeader=False; CreateJob=True
+- "Ustawienia Importu CSV 5" (ID7): 5 pól CDM, Selected=True, CreateJob=True (user ustawił w GUI)
+- Konfiguracja testowa ID8 usunięta. AM_ImportSettingsParameter kolumna = ParameterType (nie "Type"!)
+
+**Recepty na przyszłość:**
+- `FieldsOrder.Add(field)` przez API dla pól job (512/513/524) → **UserInteractive** (wymagają GUI); daty (520/521) przechodzą headless. Edycja ustawień importu z polami job = GUI.
+- Dump konfiguracji ImportSettings: przez `am.ImportSettings.Item(i)` (kolejność NIE po ID! — Item(2)=ID8 gdy istniał; zawsze settings_list z harnessa) lub `GetByName(name)`.
+- `CreateJobsFromCSVFile` do tworzenia JOBÓW headless = NIE. Joby tworzyć przez `cdm create` (NewCDMJob+AddCDMOrderDetail — działa headless).
+- Automatyzacja importu CSV: makro w GUI (Session 2) — schtasks /it + makro VBA (plan: użytkownik przygotuje makro).
+- probe_cdm_import.py: `--method build-settings --fields "512,513,524"` edytuje FieldsOrder przez API (job* fail z UserInteractive) — narzędzie zostaje w scripts/.
+
+**Sprzątnięte:** konfiguracja ID8 (baza), CSV-e i skrypty ps1 z C:\temp; task schtasks "cdm_probe" + run_probe.cmd zostają (narzędzie diagnostyczne). Joby "Nowe Zadanie 7/8" (z testów GUI usera) zostały.
