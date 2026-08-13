@@ -1095,6 +1095,11 @@ def _mock_cdm_com(monkeypatch: pytest.MonkeyPatch) -> tuple[MagicMock, MagicMock
     monkeypatch.setitem(sys.modules, "win32com", win32com)
     monkeypatch.setitem(sys.modules, "win32com.client", client_mod)
     monkeypatch.setitem(sys.modules, "pythoncom", pythoncom)
+    import alphacam_cli.gateway.server as server_module
+
+    if server_module._app is None:
+        server_module._app = MagicMock()
+    server_module._app.get_automation_manager_addin.return_value = am
     am.Jobs.Count = 0
     return ai, addins, am
 
@@ -3081,8 +3086,70 @@ def test_process_cdm_job_handler_invalid_machine_type(server_app: MagicMock) -> 
 
 def test_process_cdm_job_handler_invalid_timeout_type(server_app: MagicMock) -> None:
     gw = GatewayServer()
-    with pytest.raises(COMError, match="cdm: timeout_seconds must be an int"):
+    with pytest.raises(COMError, match="cdm: timeout_seconds must be a positive int"):
         gw._handler_process_cdm_job({"job_name": "JOB-001", "timeout_seconds": "600"})
+    server_app.process_cdm_job.assert_not_called()
+
+
+def test_process_cdm_job_handler_bool_timeout_rejected(server_app: MagicMock) -> None:
+    gw = GatewayServer()
+    with pytest.raises(COMError, match="cdm: timeout_seconds must be a positive int"):
+        gw._handler_process_cdm_job({"job_name": "JOB-001", "timeout_seconds": True})
+    server_app.process_cdm_job.assert_not_called()
+
+
+def test_process_cdm_job_handler_negative_timeout_rejected(server_app: MagicMock) -> None:
+    gw = GatewayServer()
+    with pytest.raises(COMError, match="cdm: timeout_seconds must be a positive int"):
+        gw._handler_process_cdm_job({"job_name": "JOB-001", "timeout_seconds": -5})
+    server_app.process_cdm_job.assert_not_called()
+
+
+def test_process_cdm_job_handler_zero_timeout_rejected(server_app: MagicMock) -> None:
+    gw = GatewayServer()
+    with pytest.raises(COMError, match="cdm: timeout_seconds must be a positive int"):
+        gw._handler_process_cdm_job({"job_name": "JOB-001", "timeout_seconds": 0})
+    server_app.process_cdm_job.assert_not_called()
+
+
+def test_process_cdm_job_handler_machine_sanitized(server_app: MagicMock) -> None:
+    server_app.process_cdm_job.return_value = {"success": True}
+    gw = GatewayServer()
+    result = gw._handler_process_cdm_job(
+        {
+            "job_name": "JOB-001",
+            "machine": {
+                "psexec": "C:/temp/PsExec64.exe",
+                "psexec_args": ["-accepteula", "-i", "1", "-s"],
+                "use_shell": True,
+                "evil": "run",
+            },
+        }
+    )
+    assert result == {"success": True}
+    server_app.process_cdm_job.assert_called_once_with(
+        job_name="JOB-001",
+        machine={
+            "psexec": "C:/temp/PsExec64.exe",
+            "psexec_args": ["-accepteula", "-i", "1", "-s"],
+            "use_shell": False,
+        },
+    )
+
+
+def test_process_cdm_job_handler_machine_invalid_psexec_args(server_app: MagicMock) -> None:
+    gw = GatewayServer()
+    with pytest.raises(COMError, match=r"cdm: machine.psexec_args must be a list of str"):
+        gw._handler_process_cdm_job(
+            {"job_name": "JOB-001", "machine": {"psexec_args": ["ok", 123]}}
+        )
+    server_app.process_cdm_job.assert_not_called()
+
+
+def test_process_cdm_job_handler_machine_invalid_psexec(server_app: MagicMock) -> None:
+    gw = GatewayServer()
+    with pytest.raises(COMError, match=r"cdm: machine.psexec must be a str"):
+        gw._handler_process_cdm_job({"job_name": "JOB-001", "machine": {"psexec": 123}})
     server_app.process_cdm_job.assert_not_called()
 
 
@@ -3117,3 +3184,35 @@ def test_process_cdm_job_handler_invalid_method_value(server_app: MagicMock) -> 
     with pytest.raises(COMError, match="cdm: method must be 'inproc' or 'vbs'"):
         gw._handler_process_cdm_job({"job_name": "JOB-001", "method": "xyz"})
     server_app.process_cdm_job.assert_not_called()
+
+
+def test_process_cdm_job_handler_watchdog_armed_and_cancelled(server_app: MagicMock) -> None:
+    server_app.process_cdm_job.return_value = {"success": True}
+    gw = GatewayServer()
+    watchdog = MagicMock()
+    gw._watchdog_arm = MagicMock(return_value=watchdog)
+    gw._handler_process_cdm_job({"job_name": "JOB-001", "timeout_seconds": 600})
+    gw._watchdog_arm.assert_called_once()
+    assert gw._watchdog_arm.call_args.args[0] == 630.0
+    assert gw._watchdog_arm.call_args.args[1] == "process_cdm_job(JOB-001)"
+    watchdog.cancel.assert_called_once()
+
+
+def test_process_cdm_job_handler_watchdog_min_budget(server_app: MagicMock) -> None:
+    server_app.process_cdm_job.return_value = {"success": True}
+    gw = GatewayServer()
+    watchdog = MagicMock()
+    gw._watchdog_arm = MagicMock(return_value=watchdog)
+    gw._handler_process_cdm_job({"job_name": "JOB-001"})
+    assert gw._watchdog_arm.call_args.args[0] == 90.0
+    watchdog.cancel.assert_called_once()
+
+
+def test_process_cdm_job_handler_watchdog_cancelled_on_error(server_app: MagicMock) -> None:
+    server_app.process_cdm_job.side_effect = RuntimeError("cdm: boom")
+    gw = GatewayServer()
+    watchdog = MagicMock()
+    gw._watchdog_arm = MagicMock(return_value=watchdog)
+    with pytest.raises(COMError, match="cdm: boom"):
+        gw._handler_process_cdm_job({"job_name": "JOB-001"})
+    watchdog.cancel.assert_called_once()

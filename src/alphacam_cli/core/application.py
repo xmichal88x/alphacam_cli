@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import contextlib
 import glob
 import os
 import subprocess
@@ -426,14 +427,19 @@ class Application:
         try:
             gencache.EnsureModule(_ADDINS_INTERFACE_TYPELIB, 0, 1, 0)
             gencache.EnsureModule(_ADDINS_TYPELIB, 0, 1, 0)
-            app = gencache.EnsureDispatch("Ar5axaps.Application")
+            app = self._app
+            if app is None:
+                app = gencache.EnsureDispatch("Ar5axaps.Application")
             clsid = pythoncom.MakeIID(_ADDINS_INTERFACE_CLSID)
             ai = w32.Dispatch(
                 pythoncom.CoCreateInstance(
                     clsid, None, pythoncom.CLSCTX_ALL, pythoncom.IID_IDispatch
                 )
             )
-            return ai.GetAddInsInterface(app)
+            try:
+                return ai.GetAddInsInterface(app)
+            except Exception:
+                return ai.GetAddInsInterface(gencache.EnsureDispatch("Ar5axaps.Application"))
         except Exception as e:
             raise RuntimeError(f"Failed to connect to AlphaCAM add-ins: {e}") from e  # noqa: TRY003
 
@@ -692,37 +698,45 @@ class Application:
                 raise RuntimeError(f"cdm: output root not found: {job_name}")  # noqa: TRY003
             machine = machine or headless.DEFAULT_MACHINE
             vbs_dir = headless.DEFAULT_VBS_DIR
-            vbs_path = os.path.join(vbs_dir, "vbs_hp_cli.vbs")
-            log_path = os.path.join(vbs_dir, "vbs_hp_cli_out.txt")
+            stamp = f"{os.getpid()}_{int(time.time())}"
+            vbs_path = os.path.join(vbs_dir, f"vbs_hp_cli_{stamp}.vbs")
+            log_path = os.path.join(vbs_dir, f"vbs_hp_cli_{stamp}_out.txt")
             try:
-                os.makedirs(vbs_dir, exist_ok=True)
-                with open(vbs_path, "w", encoding="utf-8") as fh:
-                    fh.write(headless.build_vbs(job_name, vbs_path, log_path))
-                proc = headless.run_headless(machine, vbs_path, timeout_seconds=timeout_seconds)
-            except subprocess.TimeoutExpired as e:
-                raise RuntimeError(  # noqa: TRY003
-                    f"cdm: process job timed out after {timeout_seconds}s: {job_name}"
-                ) from e
-            except Exception as e:
-                raise RuntimeError(f"cdm: process job failed: {e}") from e  # noqa: TRY003
-            vbs_log: str | None = None
-            try:
-                with open(log_path, encoding="utf-8", errors="replace") as fh:
-                    vbs_log = fh.read()
-            except OSError:
-                vbs_log = None
-            result = headless.read_job_result(job_name, output_root)
-            success = bool(result.get("success"))
-            return {
-                "success": success,
-                "job_name": job_name,
-                "status": result.get("status"),
-                "processed": success,
-                "method": "vbs",
-                "psexec_rc": proc.returncode,
-                "vbs_log": vbs_log,
-                "log": result.get("log"),
-            }
+                try:
+                    os.makedirs(vbs_dir, exist_ok=True)
+                    with open(vbs_path, "w", encoding="utf-8") as fh:
+                        fh.write(headless.build_vbs(job_name, log_path))
+                    t0_wall = time.time()
+                    proc = headless.run_headless(machine, vbs_path, timeout_seconds=timeout_seconds)
+                except subprocess.TimeoutExpired as e:
+                    raise RuntimeError(  # noqa: TRY003
+                        f"cdm: process job timed out after {timeout_seconds}s: {job_name}"
+                    ) from e
+                except Exception as e:
+                    raise RuntimeError(f"cdm: process job failed: {e}") from e  # noqa: TRY003
+                vbs_log: str | None = None
+                try:
+                    with open(log_path, encoding="utf-8", errors="replace") as fh:
+                        vbs_log = fh.read()
+                except OSError:
+                    vbs_log = None
+                result = headless.read_job_result(job_name, output_root, min_mtime=t0_wall)
+                success = bool(result.get("success"))
+                return {
+                    "success": success,
+                    "job_name": job_name,
+                    "status": result.get("status"),
+                    "processed": success,
+                    "method": "vbs",
+                    "psexec_rc": proc.returncode,
+                    "vbs_log": vbs_log,
+                    "log": result.get("log"),
+                    "detail": result.get("detail"),
+                }
+            finally:
+                for path in (vbs_path, log_path):
+                    with contextlib.suppress(OSError):
+                        os.remove(path)
         if method == "inproc":
             return self.process_cdm_job_inproc(job_name, timeout_seconds, output_root)
         raise RuntimeError(  # noqa: TRY003
@@ -760,6 +774,7 @@ class Application:
         if not output_root:
             raise RuntimeError(f"cdm: output root not found: {job_name}")  # noqa: TRY003
         t0 = time.monotonic()
+        t0_wall = time.time()
         try:
             self._raw_app.Run("ApplyMachiningAfterNesting.Events.HeadlessProcess", job_name)
         except Exception as e:
@@ -767,7 +782,7 @@ class Application:
                 f"cdm: process job failed: {e}"
             ) from e
         elapsed_s = round(time.monotonic() - t0, 1)
-        result = headless.read_job_result(job_name, output_root)
+        result = headless.read_job_result(job_name, output_root, min_mtime=t0_wall)
         success = bool(result.get("success"))
         return {
             "success": success,
@@ -777,6 +792,7 @@ class Application:
             "method": "inproc",
             "elapsed_s": elapsed_s,
             "log": result.get("log"),
+            "detail": result.get("detail"),
         }
 
     def cdm_types(self) -> dict[str, Any]:

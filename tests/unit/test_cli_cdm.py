@@ -1558,6 +1558,22 @@ def test_cdm_process_command() -> None:
     mock_process.assert_called_once_with(job_name="JOB-001")
 
 
+def test_cdm_process_command_ignored_options_warning() -> None:
+    from tests.unit.test_cli import _mock_com
+
+    with (
+        _mock_com(),
+        patch(
+            "alphacam_cli.core.application.Application.process_cdm_job",
+            return_value={"success": True, "job_name": "JOB-001", "processed": True},
+        ) as mock_process,
+    ):
+        result = runner.invoke(app, ["cdm", "process", "JOB-001", "--timeout", "600"])
+    assert result.exit_code == 0
+    assert "ignored with --method inproc" in result.stderr
+    mock_process.assert_called_once_with(job_name="JOB-001", timeout_seconds=600)
+
+
 def test_cdm_process_command_failure() -> None:
     from tests.unit.test_cli import _mock_com
 

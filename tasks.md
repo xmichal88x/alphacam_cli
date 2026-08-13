@@ -1088,3 +1088,53 @@ Raport: `docs/raporty/2026-08-13-session0-opcjaA.md` (sekcja WDROŻENIE).
 - Default method=inproc — nie wymaga Session 1 ani PsExec.
 - Fallback vbs działa TYLKO gdy Acam działa w Session 1 (GetObject 429 przy Session 0-only) — do odnotowania w docs/gateway.md.
 - `timeout_seconds` w inproc: API compatibility (makro synchroniczne ~36s; klient RPC ma socket timeout).
+
+## 2026-08-13 SESSION cd. — FIXLOOP commita fb31f1f (0 issues, build OK)
+
+### Przebieg /fixloop (4 iteracje review)
+1. Review 1 (code-reviewer): 15 issues — 2 high (RCE use_shell przez machine z RPC → whitelist + use_shell zawsze False; brak watchdog STA dla inproc → przeniesione do TASKS.md), 7 medium (świeżość logu min_mtime, unikalne nazwy VBS, --timeout/--psexec ignorowane, timeout klienta 180s, rsplit job name, probe_nest, bool walidacja), 6 low (out_vbs dead, detail, limit XML, TOCTOU, docs, walidacja machine).
+2. Fixy A-G: headless.py (min_mtime+out_vbs+TOCTOU), application.py (detail+unikalne VBS+min_mtime ścienny), server.py (bool+whitelist machine+usunięty _handler_probe_nest 355 linii), cli/cdm.py (warning), acrepd.py (rsplit+limit 64MB), client.py (settimeout max(timeout, t+30) try/finally), docs/gateway.md.
+3. Review 2: 12/12 FIXED + 6 nowych LOW (N1-N6) → fixy.
+4. Review 3: 3 LOW (timeout<=0, stale detail, docs log) → fixy.
+5. Review 4: 1 minor (test stale→fresh) → fix.
+6. FINAL: **0 issues**. ruff/mypy czyste, pytest **867 passed**, `python -m build` → wheel OK.
+7. Sync na maszynę (6 plików SAME), restart usługi, E2E sanity "Fixloop Sanity 01": **38.5s Sukces**, NC 1744 B, .ard 84466 B, .anl 2810 B.
+
+### Kluczowe fixy bezpieczeństwa
+- **RCE**: `machine` z RPC sanitizowany (whitelist kluczy, use_shell wymuszony False, typowanie psexec/psexec_args/cscript) — subprocess nigdy z shell=True.
+- **Path traversal**: `read_job_result` odrzuca job_name z `/`, `\`, `.`, `..`.
+- **Fałszywy Sukces**: `read_job_result(min_mtime=t0_wall)` pomija stale logi (zegar ścienny, nie monotonic!).
+
+### Otwarte (TASKS.md)
+- Watchdog STA dla inproc (high, code review #1) — makro stabilne (6× E2E), ale brak zabezpieczenia przed zawieszeniem.
+
+## 2026-08-13 SESSION cd. — WERYFIKACJA TESTÓW NA MASZYNIE PO FIXLOOP
+
+### Stan po fixloop
+- Lokalnie (Linux): **867 passed**, ruff/mypy czyste, build OK.
+- Maszyna (laptop Monika, Windows): **858 passed, 1 skipped, 8 deselected** (~2 min).
+- Synchronizacja: WSZYSTKIE pliki src z commita fb31f1f + fixloop (13 plików) SAME
+  (tar+scp, weryfikacja Get-FileHash per plik). testy/unit + conftest.py SAME.
+
+### Skips/deselects na maszynie — wyjaśnienie
+1. **1 skipped**: `test_read_job_result_first_candidate_stale_second_fresh` —
+   na Windows `os.path.join` + `base.replace("/","\\")` daje TEN SAM path
+   → `_job_log_candidates` zwraca 1 kandydata → test robi `pytest.skip`
+   (platform-agnostic). Na Linuxie działa (2 kandydatów).
+2. **8 deselected (pre-existing, NIE regresja)**: `test_cli_nest.py` —
+   `test_nest_run_advanced*` + `test_nest_run_sheet_*` — wymagają
+   interaktywnej sesji COM: `cli/nest.py` (linia ~155-158) robi bezpośrednio
+   `gencache.EnsureDispatch("Ar5axaps.Application")` (NIE przez
+   `alphacam_context`), a `tests/conftest.py` wstrzykuje mock win32com TYLKO
+   gdy `sys.platform != "win32"` (linia 26). Na Windows test łączy się z
+   prawdziwym Acam → Session 0 (Services) nie ma interaktywnej stacji →
+   CO_E_SERVER_EXEC_FAILURE. Testy te NIE przechodziły na maszynie również
+   przed fixloop (testy z wcześniejszych sesji, conftest bez zmian).
+
+### Wniosek
+- Kod produkcyjny po fixloop zweryfikowany na maszynie: 858/858 wykonywalnych
+  testów przeszło; jedyne pominięcia to platformowe (Windows dedup path) i
+  pre-existing (testy COM wymagające interaktywnej sesji — nie wykonywalne
+  w Session 0 przez SSH).
+- E2E sanity na maszynie (Fixloop Sanity 01): 38.5s, Sukces, NC 1744 B,
+  .ard 84466 B — potwierdzone po pełnej synchronizacji.

@@ -10,8 +10,7 @@
 
 ## Zrealizowane w bieżącej sesji (Sprint v1.0.0)
 
-### P0 — Procesowanie CDM w Session 0 (2026-08-13, E2E potwierdzone)
-- [x] **ROOT CAUSE 80004002**: `job.Process()` cross-process przez COM marshal → makro eventów AM dostaje obiekty przez marshal → 80004002 + brak obróbek. Makro `HeadlessProcess(JobName)` uruchamiane IN-PROC (`App.Run` na referencji COM) → pełne obróbki + NC. (raport: docs/raporty/2026-08-13-session0-opcjaA.md)
+### P0 — Procesowanie CDM w Session 0 (2026-08-13, E2E potwierdzone)- [x] **ROOT CAUSE 80004002**: `job.Process()` cross-process przez COM marshal → makro eventów AM dostaje obiekty przez marshal → 80004002 + brak obróbek. Makro `HeadlessProcess(JobName)` uruchamiane IN-PROC (`App.Run` na referencji COM) → pełne obróbki + NC. (raport: docs/raporty/2026-08-13-session0-opcjaA.md)
 - [x] **core/application.py**: `process_cdm_job_inproc` (App.Run makra na referencji COM gateway, ~33-41s) + `process_cdm_job(method="inproc"|"vbs")` — default inproc
 - [x] **BUG naprawiony**: Run w osobnym wątku → RPC_E_WRONG_THREAD; naprawa: bezpośrednio na wątku STA
 - [x] **gateway/server.py**: handler `method` (walidacja inproc|vbs), usunięty tymczasowy handler probe_run_macro
@@ -222,3 +221,16 @@
 ## Kierunki na przyszłość
 
 - [ ] **Custom import (wizja, decyzja użytkownika 2026-08-10)** — import można rozbudować w przyszłości jako CUSTOM IMPORT: logika tworzenia typu importu w bibliotece (`AM_ImportSettings`) z własnymi kolumnami → dopasowanie do dowolnych plików CSV, których dane nie są poukładane. Tylko jako wizja na przyszłość — bez wpływu na obecny kontrakt (csv2 = CreateJob=No, import do istniejącego zadania; sklep CSV = CreateJob=Yes).
+
+### Fixloop (2026-08-13) — review commita fb31f1f, 0 issues
+- Review 1: 15 issues (2 high: RCE use_shell, brak timeoutu STA; 7 medium; 6 low) → fixy A-G
+- Review 2: 6 nowych LOW (N1 cleanup nie w finally; N2/N3 docs; N4 brak testu min_mtime; N5 path traversal job_name; N6 timeout<=0) → fixy
+- Review 3: 3 LOW (timeout 0; stale detail; docs log) → fixy
+- Review 4: 1 minor (test stale→fresh) → fix
+- Final: **0 issues**; ruff/mypy czyste; pytest 867 passed; build wheel OK
+- E2E sanity laptop Monika: "Fixloop Sanity 01" 38.5s Sukces, NC 1744 B, .ard 84466 B
+- Kod zsynchronizowany na maszynę (6 plików SAME), usługa RUNNING
+
+## Otwarte po fixloop (do osobnych sesji)
+- [ ] **Watchdog dla inproc na wątku STA** (code review #1, high) — `process_cdm_job_inproc` jest synchroniczny na jedynym wątku STA gateway; zawieszenie makra = permanentny deadlock usługi (klient ma socket timeout, serwer nie). Rozważ: watchdog per-call + restart usługi (SCM Recovery) lub drugi wątek STA z marshal referencji (CoMarshalInterThreadInterfaceInStream). Makro jest stabilne (6× E2E 33-41s), ale brak zabezpieczenia.
+- [ ] Usunąć/odciąć pozostałe pre-existing: duplikacja importu CSV (server vs core), `_cdm_automation_manager` duplikat (server.py) — wg TASKS pre-existing #5/#7.

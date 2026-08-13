@@ -237,9 +237,9 @@ The gateway uses **JSON-RPC 2.0** over TCP with length-prefixed frames.
 | `select_post` | `name` | `success` |
 | `run_nest` | `parts, sheet_width, sheet_height` | `{count, success}` |
 | `create_cdm_job` | `job_name, config, material, customer, po, due_date, description` | `{success, job_name, config, material, warnings}` |
-| `process_cdm_job` | `job_name` | `{success, job_name, processed}` |
+| `process_cdm_job` | `job_name, method, machine, timeout_seconds, output_root` | `{success, job_name, processed, status, method, detail, log, elapsed_s (inproc), psexec_rc, vbs_log (vbs)}` |
 
-> `process_cdm_job` is synchronous and may run long (geometry + toolpaths + nesting). The client's remote request has a **180 s timeout** (`RemoteSession.settimeout`) — for longer jobs increase the remote request timeout (client). The gateway serves one request at a time: `process_cdm_job` blocks the only STA thread for its whole duration, so other requests wait until it finishes.
+> `process_cdm_job` is synchronous and may run long (geometry + toolpaths + nesting). The client automatically extends the socket timeout for the duration of the call to `max(self.timeout, timeout_seconds + 30)` and restores it in `finally` — no manual timeout adjustment is needed. The gateway serves one request at a time: `process_cdm_job` blocks the only STA thread for its whole duration, so other requests wait until it finishes. `method` selects the execution path: `inproc` (default) runs the macro `ApplyMachiningAfterNesting.Events.HeadlessProcess` in-proc on the gateway's held COM reference (Session 0, no PsExec); `vbs` is the VBScript+PsExec fallback and requires Acam running in Session 1 (`GetObject` fails with 429 when Acam runs only in the Session 0 service). `machine` is optional and used only with `method=vbs`; it is sanitized server-side (`use_shell` is always False, key whitelist). `inproc` must be invoked on the gateway's STA thread like all handlers (`_com_call`) — otherwise COM raises `RPC_E_WRONG_THREAD`.
 | `find_drawing_files` | `pattern` | `[path, ...]` |
 
 ### Error codes

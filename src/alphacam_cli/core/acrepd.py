@@ -102,6 +102,8 @@ _PART_NUMERIC: dict[str, Callable[..., Any]] = {
 
 _IMAGE_TAGS = frozenset({"sheetimage", "partimage"})
 
+_MAX_ACREPD_SIZE = 64 * 1024 * 1024
+
 
 def _num(value: str | None, cast: Callable[..., Any]) -> Any:
     """Convert a string value via ``cast``; return None on missing or invalid input."""
@@ -130,7 +132,7 @@ def _reports_data_dir(licomdir_path: str, override: str | None = None) -> str:
 def _name_parts(path: str) -> tuple[str, str | None]:
     """Split "<JobName> - <Material>.acrepd" into (job_name, material)."""
     base = os.path.splitext(os.path.basename(path))[0]
-    parts = base.split(" - ", 1)
+    parts = base.rsplit(" - ", 1)
     job_name = parts[0].strip()
     material: str | None = None
     if len(parts) > 1 and parts[1].strip():
@@ -273,6 +275,11 @@ def _attach_sheet_cdm(sheets: list[dict[str, Any]], cdm_rows: list[dict[str, str
 
 def parse_manifest(path: str) -> dict[str, Any]:
     """Parse an .acrepd nesting results manifest (VistaDB DataSet XML)."""
+    if os.path.getsize(path) > _MAX_ACREPD_SIZE:
+        size = os.path.getsize(path)
+        raise RuntimeError(  # noqa: TRY003
+            f"manifest: file too large: {size} bytes (max {_MAX_ACREPD_SIZE})"
+        )
     try:
         root = ET.parse(path).getroot()
     except ParseError as e:

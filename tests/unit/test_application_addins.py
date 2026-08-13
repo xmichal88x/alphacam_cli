@@ -47,16 +47,33 @@ def test_get_addins_connects_interface(monkeypatch: pytest.MonkeyPatch) -> None:
     addins_interface.GetAddInsInterface.return_value = addins
     pythoncom_mod.CoCreateInstance.return_value = "co-created-instance"
 
-    ac = Application(MagicMock())
+    app_dispatch = MagicMock(name="app-dispatch")
+    ac = Application(app_dispatch)
     result = ac.get_addins()
 
     assert result is addins
     gencache.EnsureModule.assert_any_call("{D216BAAC-A717-4793-92D3-1AE37AE3AC2E}", 0, 1, 0)
     gencache.EnsureModule.assert_any_call("{A87DD4DB-67C9-4F1B-BC79-A71EE8C7D1E5}", 0, 1, 0)
-    gencache.EnsureDispatch.assert_called_once_with("Ar5axaps.Application")
+    gencache.EnsureDispatch.assert_not_called()
     pythoncom_mod.MakeIID.assert_called_once_with("{39BFE38A-D3E4-43EA-89D0-584C776B97A9}")
     client_mod.Dispatch.assert_called_once_with("co-created-instance")
-    addins_interface.GetAddInsInterface.assert_called_once_with("app-dispatch")
+    addins_interface.GetAddInsInterface.assert_called_once_with(app_dispatch)
+
+
+def test_get_addins_fallback_on_interface_failure(monkeypatch: pytest.MonkeyPatch) -> None:
+    gencache, pythoncom_mod, client_mod, addins_interface = _mock_addin_com(monkeypatch)
+    addins = MagicMock(name="IAddIns")
+    addins_interface.GetAddInsInterface.side_effect = [RuntimeError("boom"), addins]
+    pythoncom_mod.CoCreateInstance.return_value = "co-created-instance"
+
+    app_dispatch = MagicMock(name="app-dispatch")
+    ac = Application(app_dispatch)
+    result = ac.get_addins()
+
+    assert result is addins
+    gencache.EnsureDispatch.assert_called_once_with("Ar5axaps.Application")
+    assert addins_interface.GetAddInsInterface.call_args_list[0].args == (app_dispatch,)
+    assert addins_interface.GetAddInsInterface.call_args_list[1].args == ("app-dispatch",)
 
 
 def test_get_addins_cached(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -68,7 +85,7 @@ def test_get_addins_cached(monkeypatch: pytest.MonkeyPatch) -> None:
     assert ac.get_addins() is addins
     assert ac.get_addins() is addins
 
-    gencache.EnsureDispatch.assert_called_once()
+    gencache.EnsureDispatch.assert_not_called()
     addins_interface.GetAddInsInterface.assert_called_once()
 
 

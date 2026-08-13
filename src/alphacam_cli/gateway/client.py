@@ -328,7 +328,14 @@ class RemoteSession:
             params["output_root"] = output_root
         if method is not None:
             params["method"] = method
-        return self._call("process_cdm_job", params)  # type: ignore[no-any-return]
+        sock = self._sock
+        if sock is not None:
+            sock.settimeout(max(self.timeout, timeout_seconds + 30))
+        try:
+            return self._call("process_cdm_job", params)  # type: ignore[no-any-return]
+        finally:
+            if sock is not None:
+                sock.settimeout(self.timeout)
 
     def cdm_types(self) -> dict[str, Any]:
         return self._call("cdm_types")  # type: ignore[no-any-return]

@@ -741,6 +741,16 @@ def test_remote_session_process_cdm_job_full_params() -> None:
     )
 
 
+def test_remote_session_process_cdm_job_extended_timeout() -> None:
+    client = RemoteSession(timeout=30.0)
+    sock = MagicMock()
+    client._sock = sock
+    client._call = MagicMock(return_value={"success": True})  # type: ignore[method-assign]
+    client.process_cdm_job(job_name="JOB-001", timeout_seconds=600)
+    sock.settimeout.assert_any_call(630.0)
+    sock.settimeout.assert_called_with(30.0)
+
+
 def test_remote_session_call_socket_timeout_wrapped() -> None:
     from alphacam_cli.gateway.client import RemoteConnectionError
 

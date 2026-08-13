@@ -605,6 +605,33 @@ def test_manifest_files(tmp_path: pathlib.Path) -> None:
     assert isinstance(manifests[1]["mtime"], float)
 
 
+def test_name_parts_splits_from_end(tmp_path: pathlib.Path) -> None:
+    path = tmp_path / "Fronty - Dąb - MDF_18.acrepd"
+
+    job_name, material = acrepd._name_parts(str(path))
+
+    assert job_name == "Fronty - Dąb"
+    assert material == "MDF_18"
+
+
+def test_name_parts_without_separator(tmp_path: pathlib.Path) -> None:
+    path = tmp_path / "Fronty.acrepd"
+
+    job_name, material = acrepd._name_parts(str(path))
+
+    assert job_name == "Fronty"
+    assert material is None
+
+
+def test_parse_manifest_too_large(tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    path = tmp_path / "big.acrepd"
+    path.write_text(_FULL_MANIFEST_XML, encoding="utf-8")
+    monkeypatch.setattr(acrepd, "_MAX_ACREPD_SIZE", 16)
+
+    with pytest.raises(RuntimeError, match="file too large"):
+        acrepd.parse_manifest(str(path))
+
+
 def test_find_manifest(tmp_path: pathlib.Path) -> None:
     (tmp_path / "Fronty - MDF_18.acrepd").write_text("x", encoding="utf-8")
     (tmp_path / "Fronty - MDF_20.acrepd").write_text("y", encoding="utf-8")

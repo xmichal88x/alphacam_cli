@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import os
 import pathlib
 from unittest.mock import ANY, MagicMock, PropertyMock
 
@@ -1669,23 +1668,24 @@ def _mock_headless_process(
     run_result: object = None,
     run_side_effect: Exception | None = None,
     read_result: dict[str, object] | None = None,
-) -> MagicMock:
+) -> tuple[MagicMock, MagicMock]:
     monkeypatch.setattr("alphacam_cli.core.cdm_db.job_count", MagicMock(return_value=count))
     monkeypatch.setattr(
         "alphacam_cli.core.cdm_db.job_output_root", MagicMock(return_value=output_root)
     )
     run = MagicMock(return_value=run_result, side_effect=run_side_effect)
     monkeypatch.setattr("alphacam_cli.core.application.headless.run_headless", run)
+    read = MagicMock(return_value=read_result)
     monkeypatch.setattr(
         "alphacam_cli.core.application.headless.read_job_result",
-        MagicMock(return_value=read_result),
+        read,
     )
-    return run
+    return run, read
 
 
 def test_process_cdm_job_headless_success(monkeypatch: pytest.MonkeyPatch) -> None:
     proc = MagicMock(returncode=0)
-    run = _mock_headless_process(
+    run, read = _mock_headless_process(
         monkeypatch,
         run_result=proc,
         read_result={
@@ -1705,17 +1705,20 @@ def test_process_cdm_job_headless_success(monkeypatch: pytest.MonkeyPatch) -> No
         "psexec_rc": 0,
         "vbs_log": None,
         "log": "Status przetwarzania zadania: Sukces",
+        "detail": None,
     }
     run.assert_called_once()
     args, kwargs = run.call_args
     assert args[0] == headless.DEFAULT_MACHINE
-    assert args[1].endswith(os.path.join("vbs_hp_cli.vbs"))
+    assert args[1].endswith(".vbs")
+    assert "vbs_hp_cli_" in args[1]
     assert kwargs == {"timeout_seconds": 300}
+    read.assert_called_once_with("JOB-001", "C:/out", min_mtime=ANY)
 
 
 def test_process_cdm_job_headless_custom_machine(monkeypatch: pytest.MonkeyPatch) -> None:
     proc = MagicMock(returncode=0)
-    run = _mock_headless_process(
+    run, _ = _mock_headless_process(
         monkeypatch,
         run_result=proc,
         read_result={"success": True, "status": "Sukces", "log": ""},
@@ -1757,12 +1760,17 @@ def test_process_cdm_job_missing_result(monkeypatch: pytest.MonkeyPatch) -> None
     _mock_headless_process(
         monkeypatch,
         run_result=MagicMock(returncode=0),
-        read_result={"success": False, "status": "missing"},
+        read_result={
+            "success": False,
+            "status": "missing",
+            "detail": "job log not found: C:/out/JOB-001/JOB-001.log",
+        },
     )
     result = Application(MagicMock()).process_cdm_job("JOB-001", method="vbs")
     assert result["success"] is False
     assert result["status"] == "missing"
     assert result["log"] is None
+    assert result["detail"] == "job log not found: C:/out/JOB-001/JOB-001.log"
 
 
 def test_process_cdm_job_not_found(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -1817,21 +1825,22 @@ def _mock_inproc_process(
     output_root: str | None = "C:/out",
     count: int | None = 1,
     read_result: dict[str, object] | None = None,
-) -> MagicMock:
+) -> tuple[MagicMock, MagicMock]:
     monkeypatch.setattr("alphacam_cli.core.cdm_db.job_count", MagicMock(return_value=count))
     monkeypatch.setattr(
         "alphacam_cli.core.cdm_db.job_output_root", MagicMock(return_value=output_root)
     )
     run = MagicMock()
+    read = MagicMock(return_value=read_result)
     monkeypatch.setattr(
         "alphacam_cli.core.application.headless.read_job_result",
-        MagicMock(return_value=read_result),
+        read,
     )
-    return run
+    return run, read
 
 
 def test_process_cdm_job_inproc_success(monkeypatch: pytest.MonkeyPatch) -> None:
-    run = _mock_inproc_process(
+    run, read = _mock_inproc_process(
         monkeypatch,
         read_result={
             "success": True,
@@ -1850,10 +1859,11 @@ def test_process_cdm_job_inproc_success(monkeypatch: pytest.MonkeyPatch) -> None
     assert result["elapsed_s"] >= 0
     assert result["log"] == "Status przetwarzania zadania: Sukces"
     run.Run.assert_called_once_with("ApplyMachiningAfterNesting.Events.HeadlessProcess", "JOB-001")
+    read.assert_called_once_with("JOB-001", "C:/out", min_mtime=ANY)
 
 
 def test_process_cdm_job_inproc_default_is_inproc(monkeypatch: pytest.MonkeyPatch) -> None:
-    run = _mock_inproc_process(monkeypatch, read_result={"success": False, "status": "missing"})
+    run, _ = _mock_inproc_process(monkeypatch, read_result={"success": False, "status": "missing"})
     result = Application(run).process_cdm_job("JOB-001")
     assert result["method"] == "inproc"
     run.Run.assert_called_once()
@@ -1862,7 +1872,7 @@ def test_process_cdm_job_inproc_default_is_inproc(monkeypatch: pytest.MonkeyPatc
 def test_process_cdm_job_inproc_com_error_propagates(monkeypatch: pytest.MonkeyPatch) -> None:
     import pythoncom
 
-    run = _mock_inproc_process(monkeypatch)
+    run, _ = _mock_inproc_process(monkeypatch)
     run.Run.side_effect = pythoncom.com_error(
         -2147417842, "Aplikacja wywołała interfejs, który został skierowany na inny wątek"
     )
@@ -1872,7 +1882,7 @@ def test_process_cdm_job_inproc_com_error_propagates(monkeypatch: pytest.MonkeyP
 
 
 def test_process_cdm_job_inproc_com_failure(monkeypatch: pytest.MonkeyPatch) -> None:
-    run = _mock_inproc_process(monkeypatch)
+    run, _ = _mock_inproc_process(monkeypatch)
     run.Run.side_effect = OSError("0x80004002")
     with pytest.raises(RuntimeError, match=r"cdm: process job failed: .*0x80004002"):
         Application(run).process_cdm_job("JOB-001")

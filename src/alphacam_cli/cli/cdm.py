@@ -92,6 +92,11 @@ def process(
     out-of-process fallback (no COM from this process).
     """
     require_platform()
+    if method == "inproc" and (timeout != 300 or psexec is not None):
+        console.print(
+            "[yellow]WARNING:[/yellow] --timeout/--psexec are ignored with --method inproc "
+            "(only used by vbs fallback)"
+        )
     kwargs: dict[str, Any] = {"job_name": job_name}
     if timeout != 300:
         kwargs["timeout_seconds"] = timeout

@@ -21,8 +21,8 @@ def _vbs_quote(value: str) -> str:
     return value.replace('"', '""')
 
 
-def build_vbs(job_name: str, out_vbs: str, out_log: str) -> str:
-    """Return the headless VBScript text (caller persists it to ``out_vbs``).
+def build_vbs(job_name: str, out_log: str) -> str:
+    """Return the headless VBScript text.
 
     The script attaches to the running AlphaCAM instance, runs the
     ``ApplyMachiningAfterNesting.Events.HeadlessProcess`` macro with
@@ -80,16 +80,36 @@ def _job_log_candidates(job_name: str, output_root: str) -> list[str]:
     return candidates
 
 
-def read_job_result(job_name: str, output_root: str) -> dict[str, Any]:
+def read_job_result(
+    job_name: str, output_root: str, min_mtime: float | None = None
+) -> dict[str, Any]:
     """Read the Automation Manager job log and return its status as a dict.
 
     ``status`` is the value after ``"Status przetwarzania zadania:"`` (stripped);
     ``success`` is True only when ``status`` contains ``"Sukces"`` (case-sensitive).
+    When ``min_mtime`` is given, log files modified before it are skipped as if
+    they did not exist.
     """
+    if "/" in job_name or "\\" in job_name or job_name in (".", ".."):
+        return {
+            "success": False,
+            "status": "missing",
+            "detail": f"invalid job name: {job_name}",
+        }
     candidates = _job_log_candidates(job_name, output_root)
+    stale_path: str | None = None
     for path in candidates:
         if not os.path.exists(path):
             continue
+        if min_mtime is not None:
+            try:
+                mtime = os.path.getmtime(path)
+            except OSError as e:
+                return {"success": False, "status": "read_error", "detail": str(e)}
+            if mtime < min_mtime:
+                if stale_path is None:
+                    stale_path = path
+                continue
         try:
             with open(path, encoding="utf-8", errors="replace") as fh:
                 log = fh.read()
@@ -100,13 +120,23 @@ def read_job_result(job_name: str, output_root: str) -> dict[str, Any]:
             if "Status przetwarzania zadania:" in line:
                 status = line.split(":", 1)[1].strip()
                 break
+        try:
+            file_mtime = os.path.getmtime(path)
+        except OSError as e:
+            return {"success": False, "status": "read_error", "detail": str(e)}
         result: dict[str, Any] = {
             "success": "Sukces" in status,
             "status": status,
             "log": log,
-            "file_mtime": os.path.getmtime(path),
+            "file_mtime": file_mtime,
         }
         return result
+    if stale_path is not None:
+        return {
+            "success": False,
+            "status": "missing",
+            "detail": f"job log is stale (mtime older than process start): {stale_path}",
+        }
     return {
         "success": False,
         "status": "missing",

@@ -28,6 +28,7 @@ from alphacam_cli.gateway.protocol import (
 CONNECT_TIMEOUT = 180
 _RPC_E_CHANGED_MODE = -2147417850
 _DRILL_MAP: dict[str, int] = {"drill": 0, "tap": 1, "peck": 3}
+_MACHINE_KEYS = frozenset({"psexec", "psexec_args", "cscript", "use_shell"})
 _NEST_TYPELIB_GUID = "{6702E3DF-142C-4627-8EA2-4C47EBC78441}"
 
 _NEST_OPT_PROPERTIES: dict[str, str] = {
@@ -266,6 +267,8 @@ class GatewayServer:
         start_q: queue.Queue[Any] = queue.Queue()
 
         def sta_worker() -> None:
+            from win32com.client import gencache  # type: ignore[import-untyped]
+
             from alphacam_cli.com.constants import PROG_IDS
 
             com_ok = False
@@ -282,10 +285,11 @@ class GatewayServer:
             for pid in PROG_IDS:
                 try:
                     ac_app = win32.GetActiveObject(pid)
+                    ac_app = gencache.EnsureDispatch(ac_app)
                     break
                 except Exception:
                     try:
-                        ac_app = win32.Dispatch(pid)
+                        ac_app = gencache.EnsureDispatch(pid)
                         owned = True
                         break
                     except Exception:
@@ -398,6 +402,16 @@ class GatewayServer:
             self._call_queue.put((lambda: None, queue.Queue(), "stop"))
             self._sta_thread.join(timeout=10)
 
+    def _watchdog_arm(self, seconds: float, label: str) -> threading.Timer:
+        timer = threading.Timer(seconds, self._watchdog_fire, args=(label, seconds))
+        timer.daemon = True
+        timer.start()
+        return timer
+
+    def _watchdog_fire(self, label: str, seconds: float) -> None:
+        self._logger.critical("WATCHDOG: %s exceeded %.0fs — forcing service exit", label, seconds)
+        os._exit(1)
+
     def _handler_ping(self, params: dict[str, Any]) -> dict[str, bool]:
         return {"pong": True}
 
@@ -458,376 +472,33 @@ class GatewayServer:
             raise COMError(f"drawing query failed: {e}") from e
         return {"success": True, "count": int(count)}
 
-    def _handler_probe_nest(self, params: dict[str, Any]) -> dict[str, str]:
-        from alphacam_cli.gateway.server import _app as com_app
-
-        out: dict[str, str] = {}
-        d = None
-        try:
-            d = com_app.get_active_drawing()
-            out["active_drawing"] = "OK" if d else "None"
-        except Exception as e:
-            out["active_drawing"] = f"FAIL: {e!r}"
-        if d is not None:
-            try:
-                nd = d.create_nest_data(str(params.get("path", r"C:\temp\nest_out\nest.anl")))
-                out["create_nest_data"] = f"OK: {nd}"
-            except Exception as e:
-                out["create_nest_data"] = f"FAIL: {e!r}"
-        try:
-            raw = com_app._app.Nesting  # type: ignore[attr-defined]
-            out["app_nesting"] = f"OK: {raw}"
-        except Exception as e:
-            out["app_nesting"] = f"FAIL: {e!r}"
-        try:
-            import win32com.client as w32  # type: ignore[import-untyped]
-
-            raw = w32.Dispatch("AcamNest.Nesting")
-            out["dispatch_acamnest"] = f"OK: {raw}"
-        except Exception as e:
-            out["dispatch_acamnest"] = f"FAIL: {e!r}"
-        try:
-            import win32com.client.gencache as gencache  # type: ignore[import-untyped]
-
-            app2 = gencache.EnsureDispatch("Ar5axaps.Application")
-            out["gencache_app"] = f"OK: {app2}"
-            members = [
-                m for m in dir(app2) if any(s in m.lower() for s in ("nest", "level", "addin"))
-            ]
-            out["app2_members"] = f"{members}"
-            try:
-                n3 = app2.Nesting
-                out["gencache_nesting"] = f"OK: {n3}"
-            except Exception as e:
-                out["gencache_nesting"] = f"FAIL: {e!r}"
-            for addin_name in (
-                r"C:\Program Files\Hexagon\ALPHACAM 2025\Add-Ins\Nesting\AcamRadNest.dll",
-            ):
-                try:
-                    r2 = app2.LoadAddIn(addin_name)
-                    out["load_addin_fullpath"] = f"OK: {r2}"
-                    n4 = app2.Nesting
-                    out["nesting_after_load_fullpath"] = f"OK: {n4}"
-                except Exception as e:
-                    out["load_addin_fullpath"] = f"FAIL: {e!r}"
-            try:
-                r5 = app2.EnableAddIn(
-                    r"C:\Program Files\Hexagon\ALPHACAM 2025\Add-Ins\Nesting\AcamRadNest.dll",
-                    True,
-                )
-                out["enable_addin_fullpath"] = f"OK: {r5}"
-                n6 = app2.Nesting
-                out["nesting_after_enable"] = f"OK: {n6}"
-            except Exception as e:
-                out["enable_addin_fullpath"] = f"FAIL: {e!r}"
-            for fn, args in (
-                ("EnableAddIn", ("Nesting",)),
-                ("EnableAddIn", ("AcamRadNest",)),
-                ("EnableAddIn", ("AcamNest",)),
-            ):
-                try:
-                    r5 = getattr(app2, fn)(*args)
-                    out[f"{fn}{args}"] = f"OK: {r5}"
-                except Exception as e:
-                    out[f"{fn}{args}"] = f"FAIL: {e!r}"
-            try:
-                out["IsAlphaNest_value"] = f"OK: {app2.IsAlphaNest}"
-            except Exception as e:
-                out["IsAlphaNest_value"] = f"FAIL: {e!r}"
-            try:
-                out["LoadAddIn_sig"] = f"OK: {app2.LoadAddIn.__doc__}"
-            except Exception as e:
-                out["LoadAddIn_sig"] = f"FAIL: {e!r}"
-            try:
-                out["EnableAddIn_sig"] = f"OK: {app2.EnableAddIn.__doc__}"
-            except Exception as e:
-                out["EnableAddIn_sig"] = f"FAIL: {e!r}"
-        except Exception as e:
-            out["gencache_app"] = f"FAIL: {e!r}"
-        try:
-            com_app.get_active_drawing()
-            out["materials"] = "n/a"
-        except Exception as e:
-            out["materials"] = f"FAIL: {e!r}"
-        try:
-            import win32com.client.gencache as gencache  # type: ignore[import-untyped]
-
-            mod = gencache.EnsureModule("{6702E3DF-142C-4627-8EA2-4C47EBC78441}", 0, 1, 3)
-            out["ensuremodule"] = f"OK: {mod!r}"
-        except Exception as e:
-            out["ensuremodule"] = f"FAIL: {e!r}"
-        app3: Any = None
-        n: Any = None
-        try:
-            import win32com.client.gencache as gencache  # type: ignore[import-untyped]
-
-            app3 = gencache.EnsureDispatch("Ar5axaps.Application")
-            n = app3.Nesting
-            out["nesting_after_ensure"] = f"OK: {n!r}"
-        except Exception as e:
-            out["nesting_after_ensure"] = f"FAIL: {e!r}"
-        if n is not None:
-            db: Any = None
-            try:
-                db = n.SheetDatabase
-                out["sheetdatabase"] = f"OK: {db!r}"
-            except Exception as e:
-                out["sheetdatabase"] = f"FAIL: {e!r}"
-            mat_coll: Any = None
-            try:
-                mat_coll = db.Materials
-                out["materials"] = f"OK count={mat_coll.Count}"
-            except Exception as e:
-                out["materials"] = f"FAIL: {e!r}"
-            mat0: Any = None
-            if mat_coll is not None:
-                try:
-                    mat0 = mat_coll.Item(1)
-                    out["material0"] = f"OK: {mat0.Name}"
-                except Exception as e:
-                    out["material0"] = f"FAIL: {e!r}"
-            mat: Any = None
-            if mat0 is not None:
-                try:
-                    mat = mat0.FindMaterial(mat0.Name)
-                    out["findmaterial"] = f"OK: {mat!r}"
-                except Exception as e:
-                    out["findmaterial"] = f"FAIL: {e!r}"
-            thick: Any = None
-            if mat is not None:
-                try:
-                    thick = mat.FindThickness(18.0, "mm")
-                    out["thickness18"] = f"OK: {thick!r}"
-                except Exception as e:
-                    out["thickness18"] = f"FAIL: {e!r}"
-            if thick is not None:
-                try:
-                    ws = thick.WholeSheets
-                    wcount = ws.Count
-                    sheet_names: list[str] = []
-                    for i in range(1, wcount + 1):
-                        if len(sheet_names) >= 5:
-                            break
-                        try:
-                            s = ws.Item(i)
-                            sheet_names.append(f"{s.Name} {s.Width}x{s.Height}x{s.Quantity}")
-                        except Exception as e:
-                            sheet_names.append(f"item{i} FAIL: {e!r}")
-                    out["wholesheets"] = f"OK count={wcount} first={sheet_names}"
-                except Exception as e:
-                    out["wholesheets"] = f"FAIL: {e!r}"
-            try:
-                sheet = db.FindSheet("MDF_18")
-                out["findsheet"] = (
-                    f"OK: {sheet.Name} {sheet.Width}x{sheet.Height}x{sheet.Quantity} "
-                    f"mat={sheet.Material.Name}"
-                )
-            except Exception as e:
-                out["findsheet"] = f"FAIL: {e!r}"
-            sheet2: Any = None
-            paths2: Any = None
-            try:
-                sheet2 = db.FindSheet("MDF_18")
-                paths2 = sheet2.InsertInActiveDrawingAtPoint(0.0, 0.0)
-                out["sheet_insert_paths"] = f"OK: {paths2!r} type={type(paths2).__name__}"
-            except Exception as e:
-                out["sheet_insert_paths"] = f"FAIL: {e!r}"
-            try:
-                drw2 = com_app.get_active_drawing()
-                out["drawing_after_sheet_insert"] = (
-                    f"OK geometries={drw2.geometries_count} tool_paths={drw2.tool_paths_count}"
-                )
-            except Exception as e:
-                out["drawing_after_sheet_insert"] = f"FAIL: {e!r}"
-            nd2: Any = None
-            try:
-                drw2b = com_app.get_active_drawing()
-                nd2 = drw2b.create_nest_data(r"C:\temp\nest_out\nest.anl")
-                out["nd2"] = f"OK: {nd2!r}"
-            except Exception as e:
-                out["nd2"] = f"FAIL: {e!r}"
-            if nd2 is not None:
-                try:
-                    r = nd2.AddSheet(paths2.Item(1), sheet2.Material.Name, 18, sheet2.Quantity)
-                    out["addsheet_item1"] = f"OK: {r!r}"
-                except Exception as e:
-                    out["addsheet_item1"] = f"FAIL: {e!r}"
-                try:
-                    r = nd2.DoNest()
-                    out["donest_item1"] = f"OK: {r!r}"
-                except Exception as e:
-                    out["donest_item1"] = f"FAIL: {e!r}"
-                try:
-                    drw3 = com_app.get_active_drawing()
-                    out["drawing_after_nest_item1"] = (
-                        f"OK geometries={drw3.geometries_count} tool_paths={drw3.tool_paths_count}"
-                    )
-                except Exception as e:
-                    out["drawing_after_nest_item1"] = f"FAIL: {e!r}"
-                if out.get("addsheet_item1", "").startswith("FAIL"):
-                    try:
-                        r = nd2.AddSheet(paths2, sheet2.Material.Name, 18, sheet2.Quantity)
-                        out["addsheet_collection"] = f"OK: {r!r}"
-                    except Exception as e:
-                        out["addsheet_collection"] = f"FAIL: {e!r}"
-                    try:
-                        r = nd2.DoNest()
-                        out["donest_collection"] = f"OK: {r!r}"
-                    except Exception as e:
-                        out["donest_collection"] = f"FAIL: {e!r}"
-                nst: Any = None
-                try:
-                    nst = n
-                    out["nestlist_nesting"] = f"OK: {nst!r}"
-                except Exception as e:
-                    out["nestlist_nesting"] = f"FAIL: {e!r}"
-                if nst is not None:
-                    try:
-                        nst.SuppressDialogs = True
-                        out["nestlist_suppress"] = f"OK: {nst.SuppressDialogs!r}"
-                    except Exception as e:
-                        out["nestlist_suppress"] = f"FAIL: {e!r}"
-                    nl: Any = None
-                    try:
-                        nl = nst.NewNestList(r"C:\temp\nest_out\nest_full.anl")
-                        out["nestlist_new"] = f"OK: {nl!r}"
-                    except Exception as e:
-                        out["nestlist_new"] = f"FAIL: {e!r}"
-                    np: Any = None
-                    if nl is not None:
-                        try:
-                            np = nl.AddFile(r"C:\Users\48797\Documents\Kmil elementy\cz1.ard")
-                            out["nestlist_addfile"] = f"OK: {np!r}"
-                        except Exception as e:
-                            out["nestlist_addfile"] = f"FAIL: {e!r}"
-                        try:
-                            np.Required = 2
-                            out["nestlist_required"] = f"OK: {np.Required!r}"
-                        except Exception as e:
-                            out["nestlist_required"] = f"FAIL: {e!r}"
-                        for attr_name, key, value in (
-                            ("TotalTime", "nestlist_total_time", 15),
-                            ("OptimiseLevel", "nestlist_opt_level", 1),
-                            ("PartGap", "nestlist_part_gap", 5.0),
-                            ("EdgeGap", "nestlist_edge_gap", 10.0),
-                            ("LeadInGap", "nestlist_lead_gap", 1.5),
-                            ("CutWidth", "nestlist_cut_width", 0.0),
-                            ("NestingMethod", "nestlist_method", 0),
-                            ("OptimiseForCuts", "nestlist_opt_cuts", 0),
-                            ("UseSubroutines", "nestlist_subroutines", False),
-                            ("PreventApertureNest", "nestlist_no_aperture", True),
-                            ("OrderByPart", "nestlist_order_part", False),
-                            ("SelectBestSheet", "nestlist_best_sheet", 0),
-                        ):
-                            try:
-                                setattr(nl, attr_name, value)
-                                out[key] = f"OK: {getattr(nl, attr_name)!r}"
-                            except Exception as e:
-                                out[key] = f"FAIL: {e!r}"
-                        sl: Any = None
-                        try:
-                            sl = nst.NewSheetList()
-                            out["nestlist_sheetlist"] = f"OK: {sl!r}"
-                        except Exception as e:
-                            out["nestlist_sheetlist"] = f"FAIL: {e!r}"
-                        ns: Any = None
-                        if sl is not None:
-                            try:
-                                ns = sl.Add(paths2.Item(1))
-                                out["nestlist_sheet_add"] = f"OK: {ns!r}"
-                            except Exception as e:
-                                out["nestlist_sheet_add"] = f"FAIL: {e!r}"
-                            try:
-                                ns.Required = 1
-                                ns.Thickness = 18.0
-                                out["nestlist_sheet_params"] = (
-                                    f"OK: required={ns.Required!r} thickness={ns.Thickness!r}"
-                                )
-                            except Exception as e:
-                                out["nestlist_sheet_params"] = f"FAIL: {e!r}"
-                            result: Any = None
-                            try:
-                                result = nst.Nest(nl, sl)
-                                out["nestlist_nest"] = f"OK: {result!r}"
-                            except Exception as e:
-                                out["nestlist_nest"] = f"FAIL: {e!r}"
-                            try:
-                                out["nestlist_result_count"] = f"OK: {result.Count}"
-                            except Exception as e:
-                                out["nestlist_result_count"] = f"FAIL: {e!r}"
-                            try:
-                                drw4 = com_app.get_active_drawing()
-                                out["drawing_after_nestlist"] = (
-                                    "OK geometries="
-                                    f"{drw4.geometries_count} tool_paths={drw4.tool_paths_count}"
-                                )
-                            except Exception as e:
-                                out["drawing_after_nestlist"] = f"FAIL: {e!r}"
-                    try:
-                        nst.DeleteAllNestLists()
-                        out["nestlist_cleanup"] = "OK"
-                    except Exception as e:
-                        out["nestlist_cleanup"] = f"FAIL: {e!r}"
-        elif app3 is not None:
-            n2: Any = None
-            try:
-                n2 = app3.GetNestInformation()
-                out["nest_information"] = f"OK: {n2!r}"
-            except Exception as e:
-                out["nest_information"] = f"FAIL: {e!r}"
-            try:
-                sdb = n2.SheetDB
-                out["sheetdb_legacy"] = f"OK: {sdb!r}"
-                paths = sdb.InsertSheet(0)
-                out["sheetdb_insert0"] = f"OK: {paths!r} type={type(paths).__name__}"
-            except Exception as e:
-                out["sheetdb_insert0"] = f"FAIL: {e!r}"
-        else:
-            out["sheetdb_insert0"] = "SKIP: nesting and app3 unavailable"
-        stl_d: Any = None
-        try:
-            stl_d = com_app.open_cad_file(r"C:\temp\nest_out\slotted_disk.stl", "stl")
-            out["stl_import"] = (
-                f"OK geometries={stl_d.geometries_count}" if stl_d else "OK drawing=None"
-            )
-        except Exception as e:
-            out["stl_import"] = f"FAIL: {e!r}"
-        if stl_d is not None:
-            try:
-                stl_d._drw.SetGeosSelected(True)  # type: ignore[attr-defined]
-                out["stl_select"] = "OK"
-            except Exception as e:
-                out["stl_select"] = f"FAIL: {e!r}"
-            for stl_type in (0, 1, 2):
-                try:
-                    stl_d._drw.SaveStlFile(  # type: ignore[attr-defined]
-                        rf"C:\temp\nest_out\stl_t{stl_type}.stl", stl_type, 0.1
-                    )
-                    out[f"stl_export_t{stl_type}"] = "OK"
-                except Exception as e:
-                    out[f"stl_export_t{stl_type}"] = f"FAIL: {e!r}"
-            try:
-                stl_d._drw.SetGeosSelected(False)  # type: ignore[attr-defined]
-                out["stl_deselect"] = "OK"
-            except Exception as e:
-                out["stl_deselect"] = f"FAIL: {e!r}"
-
-        return out
-
     def _cdm_automation_manager(self) -> Any:
-        """Return the IAutomationManager via GetAutomationManagerAddInGUI (headless-safe)."""
+        import time
+
         import pythoncom  # type: ignore[import-untyped]
         import win32com.client as w32  # type: ignore[import-untyped]
-
-        from alphacam_cli.gateway.server import _app as com_app
+        from win32com.client import gencache  # type: ignore[import-untyped]
 
         clsid = pythoncom.MakeIID("{39BFE38A-D3E4-43EA-89D0-584C776B97A9}")
-        ai = w32.Dispatch(
-            pythoncom.CoCreateInstance(clsid, None, pythoncom.CLSCTX_ALL, pythoncom.IID_IDispatch)
-        )
-        raw = getattr(com_app, "_app", None) or getattr(com_app, "raw_dispatch", None)
-        addins = ai.GetAddInsInterface(raw)
-        return addins.GetAutomationManagerAddInGUI()
+        last_error: Exception | None = None
+        for attempt in range(3):
+            try:
+                app = gencache.EnsureDispatch("Ar5axaps.Application")
+                ai = w32.Dispatch(
+                    pythoncom.CoCreateInstance(
+                        clsid, None, pythoncom.CLSCTX_ALL, pythoncom.IID_IDispatch
+                    )
+                )
+                addins = ai.GetAddInsInterface(app)
+                return addins.GetAutomationManagerAddInGUI()
+            except Exception as e:
+                last_error = e
+                self._logger.warning(
+                    "cdm: automation manager attempt %d failed: %s", attempt + 1, e
+                )
+                if attempt < 2:
+                    time.sleep(3)
+        raise COMError(f"cdm: automation manager unavailable: {last_error}")
 
     def _handler_create_cdm_job(self, params: dict[str, Any]) -> dict[str, Any]:
         job_name = str(params.get("job_name") or "").strip()
@@ -866,9 +537,25 @@ class GatewayServer:
         machine = params.get("machine")
         if machine is not None and not isinstance(machine, dict):
             raise COMError("cdm: machine must be a dict")
+        if machine is not None:
+            machine = {k: v for k, v in machine.items() if k in _MACHINE_KEYS}
+            for key in ("psexec", "cscript"):
+                if key in machine and not isinstance(machine[key], str):
+                    raise COMError(f"cdm: machine.{key} must be a str")
+            if "psexec_args" in machine:
+                psexec_args = machine["psexec_args"]
+                if not isinstance(psexec_args, list) or not all(
+                    isinstance(a, str) for a in psexec_args
+                ):
+                    raise COMError("cdm: machine.psexec_args must be a list of str")
+            machine["use_shell"] = False
         timeout_seconds = params.get("timeout_seconds")
-        if timeout_seconds is not None and not isinstance(timeout_seconds, int):
-            raise COMError("cdm: timeout_seconds must be an int")
+        if timeout_seconds is not None and (
+            not isinstance(timeout_seconds, int)
+            or isinstance(timeout_seconds, bool)
+            or timeout_seconds <= 0
+        ):
+            raise COMError("cdm: timeout_seconds must be a positive int")
         output_root = params.get("output_root")
         if output_root is not None and not isinstance(output_root, str):
             raise COMError("cdm: output_root must be a str")
@@ -888,10 +575,15 @@ class GatewayServer:
             call_kwargs["output_root"] = output_root
         if method is not None:
             call_kwargs["method"] = method
+        watchdog = self._watchdog_arm(
+            max(60.0, float(timeout_seconds or 0)) + 30.0, f"process_cdm_job({job_name})"
+        )
         try:
             return com_app.process_cdm_job(**call_kwargs)  # type: ignore[no-any-return]
         except Exception as e:
             raise COMError(str(e)) from e
+        finally:
+            watchdog.cancel()
 
     def _handler_cdm_types(self, params: dict[str, Any]) -> dict[str, Any]:
         try:

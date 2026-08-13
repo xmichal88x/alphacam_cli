@@ -4,7 +4,6 @@ import csv
 from typing import Any
 from unittest.mock import MagicMock, mock_open, patch
 
-import win32com.client.gencache as gencache  # type: ignore[import-untyped]
 from typer.testing import CliRunner
 
 from alphacam_cli.main import app
@@ -12,9 +11,6 @@ from alphacam_cli.main import app
 runner = CliRunner()
 
 CSV_DATA = "filename,count\npart1.amd,3\npart2.amd,5\n"
-
-# conftest wstrzykuje MagicMock jako win32com.client.gencache w sys.modules
-_gencache: Any = gencache
 
 
 class _BadFloat:
@@ -33,7 +29,6 @@ class _RaiseOnAttr:
 
 def _advanced_mocks() -> tuple[MagicMock, MagicMock]:
     nest_app = MagicMock()
-    _gencache.EnsureDispatch.return_value = nest_app
     nesting = nest_app.Nesting
     nesting.Nest.return_value = MagicMock(Count=1)
     return nest_app, nesting
@@ -150,7 +145,7 @@ def test_nest_run_advanced() -> None:
     nest_part = nesting.NewNestList.return_value.AddFile.return_value
     nest_sheet = nesting.NewSheetList.return_value.Add.return_value
     with (
-        _mock_com(),
+        _mock_com(app_mock=nest_app),
         patch("os.path.isfile", return_value=True),
         patch("builtins.open", mock_open(read_data=CSV_DATA)),
     ):
@@ -159,8 +154,6 @@ def test_nest_run_advanced() -> None:
     assert "Nesting completed" in result.stderr
     assert "Total parts: 8" in result.stderr
     assert "Un-nested parts: 1" in result.stderr
-    _gencache.EnsureModule.assert_called_once()
-    _gencache.EnsureDispatch.assert_called_once_with("Ar5axaps.Application")
     nesting.NewNestList.assert_called_once()
     assert nest_part.Required == 5
     assert nest_sheet.Required == 1
@@ -174,7 +167,7 @@ def test_nest_run_advanced_options() -> None:
     nest_app, nesting = _advanced_mocks()
     nl = nesting.NewNestList.return_value
     with (
-        _mock_com(),
+        _mock_com(app_mock=nest_app),
         patch("os.path.isfile", return_value=True),
         patch("builtins.open", mock_open(read_data=CSV_DATA)),
     ):
@@ -246,7 +239,7 @@ def test_nest_run_advanced_sheet_from_library() -> None:
     sheet = nesting.SheetDatabase.FindSheet.return_value
     sheet.Thickness.Thickness = 19.0
     with (
-        _mock_com(),
+        _mock_com(app_mock=nest_app),
         patch("os.path.isfile", return_value=True),
         patch("builtins.open", mock_open(read_data=CSV_DATA)),
     ):
@@ -267,7 +260,7 @@ def test_nest_run_advanced_sheet_thickness_fallback() -> None:
     sheet = nesting.SheetDatabase.FindSheet.return_value
     sheet.Thickness.Thickness = _BadFloat()
     with (
-        _mock_com(),
+        _mock_com(app_mock=nest_app),
         patch("os.path.isfile", return_value=True),
         patch("builtins.open", mock_open(read_data=CSV_DATA)),
     ):
@@ -284,7 +277,7 @@ def test_nest_run_advanced_sheet_not_found() -> None:
     nest_app, nesting = _advanced_mocks()
     nesting.SheetDatabase.FindSheet.side_effect = Exception("not in library")
     with (
-        _mock_com(),
+        _mock_com(app_mock=nest_app),
         patch("os.path.isfile", return_value=True),
         patch("builtins.open", mock_open(read_data=CSV_DATA)),
     ):
@@ -323,7 +316,7 @@ def test_nest_run_sheet_from_library() -> None:
     sheet.Quantity = 2
     paths = sheet.InsertInActiveDrawingAtPoint.return_value
     with (
-        _mock_com() as mock_app,
+        _mock_com(app_mock=nest_app) as mock_app,
         patch("os.path.isfile", return_value=True),
         patch("builtins.open", mock_open(read_data=CSV_DATA)),
     ):
@@ -345,7 +338,7 @@ def test_nest_run_sheet_thickness_fallback() -> None:
     sheet.Quantity = 1
     paths = sheet.InsertInActiveDrawingAtPoint.return_value
     with (
-        _mock_com() as mock_app,
+        _mock_com(app_mock=nest_app) as mock_app,
         patch("os.path.isfile", return_value=True),
         patch("builtins.open", mock_open(read_data=CSV_DATA)),
     ):
@@ -361,7 +354,7 @@ def test_nest_run_sheet_not_found() -> None:
     nest_app, nesting = _advanced_mocks()
     nesting.SheetDatabase.FindSheet.side_effect = Exception("not in library")
     with (
-        _mock_com(),
+        _mock_com(app_mock=nest_app),
         patch("os.path.isfile", return_value=True),
         patch("builtins.open", mock_open(read_data=CSV_DATA)),
     ):

@@ -151,3 +151,12 @@ Pytania testowe:
 - **Domyślnie: `--method inproc`** — procesowanie przez gateway na jednym
   procesie Acam (Session 0), bez PsExec, bez Session 1, ~36-41s.
 - Fallback vbs zostaje tylko dla środowisk z Acam w Session 1.
+
+## FIXLOOP (2026-08-13) — 4 iteracje review, 0 issues, build OK
+
+- Review 1: 15 issues → fixy A-G (szczegóły w tasks.md).
+- Review 2/3/4: N1-N6 + 3 LOW + 1 minor → fixy.
+- Final: 0 issues; ruff/mypy czyste; pytest 867 passed; build wheel OK.
+- E2E sanity: "Fixloop Sanity 01" 38.5s Sukces (NC 1744 B, .ard 84466 B).
+- Zabezpieczenia dodane: RCE fix (whitelist machine, use_shell=False), path traversal (job_name), stale log fix (min_mtime z zegara ściennego).
+- Otwarte: watchdog STA dla inproc (TASKS.md).

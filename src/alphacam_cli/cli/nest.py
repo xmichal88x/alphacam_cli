@@ -152,11 +152,7 @@ def run(
         # Create sheet geometry (from library or rectangle) and run nesting
         console.print(f"[yellow]Nesting {len(parts)} part types...[/yellow]")
         if advanced:
-            import win32com.client.gencache as gencache  # type: ignore[import-untyped]
-
-            gencache.EnsureModule("{6702E3DF-142C-4627-8EA2-4C47EBC78441}", 0, 1, 3)
-            app = gencache.EnsureDispatch("Ar5axaps.Application")
-            nesting = app.Nesting
+            nesting = raw.Nesting
             nesting.SuppressDialogs = True
             nl = nesting.NewNestList(anl_path)
             for part in parts:
@@ -241,12 +237,9 @@ def run(
             nd.LeadGap = lead_gap  # type: ignore[attr-defined]
 
         if sheet_name:
-            import win32com.client.gencache as gencache  # type: ignore[import-untyped]
-
-            gencache.EnsureModule("{6702E3DF-142C-4627-8EA2-4C47EBC78441}", 0, 1, 3)
-            app = gencache.EnsureDispatch("Ar5axaps.Application")
+            nesting = raw.Nesting
             try:
-                sheet = app.Nesting.SheetDatabase.FindSheet(sheet_name)
+                sheet = nesting.SheetDatabase.FindSheet(sheet_name)
             except Exception as e:
                 console.print(f"[red]nest: sheet from library not found: {sheet_name}[/red]")
                 raise typer.Exit(code=1) from e
