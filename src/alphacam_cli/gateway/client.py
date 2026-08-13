@@ -316,18 +316,12 @@ class RemoteSession:
     def process_cdm_job(
         self,
         job_name: str,
-        machine: dict[str, Any] | None = None,
         timeout_seconds: int = 300,
         output_root: str | None = None,
-        method: str | None = None,
     ) -> dict[str, Any]:
         params: dict[str, Any] = {"job_name": job_name, "timeout_seconds": timeout_seconds}
-        if machine is not None:
-            params["machine"] = machine
         if output_root is not None:
             params["output_root"] = output_root
-        if method is not None:
-            params["method"] = method
         sock = self._sock
         if sock is not None:
             sock.settimeout(max(self.timeout, timeout_seconds + 30))

@@ -667,10 +667,8 @@ def test_remote_process_cdm_job() -> None:
     assert result == {"success": True, "job_name": "JOB-001", "processed": True}
     session.process_cdm_job.assert_called_once_with(
         job_name="JOB-001",
-        machine=None,
         timeout_seconds=300,
         output_root=None,
-        method=None,
     )
 
 
@@ -682,26 +680,16 @@ def test_remote_process_cdm_job_full_params() -> None:
         "processed": True,
     }
     app = RemoteApplication(session)
-    machine = {
-        "psexec": "C:/temp/PsExec64.exe",
-        "psexec_args": ["-accepteula", "-i", "1", "-s"],
-        "cscript": "cscript",
-        "use_shell": False,
-    }
     result = app.process_cdm_job(
         job_name="JOB-001",
-        machine=machine,
         timeout_seconds=600,
         output_root="C:/out",
-        method="vbs",
     )
     assert result == {"success": True, "job_name": "JOB-001", "processed": True}
     session.process_cdm_job.assert_called_once_with(
         job_name="JOB-001",
-        machine=machine,
         timeout_seconds=600,
         output_root="C:/out",
-        method="vbs",
     )
 
 
@@ -718,15 +706,8 @@ def test_remote_session_process_cdm_job() -> None:
 def test_remote_session_process_cdm_job_full_params() -> None:
     client = RemoteSession()
     client._call = MagicMock(return_value={"success": True, "processed": True})  # type: ignore[method-assign]
-    machine = {
-        "psexec": "C:/temp/PsExec64.exe",
-        "psexec_args": ["-accepteula", "-i", "1", "-s"],
-        "cscript": "cscript",
-        "use_shell": False,
-    }
     client.process_cdm_job(
         job_name="JOB-001",
-        machine=machine,
         timeout_seconds=600,
         output_root="C:/out",
     )
@@ -735,7 +716,6 @@ def test_remote_session_process_cdm_job_full_params() -> None:
         {
             "job_name": "JOB-001",
             "timeout_seconds": 600,
-            "machine": machine,
             "output_root": "C:/out",
         },
     )

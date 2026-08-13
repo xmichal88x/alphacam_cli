@@ -1,10 +1,72 @@
 # TASKS.md — Alphacam CLI
 
-## Status: ~93% gotowości produkcyjnej — PRZED v1.0.0
+## Status: ~95% gotowości produkcyjnej — PRZED v1.0.0
 
-- ruff ✅ mypy src/ **0 błędów** ✅ pytest **165/165** (91.25% coverage) ✅ build wheel ✅
+- ruff ✅ mypy src/ **0 błędów** ✅ pytest **892 passed** ✅ build wheel ✅
 - COM safety: STA thread ✅ marshal ✅ cleanup (result_sent guard) ✅ keep_alive ✅
 - CI: publish workflow ✅ lint ✅ typecheck ✅ coverage gate 70% ✅
+- CDM 3 bloki (create/import/process): audyt produkcyjny + 8 fixów + E2E na maszynie ✅
+
+---
+
+## PRODUCTION AUDIT CDM create/import/process (2026-08-13, E2E laptop Monika)
+
+**Werdykt po naprawach: 0 blokerów. Pełny cykl E2E 2×: create→import--job→process (Sukces 35.0s/34.0s) + auto-create→dup-check→process (Sukces 34.0s); NC/.anl/.ard/log wygenerowane; materiał MDF_18 (id 2) na detalach; ActiveInProcess=True; 1 proces Acam.**
+
+### Fixy wdrożone (audyt → fix → E2E):
+- [x] **RCE wektor zamknięty (P0)**: usunięty tryb `vbs`/`machine` z całego kontraktu (CLI `--method`/`--psexec`, client/remote/server/core, headless `build_vbs`/`run_headless`). Jedyna metoda procesowania: makro in-proc. −539 linii kodu+testów.
+- [x] **Dedup importu (P0)**: server.py przestał re-implementować import CSV (usunięte ~290 linii helperów) — deleguje do core (wzorzec create). Ujednolicona semantyka: ActiveInProcess jawnie True + fallback DB, materiał ustawiany W OBU tabelach (AM_JobDetails + CDM_OrderDetails), default materiału z vdb5_job_defaults, cleanup 0-items, warningi materiału. (było 2 źródła prawdy z dryfem — P1 z audytu)
+- [x] **KLUCZOWY — cache AM (P1)**: core `get_automation_manager_addin` łączył AM przez MARSHALED `self._app` → świeże joby niewidoczne w `am.Jobs` (import --job po create failował "AM cache issue"). Fix: nowy `get_cdm_automation_manager` — wzorzec serwera (fresh `gencache.EnsureDispatch` + CoCreateInstance + GUI, retry 3×3s); server `_cdm_automation_manager` deleguje do core (dedup pre-existing #7). **E2E: import --job po create w osobnym RPC działa.**
+- [x] **Duplikat joba (P1)**: check "job already exists" przez `cdm_db.job_count` (baza, deterministyczny) zamiast `find_cdm_job` (COM cache) w create + import auto-create; import --job przy find=None → diagnostyczny komunikat cache. **E2E: dup import → "job already exists (use --job...)".**
+- [x] **Walidacja job_name na brzegu (P1)**: `_validate_job_name` w core (zakaz `/ \ : * ? " < > | . .. ` + control chars, max 60) — create/import/process + handlery RPC; polskie znaki i spacje przechodzą (E2E: "AudytE2E 002").
+- [x] **`_com_call` timeout (P1)**: `result_q.get(timeout=300s poll 30s)`; martwy wątek STA → czytelny COMError "STA worker died" (zamiast wiecznego wiszenia); żywy wątek → czeka (legalnie wolne operacje).
+- [x] **CLI (P1/P2)**: `--name`+`--job` → exit 2; process failure drukuje detail+log; pusty CSV → "No rows imported"; `result.get` zamiast KeyError.
+- [x] **Locale logu (P1)**: `read_job_result` — case-insensitive "sukces"/"success", status line match po "status"+":" (odporny na PL/EN locale).
+- [x] **docs/gateway.md**: kontrakt process bez vbs/machine; dodane import_cdm_csv/import_cdm_preview.
+- [x] Code review: 0 blokerów; uwagi (output_root strip, _sta_thread=None test, preview walidacja, read_error testy, backtick w forbidden chars) — wdrożone.
+
+### Weryfikacje maszynowe (rozstrzygnięte):
+- **ActiveInProcess**: detale po imporcie przez gateway mają True (COM default) — core ustawia jawnie (odporność na zmianę defaultu).
+- **Spacje w `-JobName:` ps1**: subprocess argv binduje poprawnie (test na maszynie: RC 0, `[]` zamiast błędu) — fix cudzysłowów NIEpotrzebny (false positive).
+- **SCM Recovery**: nssm bez AppExit → domyślny Restart + AppRestartDelay=5000ms — usługa wstaje sama po os._exit(1).
+- **vdb5_set_has_drilling off-by-N**: false positive — values z ok_details (count==detali w bazie), GetRange poprawny w obu trybach.
+- **Restart usługi**: przez ssh `sc stop/start` CICHO failował (2×) — używać `powershell Stop-Service/Start-Service` z weryfikacją PID Acam (StartTime!).
+
+### Otwarcie (po tej sesji):
+- [ ] **watchdog inproc → izolacja procesowania** (os._exit zabija całą usługę; recovery nssm potwierdzony, ale job wisi) — TASKS.md "Otwarte po fixloop"
+- [ ] `core/session.py` (plan A refaktoru) — jeden punkt połączenia COM; obecnie 4+ (sta_worker, run_nest ×2, get_cdm_automation_manager)
+- [ ] `scripts/e2e_cdm.sh` — skrypt E2E (restart → create → import → process → weryfikacja NC)
+- [ ] README: sekcja `cdm import` — auto-create wymaga settingu z CreateJob=1 (np. `--import-setting "sklep CSV"`; domyślny "Ustawienia Importu CSV 2" = CreateJob=0 → "job is required")
+- [ ] `get_automation_manager_addin` (core) — martwe API (0 użyć) po T2c; usunąć lub oznaczyć deprecated
+- [ ] probe_cdm_import.py/probe_cdm_process.py — nadal pakowane do exe (alphacam.spec:6)
+
+## FIXLOOP (2026-08-13) — 3 iteracje, 0 issues, build OK
+
+**Zakres:** 15 zmienionych plików (CDM audit fixes, uncommitted). Reviewer: 2 rundy (src + testy) + weryfikacja zarzutów w kodzie.
+
+**Iteracja 1 — issues znalezione przez reviewera i naprawione (3 fixy, 1 subagent = 1 fix):**
+- [x] **delete_job duplikacja** (medium): `_handler_cdm_delete_job` — pełna kopia logiki core → delegacja do `com_app.delete_cdm_job(job_name)` + `_validate_job_name` (server.py:670-681); 6 testów przepisanych na delegację
+- [x] **name niespójność gateway↔core** (low×2): core stripował tylko `job` (nie `name`) → `--name " "` mylący błąd; core obcinał `name[:60]` a gateway odrzucał >60 → ujednolicenie: `name = (name or "").strip() or None` w import_cdm_csv/preview; `_cdm_job_name` bez [:60] dla explicit name i kolumny CSV (basename zachowuje [:60]); +2 testy
+- [x] **CLI create/delete bez checka success** (low): defensywny `if not result.get("success")` → exit 1 (cdm.py create/delete); +2 testy
+
+**Iteracja 2 — runda C (testy): 0 blokerów; 3 zarzuty medium → FALSE POSITIVES (zweryfikowane w kodzie):**
+- fixture `server_app` patchuje modułowy `gateway.server._app` (nie CoCreateInstance) ✅ (test_gateway_server.py:18-24)
+- testy delegacji importu ISTNIEJĄ: delegates:1535, full_params:1562, preview_delegates:1727, error_wrapped:1700, job_exists_wrapped:1711 ✅
+- warnings przy sukcesie create są drukowane (cdm.py:62-64); testy CLI COMError istnieją (test_cli_cdm.py:214,574) ✅
+
+**Fix docs:** `import_cdm_preview` kontrakt w docs/gateway.md — `would_create_job` (nieistniejący klucz) → rzeczywisty `{success, setting, field_map, job_name, config, material, items, rows, errors, job}` (gateway.md:241)
+
+**Werdykt:** 0 issues — GOTOWE. `pytest 897 passed`, `ruff format/check 0`, `mypy 0`, `python -m build` OK (wheel+tar.gz).
+
+**Kaizen/pre-existing zapisane (NIE naprawiane w pętli):**
+- [ ] `_com_call`/`_sta_loop` gubi traceback wyjątku STA (putuje sam wyjątek) — dodać `with_traceback`/log na STA (low)
+- [ ] fixture `server_app` bez `create_autospec` — ryzyko "phantom methods" przy literówkach w handlerach (low)
+- [ ] `_handler_cdm_types` mylący komunikat "automation manager unavailable" gdy padnie iteracja `am.Jobs` (AM działał) (low)
+- [ ] `_sta_loop` `start_q.get(timeout=CONNECT_TIMEOUT)` bez obsługi `queue.Empty` — goły wyjątek przy timeout connect (pre-existing, low)
+- [ ] lazy-import `from alphacam_cli.gateway.server import _app` wewnątrz handlerów (styl pre-existing; przy `_app=None` komunikat "'NoneType'..." zamiast "not connected") (low)
+- [ ] `_cdm_job_name`: job_name z kolumny CSV >60 znaków → twardy błąd (świadoma zmiana T3; błąd nie wskazuje wiersza CSV) — dokumentacja w README (low)
+- [ ] testy delete: `failed` vs `no_delete_method` strukturalnie identyczne → parametrize (kosmetyka)
+- [ ] `test_import_cdm_csv_autocreate_whitespace_name_uses_basename` — asercja pośrednia (przez błąd dup-check) — zamienić na bezpośrednią (kosmetyka)
 
 ---
 

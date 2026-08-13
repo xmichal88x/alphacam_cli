@@ -1,9 +1,7 @@
 from __future__ import annotations
 
-import contextlib
 import glob
 import os
-import subprocess
 import time
 from datetime import datetime
 from typing import TYPE_CHECKING, Any, ClassVar
@@ -53,6 +51,45 @@ def _validate_due_date(date_str: str) -> None:
         raise RuntimeError(  # noqa: TRY003
             f"cdm: invalid due date: {date_str!r} (expected YYYY-MM-DD)"
         ) from None
+
+
+_JOB_NAME_MAX_LENGTH = 60
+_JOB_NAME_FORBIDDEN_CHARS = '/\\:*?"<>|`'
+_JOB_NAME_CONTROL_CHARS = tuple(chr(i) for i in range(32))
+
+
+def _validate_job_name(name: str) -> str:
+    """Validate a CDM job name at the edge and return the stripped name.
+
+    Rejects empty names, names longer than ``_JOB_NAME_MAX_LENGTH``
+    characters, ``.``/``..``, Windows path-forbidden characters
+    (``/ \\ : * ? " < > |``), backtick (PowerShell escape) and control
+    characters (VBA/macro safety).
+    Unicode letters (including Polish diacritics), digits, spaces, ``_``,
+    ``-`` and similar are allowed.
+    """
+    name = name.strip()
+    if not name:
+        raise RuntimeError("cdm: job_name is required")  # noqa: TRY003
+    if len(name) > _JOB_NAME_MAX_LENGTH:
+        raise RuntimeError(  # noqa: TRY003
+            f"cdm: invalid job name: {name!r} "
+            f"(max {_JOB_NAME_MAX_LENGTH} characters, got {len(name)})"
+        )
+    if name in (".", ".."):
+        raise RuntimeError(  # noqa: TRY003
+            f"cdm: invalid job name: {name!r} (forbidden characters: . ..)"
+        )
+    found = sorted({c for c in _JOB_NAME_FORBIDDEN_CHARS if c in name})
+    if found:
+        raise RuntimeError(  # noqa: TRY003
+            f"cdm: invalid job name: {name!r} (forbidden characters: {' '.join(found)})"
+        )
+    if any(c in _JOB_NAME_CONTROL_CHARS for c in name):
+        raise RuntimeError(  # noqa: TRY003
+            f"cdm: invalid job name: {name!r} (control characters are not allowed)"
+        )
+    return name
 
 
 class Application:
@@ -503,6 +540,42 @@ class Application:
             raise RuntimeError("Add-ins interface unavailable")  # noqa: TRY003
         return addins.GetAutomationManagerAddInGUI()
 
+    def get_cdm_automation_manager(self) -> Any:
+        """Return a fresh CDM Automation Manager (headless-safe).
+
+        Uses a fresh EnsureDispatch connection (same pattern as the gateway
+        server) so newly created CDM jobs are visible in am.Jobs; the
+        marshalled app reference used by get_addins does not see them.
+        """
+        try:
+            import pythoncom  # type: ignore[import-untyped]
+            import win32com.client as w32  # type: ignore[import-untyped]
+            from win32com.client import gencache  # type: ignore[import-untyped]
+        except ImportError as e:
+            raise RuntimeError(  # noqa: TRY003
+                "cdm: automation manager requires pywin32 (Windows only)"
+            ) from e
+        clsid = pythoncom.MakeIID(_ADDINS_INTERFACE_CLSID)
+        last_error: Exception | None = None
+        for attempt in range(3):
+            try:
+                app = gencache.EnsureDispatch("Ar5axaps.Application")
+                ai = w32.Dispatch(
+                    pythoncom.CoCreateInstance(
+                        clsid, None, pythoncom.CLSCTX_ALL, pythoncom.IID_IDispatch
+                    )
+                )
+                addins = ai.GetAddInsInterface(app)
+                return addins.GetAutomationManagerAddInGUI()
+            except Exception as e:
+                last_error = e
+                logger.warning("cdm: automation manager attempt %d failed: %s", attempt + 1, e)
+                if attempt < 2:
+                    time.sleep(3)
+        raise RuntimeError(  # noqa: TRY003
+            f"cdm: automation manager unavailable: {last_error}"
+        ) from last_error
+
     def create_cdm_job(
         self,
         job_name: str,
@@ -526,13 +599,16 @@ class Application:
         via a VistaDB UPDATE afterwards; when it fails the job is removed and
         the creation aborts.
         """
-        job_name = job_name.strip()
-        if not job_name:
-            raise RuntimeError("cdm: job_name is required")  # noqa: TRY003
+        job_name = _validate_job_name(job_name)
         if due_date is not None:
             _validate_due_date(due_date)
-        am = self.get_automation_manager_addin()
-        if cdm_db.find_cdm_job(am, job_name) is not None:
+        am = self.get_cdm_automation_manager()
+        count = cdm_db.job_count(job_name)
+        if count is None:
+            raise RuntimeError(  # noqa: TRY003
+                f"cdm: job existence check failed: {job_name}"
+            )
+        if count > 0:
             raise RuntimeError(f"cdm: job already exists: {job_name}")  # noqa: TRY003
         defaults: dict[str, Any] | None = None
         config_name = (config or "").strip()
@@ -663,105 +739,20 @@ class Application:
     def process_cdm_job(
         self,
         job_name: str,
-        machine: dict[str, Any] | None = None,
-        timeout_seconds: int = 300,
-        output_root: str | None = None,
-        method: str = "inproc",
-    ) -> dict[str, Any]:
-        """Process a CDM job via the ``ApplyMachiningAfterNesting`` macro.
-
-        ``method="inproc"`` (default) runs the macro in-process on the COM
-        reference held by this wrapper (``self._raw_app``) — no PsExec
-        required. ``method="vbs"`` falls back to the out-of-process path: a
-        VBScript is written to ``headless.DEFAULT_VBS_DIR`` and executed on
-        ``machine`` via PsExec; it attaches to the running AlphaCAM instance
-        and runs the macro. No COM calls are made from this process in the
-        vbs path (``Job.Process`` across processes hangs the machine).
-        Processing settings come from the job's configuration; the output
-        root comes from the database (``DrawingFileOutputLocation``) unless
-        ``output_root`` is given.
-        """
-        if method == "vbs":
-            job_name = job_name.strip()
-            if not job_name:
-                raise RuntimeError("cdm: job_name is required")  # noqa: TRY003
-            count = cdm_db.job_count(job_name)
-            if count is None:
-                raise RuntimeError(  # noqa: TRY003
-                    f"cdm: job existence check failed: {job_name}"
-                )
-            if count < 1:
-                raise RuntimeError(f"cdm: job not found: {job_name}")  # noqa: TRY003
-            if output_root is None:
-                output_root = cdm_db.job_output_root(job_name)
-            if not output_root:
-                raise RuntimeError(f"cdm: output root not found: {job_name}")  # noqa: TRY003
-            machine = machine or headless.DEFAULT_MACHINE
-            vbs_dir = headless.DEFAULT_VBS_DIR
-            stamp = f"{os.getpid()}_{int(time.time())}"
-            vbs_path = os.path.join(vbs_dir, f"vbs_hp_cli_{stamp}.vbs")
-            log_path = os.path.join(vbs_dir, f"vbs_hp_cli_{stamp}_out.txt")
-            try:
-                try:
-                    os.makedirs(vbs_dir, exist_ok=True)
-                    with open(vbs_path, "w", encoding="utf-8") as fh:
-                        fh.write(headless.build_vbs(job_name, log_path))
-                    t0_wall = time.time()
-                    proc = headless.run_headless(machine, vbs_path, timeout_seconds=timeout_seconds)
-                except subprocess.TimeoutExpired as e:
-                    raise RuntimeError(  # noqa: TRY003
-                        f"cdm: process job timed out after {timeout_seconds}s: {job_name}"
-                    ) from e
-                except Exception as e:
-                    raise RuntimeError(f"cdm: process job failed: {e}") from e  # noqa: TRY003
-                vbs_log: str | None = None
-                try:
-                    with open(log_path, encoding="utf-8", errors="replace") as fh:
-                        vbs_log = fh.read()
-                except OSError:
-                    vbs_log = None
-                result = headless.read_job_result(job_name, output_root, min_mtime=t0_wall)
-                success = bool(result.get("success"))
-                return {
-                    "success": success,
-                    "job_name": job_name,
-                    "status": result.get("status"),
-                    "processed": success,
-                    "method": "vbs",
-                    "psexec_rc": proc.returncode,
-                    "vbs_log": vbs_log,
-                    "log": result.get("log"),
-                    "detail": result.get("detail"),
-                }
-            finally:
-                for path in (vbs_path, log_path):
-                    with contextlib.suppress(OSError):
-                        os.remove(path)
-        if method == "inproc":
-            return self.process_cdm_job_inproc(job_name, timeout_seconds, output_root)
-        raise RuntimeError(  # noqa: TRY003
-            f"cdm: unknown method: {method} (expected inproc|vbs)"
-        )
-
-    def process_cdm_job_inproc(
-        self,
-        job_name: str,
-        timeout_seconds: int = 300,
+        timeout_seconds: int | None = None,
         output_root: str | None = None,
     ) -> dict[str, Any]:
         """Process a CDM job in-process via the held COM reference.
 
         The ``ApplyMachiningAfterNesting.Events.HeadlessProcess`` macro runs
         synchronously on ``self._raw_app`` inside the AlphaCAM process
-        (~33-36s), so no VBScript/PsExec is needed. ``timeout_seconds`` is
+        (~33-41s), so no VBScript/PsExec is needed. ``timeout_seconds`` is
         accepted for API compatibility; the macro is synchronous and
         terminates on its own, and the client-side RPC timeout protects the
         caller. Results come from the Automation Manager job log via
         ``headless.read_job_result``.
         """
-        job_name = job_name.strip()
-        if not job_name:
-            raise RuntimeError("cdm: job_name is required")  # noqa: TRY003
+        job_name = _validate_job_name(job_name)
         count = cdm_db.job_count(job_name)
         if count is None:
             raise RuntimeError(  # noqa: TRY003
@@ -776,7 +767,7 @@ class Application:
         t0 = time.monotonic()
         t0_wall = time.time()
         try:
-            self._raw_app.Run("ApplyMachiningAfterNesting.Events.HeadlessProcess", job_name)
+            self._raw_app.Run(headless._HEADLESS_MACRO, job_name)
         except Exception as e:
             raise RuntimeError(  # noqa: TRY003
                 f"cdm: process job failed: {e}"
@@ -797,7 +788,7 @@ class Application:
 
     def cdm_types(self) -> dict[str, Any]:
         """List CDM door types from the vdb5 database + existing jobs (headless-safe)."""
-        am = self.get_automation_manager_addin()
+        am = self.get_cdm_automation_manager()
         com_names: list[str] = []
         seen: set[str] = set()
         try:
@@ -822,7 +813,7 @@ class Application:
 
     def cdm_jobs(self) -> dict[str, Any]:
         """List existing CDM jobs (headless-safe)."""
-        am = self.get_automation_manager_addin()
+        am = self.get_cdm_automation_manager()
         jobs_out: list[dict[str, Any]] = []
         try:
             jobs = am.Jobs
@@ -863,6 +854,7 @@ class Application:
         basename, max 60 chars) — when CreateJob=No ``job`` is required.
         """
         job = (job or "").strip() or None
+        name = (name or "").strip() or None
         if job and name:
             raise RuntimeError("cdm: --name and --job are mutually exclusive")  # noqa: TRY003
         if not csv.strip():
@@ -925,6 +917,9 @@ class Application:
             material_id = materials.get(material_name)
             if material_id is None:
                 raise RuntimeError(f"cdm: material not found: {material_name}")  # noqa: TRY003
+        else:
+            defaults = cdm_db.vdb5_job_defaults()
+            material_id = defaults.get("material_id")
         material_label: str | None = material_name
         if material_label is None and material_id is not None:
             material_label = next(
@@ -940,7 +935,7 @@ class Application:
                 "errors": errors,
                 "import_setting": setting_name,
             }
-        am = self.get_automation_manager_addin()
+        am = self.get_cdm_automation_manager()
         cdm_job: Any = None
         if job:
             try:
@@ -948,6 +943,16 @@ class Application:
             except Exception as e:
                 raise RuntimeError(f"cdm: job lookup failed: {e}") from e  # noqa: TRY003
             if cdm_job is None:
+                count = cdm_db.job_count(job)
+                if count is None:
+                    raise RuntimeError(  # noqa: TRY003
+                        f"cdm: job existence check failed: {job}"
+                    )
+                if count > 0:
+                    raise RuntimeError(  # noqa: TRY003
+                        "cdm: job not found via Automation Manager but exists in "
+                        f"database (AM cache issue): {job}"
+                    )
                 raise RuntimeError(f"cdm: job not found: {job}")  # noqa: TRY003
             job_name = job
         else:
@@ -958,7 +963,17 @@ class Application:
                 config_name = str(defaults.get("config_name") or "").strip()
                 if not config_name:
                     raise RuntimeError("cdm: no default configuration found")  # noqa: TRY003
-            job_name = _cdm_job_name(details, name, csv)
+            job_name = _validate_job_name(_cdm_job_name(details, name, csv))
+            count = cdm_db.job_count(job_name)
+            if count is None:
+                raise RuntimeError(  # noqa: TRY003
+                    f"cdm: job existence check failed: {job_name}"
+                )
+            if count > 0:
+                raise RuntimeError(  # noqa: TRY003
+                    f"cdm: job already exists: {job_name} "
+                    "(use --job to import into the existing job)"
+                )
             try:
                 cdm_job = am.NewCDMJob()
             except Exception as e:
@@ -1016,14 +1031,24 @@ class Application:
             ok_details.append(d)
         if com_active_failed and not cdm_db.set_order_details_active(job_name):
             errors.append(f"job {job_name}: failed to set order details active")
-        if material_id is not None and not cdm_db.set_order_detail_material(job_name, material_id):
-            errors.append(f"job {job_name}: failed to set order detail material")
+        if material_id is not None:
+            if not cdm_db.set_job_material(job_name, material_id):
+                errors.append(f"job {job_name}: failed to set material")
+            if not cdm_db.set_order_detail_material(job_name, material_id):
+                errors.append(f"job {job_name}: failed to set order detail material")
+        elif material_name is None:
+            errors.append(f"job {job_name}: no material set (required for processing)")
         if "door_drilling" in field_map.values() and ok_details:
             values = [bool(d.get("has_drilling") or False) for d in ok_details]
             if not cdm_db.set_has_drilling(job_name, values):
                 errors.append(f"job {job_name}: failed to set has_drilling")
         if items == 0 and not job:
-            deleted, reason = cdm_db.cleanup_created_job(am, cdm_job, job_name)
+            deleted, reason = cdm_db.cleanup_created_job(
+                am,
+                cdm_job,
+                job_name,
+                log=lambda msg: logger.warning("cdm import: cleanup failed: %s", msg),
+            )
             if deleted:
                 errors.append(f"job {job_name}: no valid order details, deleted")
             elif reason == "failed":
@@ -1057,6 +1082,7 @@ class Application:
         ``job``.
         """
         job = (job or "").strip() or None
+        name = (name or "").strip() or None
         if job and name:
             raise RuntimeError("cdm: --name and --job are mutually exclusive")  # noqa: TRY003
         if not csv.strip():
@@ -1201,7 +1227,7 @@ class Application:
 
     def delete_cdm_job(self, job_name: str) -> dict[str, Any]:
         """Delete a CDM job from the database (headless, no dialogs)."""
-        am = self.get_automation_manager_addin()
+        am = self.get_cdm_automation_manager()
         job: Any = None
         try:
             job = cdm_db.find_cdm_job(am, job_name)
@@ -1297,11 +1323,11 @@ def _cdm_material_name(details: list[dict[str, Any]], material: str | None) -> s
 def _cdm_job_name(details: list[dict[str, Any]], name: str | None, csv: str) -> str:
     explicit = (name or "").strip()
     if explicit:
-        return explicit[:60]
+        return explicit
     for detail in details:
         raw = detail.get("job_name")
         if isinstance(raw, str) and raw.strip():
-            return raw.strip()[:60]
+            return raw.strip()
     return os.path.splitext(os.path.basename(csv))[0][:60]
 
 

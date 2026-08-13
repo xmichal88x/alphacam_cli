@@ -5,8 +5,8 @@ from unittest.mock import ANY, MagicMock, PropertyMock
 
 import pytest
 
-from alphacam_cli.core import cdm_db, headless
-from alphacam_cli.core.application import Application
+from alphacam_cli.core import cdm_db
+from alphacam_cli.core.application import Application, _validate_job_name
 
 
 def _am_with_details(am: MagicMock, *type_names: str) -> MagicMock:
@@ -24,7 +24,7 @@ def _am_with_details(am: MagicMock, *type_names: str) -> MagicMock:
 
 def _app_with_am(am: MagicMock) -> Application:
     app = Application(MagicMock())
-    app.get_automation_manager_addin = lambda: am  # type: ignore[method-assign]
+    app.get_cdm_automation_manager = lambda: am  # type: ignore[method-assign]
     return app
 
 
@@ -47,18 +47,21 @@ def _mock_cdm_db(
     setting: dict[str, object],
     materials: dict[str, int] | None = None,
     defaults: dict[str, object] | None = None,
-) -> MagicMock:
+) -> tuple[MagicMock, MagicMock]:
     set_order_detail_material = MagicMock(return_value=True)
+    set_job_material = MagicMock(return_value=True)
     monkeypatch.setattr("alphacam_cli.core.cdm_db.import_settings", lambda: [setting])
     monkeypatch.setattr("alphacam_cli.core.cdm_db.sheet_materials", lambda: materials or {})
+    monkeypatch.setattr("alphacam_cli.core.cdm_db.job_count", MagicMock(return_value=0))
     monkeypatch.setattr(
         "alphacam_cli.core.cdm_db.set_order_detail_material", set_order_detail_material
     )
+    monkeypatch.setattr("alphacam_cli.core.cdm_db.set_job_material", set_job_material)
     monkeypatch.setattr(
         "alphacam_cli.core.cdm_db.vdb5_job_defaults",
         lambda: defaults or {"config_name": "Fronty", "material_id": None},
     )
-    return set_order_detail_material
+    return set_order_detail_material, set_job_material
 
 
 _SHOP_FIELDS = [
@@ -89,6 +92,7 @@ def _mock_selected_import_setting(
     setting["create_job"] = create_job
     setting["selected"] = True
     monkeypatch.setattr("alphacam_cli.core.cdm_db.import_settings", lambda: [setting])
+    monkeypatch.setattr("alphacam_cli.core.cdm_db.job_count", MagicMock(return_value=0))
     return setting
 
 
@@ -125,6 +129,58 @@ def test_merge_door_types_empty_vdb5_ok() -> None:
         "types": [],
         "note": "no CDM door types found",
     }
+
+
+# --- _validate_job_name (edge validation) ---
+
+
+@pytest.mark.parametrize(
+    "name",
+    [
+        "JOB-001",
+        "Zadanie 132",
+        "Nowy_projekt",
+        "Material E2E 003",
+        "Zażółć gęślą jaźń",
+        "A+B (Fronty) [v2], K1;K2",
+    ],
+)
+def test_validate_job_name_allows_production_names(name: str) -> None:
+    assert _validate_job_name(f"  {name}  ") == name
+
+
+@pytest.mark.parametrize(
+    "name, fragment",
+    [
+        ("   ", "required"),
+        ("", "required"),
+        ("A/B", "forbidden characters"),
+        ("C\\x", "forbidden characters"),
+        ("A:B", "forbidden characters"),
+        ("A*B", "forbidden characters"),
+        ("A?B", "forbidden characters"),
+        ('A"B', "forbidden characters"),
+        ("A<B", "forbidden characters"),
+        ("A>B", "forbidden characters"),
+        ("A|B", "forbidden characters"),
+        ("A`B", "forbidden characters"),
+        ("zadanie`1", "forbidden characters"),
+        (".", "forbidden characters"),
+        ("..", "forbidden characters"),
+        ("a\nb", "control characters"),
+        ("a\rb", "control characters"),
+        ("a\x00b", "control characters"),
+    ],
+)
+def test_validate_job_name_rejects_bad_names(name: str, fragment: str) -> None:
+    with pytest.raises(RuntimeError, match=fragment):
+        _validate_job_name(name)
+
+
+def test_validate_job_name_rejects_too_long() -> None:
+    with pytest.raises(RuntimeError, match="max 60 characters, got 61"):
+        _validate_job_name("J" * 61)
+    assert _validate_job_name("J" * 60) == "J" * 60
 
 
 def test_merge_door_types_empty_vdb5_fail() -> None:
@@ -275,7 +331,7 @@ def test_import_cdm_csv_all_details_fail_deletes_job(
     assert result["errors"].count("job order: no valid order details, deleted") == 1
     assert any("door type not found: P003" in e for e in result["errors"])
     assert any("door type not found: P004" in e for e in result["errors"])
-    cleanup.assert_called_once_with(am, job, "order")
+    cleanup.assert_called_once_with(am, job, "order", log=ANY)
 
 
 def test_import_cdm_csv_all_details_fail_delete_via_lookup(
@@ -299,7 +355,7 @@ def test_import_cdm_csv_all_details_fail_delete_via_lookup(
     assert result["success"] is False
     assert result["items"] == 0
     assert result["errors"].count("job order: no valid order details, deleted") == 1
-    cleanup.assert_called_once_with(am, job, "order")
+    cleanup.assert_called_once_with(am, job, "order", log=ANY)
 
 
 def test_import_cdm_csv_all_details_fail_cleanup_still_present(
@@ -324,7 +380,7 @@ def test_import_cdm_csv_all_details_fail_cleanup_still_present(
     assert result["items"] == 0
     assert result["errors"].count("job order: no valid order details, cleanup failed") == 1
     assert not any("no valid order details, deleted" in e for e in result["errors"])
-    cleanup.assert_called_once_with(am, job, "order")
+    cleanup.assert_called_once_with(am, job, "order", log=ANY)
 
 
 def test_import_cdm_csv_all_details_fail_cleanup_unverified(
@@ -348,7 +404,7 @@ def test_import_cdm_csv_all_details_fail_cleanup_unverified(
     assert result["success"] is False
     assert result["items"] == 0
     assert result["errors"].count("job order: no valid order details, cleanup unverified") == 1
-    cleanup.assert_called_once_with(am, job, "order")
+    cleanup.assert_called_once_with(am, job, "order", log=ANY)
 
 
 def test_import_cdm_csv_all_details_fail_keeps_existing_job(
@@ -398,7 +454,7 @@ def test_import_cdm_csv_cleanup_failure_reports_error(
     assert result["success"] is False
     assert result["items"] == 0
     assert any("cleanup failed" in e for e in result["errors"])
-    cleanup.assert_called_once_with(am, job, "order")
+    cleanup.assert_called_once_with(am, job, "order", log=ANY)
 
 
 def test_import_cdm_csv_mapped_setters(
@@ -409,13 +465,11 @@ def test_import_cdm_csv_mapped_setters(
     detail = MagicMock()
     am.NewCDMJob.return_value = job
     job.AddCDMOrderDetail.return_value = detail
-    set_order_detail_material = _mock_cdm_db(
+    set_order_detail_material, set_job_material = _mock_cdm_db(
         monkeypatch,
         _setting_with(_SHOP_FIELDS),
         materials={"MDF_18": 5},
     )
-    set_job_material = MagicMock(return_value=True)
-    monkeypatch.setattr("alphacam_cli.core.cdm_db.set_job_material", set_job_material)
     csv_file = tmp_path / "order.csv"
     csv_file.write_text(
         "PS_03,1,500,400,1;2;3,MDF_18,Zamowienie X,Fronty,Jan Kowalski,CF1,CF2,CF3\n",
@@ -440,7 +494,7 @@ def test_import_cdm_csv_mapped_setters(
     assert detail.UserVariableString == ";".join(["1", "2", "3"] + ["0"] * 47)
     assert detail.ActiveInProcess is True
     set_order_detail_material.assert_called_once_with("Zamowienie X", 5)
-    set_job_material.assert_not_called()
+    set_job_material.assert_called_once_with("Zamowienie X", 5)
     detail.SaveToDatabase.assert_called_once_with()
 
 
@@ -486,13 +540,11 @@ def test_import_cdm_csv_mapped_material_from_column_6(
     detail = MagicMock()
     am.NewCDMJob.return_value = job
     job.AddCDMOrderDetail.return_value = detail
-    set_order_detail_material = _mock_cdm_db(
+    set_order_detail_material, set_job_material = _mock_cdm_db(
         monkeypatch,
         _setting_with([(1, 256), (2, 259), (3, 257), (4, 258), (5, 264), (6, 524)]),
         materials={"MDF_18": 5},
     )
-    set_job_material = MagicMock(return_value=True)
-    monkeypatch.setattr("alphacam_cli.core.cdm_db.set_job_material", set_job_material)
     csv_file = tmp_path / "parts.csv"
     csv_file.write_text("PS_03,1,500,400,1;2;3,MDF_18\n", encoding="utf-8")
     result = _app_with_am(am).import_cdm_csv(str(csv_file), import_setting="sklep CSV")
@@ -502,12 +554,12 @@ def test_import_cdm_csv_mapped_material_from_column_6(
     assert result["material"] == "MDF_18"
     assert result["errors"] == []
     set_order_detail_material.assert_called_once_with("parts", 5)
-    set_job_material.assert_not_called()
+    set_job_material.assert_called_once_with("parts", 5)
     am.NewCDMJob.assert_called_once_with()
     am.ConfigurationSettings.GetByName.assert_called_once_with("Fronty")
 
 
-def test_import_cdm_csv_mapped_material_sets_only_order_detail(
+def test_import_cdm_csv_mapped_material_sets_job_and_details(
     monkeypatch: pytest.MonkeyPatch, tmp_path: pathlib.Path
 ) -> None:
     am = MagicMock()
@@ -531,10 +583,10 @@ def test_import_cdm_csv_mapped_material_sets_only_order_detail(
     assert result["success"] is True
     assert result["errors"] == []
     set_order_detail_material.assert_called_once_with("Zamowienie X", 5)
-    set_job_material.assert_not_called()
+    set_job_material.assert_called_once_with("Zamowienie X", 5)
 
 
-def test_import_cdm_csv_mapped_no_material_ok(
+def test_import_cdm_csv_mapped_no_material_warning(
     monkeypatch: pytest.MonkeyPatch, tmp_path: pathlib.Path
 ) -> None:
     am = MagicMock()
@@ -555,9 +607,126 @@ def test_import_cdm_csv_mapped_no_material_ok(
     assert result["success"] is True
     assert result["items"] == 1
     assert result["material"] is None
-    assert result["errors"] == []
+    assert result["errors"] == ["job order: no material set (required for processing)"]
     set_order_detail_material.assert_not_called()
     set_job_material.assert_not_called()
+
+
+def test_import_cdm_csv_mapped_job_material_setter_fails_warning(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: pathlib.Path
+) -> None:
+    am = MagicMock()
+    job = MagicMock()
+    detail = MagicMock()
+    am.NewCDMJob.return_value = job
+    job.AddCDMOrderDetail.return_value = detail
+    _mock_cdm_db(
+        monkeypatch,
+        _setting_with(_LEGACY_FIELDS),
+        materials={"MDF_18": 5},
+        defaults={"config_name": "Fronty", "material_id": 5},
+    )
+    set_job_material = MagicMock(return_value=False)
+    monkeypatch.setattr("alphacam_cli.core.cdm_db.set_job_material", set_job_material)
+    csv_file = tmp_path / "order.csv"
+    csv_file.write_text("P003,1,500,500,1;2;3\n", encoding="utf-8")
+    result = _app_with_am(am).import_cdm_csv(str(csv_file), import_setting=3)
+    assert result["success"] is True
+    assert result["material"] == "MDF_18"
+    assert result["errors"] == ["job order: failed to set material"]
+    set_job_material.assert_called_once_with("order", 5)
+
+
+def test_import_cdm_csv_mapped_detail_material_setter_fails_warning(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: pathlib.Path
+) -> None:
+    am = MagicMock()
+    job = MagicMock()
+    detail = MagicMock()
+    am.NewCDMJob.return_value = job
+    job.AddCDMOrderDetail.return_value = detail
+    _mock_cdm_db(
+        monkeypatch,
+        _setting_with(_LEGACY_FIELDS),
+        materials={"MDF_18": 5},
+        defaults={"config_name": "Fronty", "material_id": 5},
+    )
+    set_order_detail_material = MagicMock(return_value=False)
+    monkeypatch.setattr(
+        "alphacam_cli.core.cdm_db.set_order_detail_material", set_order_detail_material
+    )
+    csv_file = tmp_path / "order.csv"
+    csv_file.write_text("P003,1,500,500,1;2;3\n", encoding="utf-8")
+    result = _app_with_am(am).import_cdm_csv(str(csv_file), import_setting=3)
+    assert result["success"] is True
+    assert result["material"] == "MDF_18"
+    assert result["errors"] == ["job order: failed to set order detail material"]
+    set_order_detail_material.assert_called_once_with("order", 5)
+
+
+def test_import_cdm_csv_mapped_material_param_overrides_csv(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: pathlib.Path
+) -> None:
+    am = MagicMock()
+    job = MagicMock()
+    detail = MagicMock()
+    am.NewCDMJob.return_value = job
+    job.AddCDMOrderDetail.return_value = detail
+    set_order_detail_material, set_job_material = _mock_cdm_db(
+        monkeypatch,
+        _setting_with([(1, 256), (2, 259), (3, 257), (4, 258), (5, 264), (6, 524)]),
+        materials={"MDF_18": 5, "Material 3 - 2440 x 1220": 9},
+    )
+    csv_file = tmp_path / "order.csv"
+    csv_file.write_text("P003,1,500,500,1;2;3,MDF_18\n", encoding="utf-8")
+    result = _app_with_am(am).import_cdm_csv(
+        str(csv_file), import_setting=3, material="Material 3 - 2440 x 1220"
+    )
+    assert result["success"] is True
+    assert result["material"] == "Material 3 - 2440 x 1220"
+    assert result["errors"] == []
+    set_order_detail_material.assert_called_once_with("order", 9)
+    set_job_material.assert_called_once_with("order", 9)
+
+
+def test_import_cdm_csv_mapped_header_flag(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: pathlib.Path
+) -> None:
+    am = MagicMock()
+    job = MagicMock()
+    detail = MagicMock()
+    am.NewCDMJob.return_value = job
+    job.AddCDMOrderDetail.return_value = detail
+    _mock_cdm_db(monkeypatch, _setting_with(_LEGACY_FIELDS), materials={"MDF_18": 5})
+    csv_file = tmp_path / "order.csv"
+    csv_file.write_text(
+        "Style,Quantity,Width,Length,DesignDimensions\nP003,1,500,500,1;18;0;0\n",
+        encoding="utf-8",
+    )
+    result = _app_with_am(am).import_cdm_csv(str(csv_file), import_setting=3, has_header=True)
+    assert result["success"] is True
+    assert result["items"] == 1
+    job.AddCDMOrderDetail.assert_called_once_with("P003")
+
+
+def test_import_cdm_csv_all_rows_invalid_returns_early(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: pathlib.Path
+) -> None:
+    am = MagicMock()
+    _mock_selected_import_setting(monkeypatch)
+    monkeypatch.setattr(
+        "alphacam_cli.core.cdm_db.vdb5_job_defaults",
+        lambda: {"config_name": "Fronty", "material_id": None},
+    )
+    csv_file = tmp_path / "order.csv"
+    csv_file.write_text("P003,1\nP004,abc,400,300,0\n", encoding="utf-8")
+    result = _app_with_am(am).import_cdm_csv(str(csv_file))
+    assert result["success"] is False
+    assert result["items"] == 0
+    assert result["job_name"] == ""
+    assert any("expected at least 3 columns" in e for e in result["errors"])
+    assert any("invalid quantity" in e for e in result["errors"])
+    am.NewCDMJob.assert_not_called()
 
 
 def test_import_cdm_csv_mapped_active_setter_fails_fallback_db(
@@ -579,7 +748,7 @@ def test_import_cdm_csv_mapped_active_setter_fails_fallback_db(
     result = _app_with_am(am).import_cdm_csv(str(csv_file), import_setting=3)
     assert result["success"] is True
     assert result["items"] == 1
-    assert result["errors"] == []
+    assert result["errors"] == ["job order: no material set (required for processing)"]
     set_order_details_active.assert_called_once_with("order")
     detail.SaveToDatabase.assert_called_once_with()
 
@@ -741,6 +910,170 @@ def test_import_cdm_csv_create_job_false_requires_job(
     ):
         _app_with_am(am).import_cdm_csv(str(csv_file))
     am.NewCDMJob.assert_not_called()
+
+
+def test_import_cdm_csv_autocreate_forbidden_basename(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: pathlib.Path
+) -> None:
+    am = MagicMock()
+    monkeypatch.setattr(
+        "alphacam_cli.core.cdm_db.vdb5_job_defaults",
+        lambda: {"config_name": "Fronty", "material_id": None},
+    )
+    _mock_selected_import_setting(monkeypatch)
+    csv_file = tmp_path / "zadanie:1.csv"
+    csv_file.write_text("P003,1,500,500,1;2;3\n", encoding="utf-8")
+    with pytest.raises(
+        RuntimeError, match=r"invalid job name: 'zadanie:1' \(forbidden characters: :\)"
+    ):
+        _app_with_am(am).import_cdm_csv(str(csv_file))
+    am.NewCDMJob.assert_not_called()
+
+
+def test_import_cdm_csv_autocreate_control_basename(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: pathlib.Path
+) -> None:
+    am = MagicMock()
+    monkeypatch.setattr(
+        "alphacam_cli.core.cdm_db.vdb5_job_defaults",
+        lambda: {"config_name": "Fronty", "material_id": None},
+    )
+    _mock_selected_import_setting(monkeypatch)
+    csv_file = tmp_path / "zadanie\n1.csv"
+    csv_file.write_text("P003,1,500,500,1;2;3\n", encoding="utf-8")
+    with pytest.raises(RuntimeError, match="control characters are not allowed"):
+        _app_with_am(am).import_cdm_csv(str(csv_file))
+    am.NewCDMJob.assert_not_called()
+
+
+def test_import_cdm_csv_autocreate_whitespace_name_uses_basename(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: pathlib.Path
+) -> None:
+    am = MagicMock()
+    monkeypatch.setattr(
+        "alphacam_cli.core.cdm_db.vdb5_job_defaults",
+        lambda: {"config_name": "Fronty", "material_id": None},
+    )
+    _mock_selected_import_setting(monkeypatch)
+    monkeypatch.setattr("alphacam_cli.core.cdm_db.job_count", MagicMock(return_value=1))
+    csv_file = tmp_path / "order.csv"
+    csv_file.write_text("P003,1,500,500,1;2;3\n", encoding="utf-8")
+    with pytest.raises(
+        RuntimeError,
+        match=r"cdm: job already exists: order \(use --job to import into the existing job\)",
+    ):
+        _app_with_am(am).import_cdm_csv(str(csv_file), name="   ")
+    am.NewCDMJob.assert_not_called()
+
+
+def test_import_cdm_csv_autocreate_name_too_long_raises(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: pathlib.Path
+) -> None:
+    am = MagicMock()
+    monkeypatch.setattr(
+        "alphacam_cli.core.cdm_db.vdb5_job_defaults",
+        lambda: {"config_name": "Fronty", "material_id": None},
+    )
+    _mock_selected_import_setting(monkeypatch)
+    csv_file = tmp_path / "order.csv"
+    csv_file.write_text("P003,1,500,500,1;2;3\n", encoding="utf-8")
+    with pytest.raises(RuntimeError, match="max 60 characters, got 61"):
+        _app_with_am(am).import_cdm_csv(str(csv_file), name="J" * 61)
+    am.NewCDMJob.assert_not_called()
+
+
+def test_import_cdm_csv_autocreate_existing_job_raises(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: pathlib.Path
+) -> None:
+    am = MagicMock()
+    monkeypatch.setattr(
+        "alphacam_cli.core.cdm_db.vdb5_job_defaults",
+        lambda: {"config_name": "Fronty", "material_id": None},
+    )
+    _mock_selected_import_setting(monkeypatch)
+    monkeypatch.setattr("alphacam_cli.core.cdm_db.job_count", MagicMock(return_value=1))
+    csv_file = tmp_path / "order.csv"
+    csv_file.write_text("P003,1,500,500,1;2;3\n", encoding="utf-8")
+    with pytest.raises(
+        RuntimeError,
+        match=r"cdm: job already exists: order \(use --job to import into the existing job\)",
+    ):
+        _app_with_am(am).import_cdm_csv(str(csv_file))
+    am.NewCDMJob.assert_not_called()
+
+
+def test_import_cdm_csv_autocreate_existence_check_failed(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: pathlib.Path
+) -> None:
+    am = MagicMock()
+    monkeypatch.setattr(
+        "alphacam_cli.core.cdm_db.vdb5_job_defaults",
+        lambda: {"config_name": "Fronty", "material_id": None},
+    )
+    _mock_selected_import_setting(monkeypatch)
+    monkeypatch.setattr("alphacam_cli.core.cdm_db.job_count", MagicMock(return_value=None))
+    csv_file = tmp_path / "order.csv"
+    csv_file.write_text("P003,1,500,500,1;2;3\n", encoding="utf-8")
+    with pytest.raises(RuntimeError, match="cdm: job existence check failed: order"):
+        _app_with_am(am).import_cdm_csv(str(csv_file))
+    am.NewCDMJob.assert_not_called()
+
+
+def test_import_cdm_csv_job_not_found_via_com_cache(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: pathlib.Path
+) -> None:
+    am = MagicMock()
+    monkeypatch.setattr("alphacam_cli.core.cdm_db.find_cdm_job", MagicMock(return_value=None))
+    monkeypatch.setattr(
+        "alphacam_cli.core.cdm_db.vdb5_job_defaults",
+        lambda: {"config_name": "Fronty", "material_id": None},
+    )
+    _mock_selected_import_setting(monkeypatch, create_job=False)
+    monkeypatch.setattr("alphacam_cli.core.cdm_db.job_count", MagicMock(return_value=1))
+    csv_file = tmp_path / "order.csv"
+    csv_file.write_text("P003,1,500,500,1;2;3\n", encoding="utf-8")
+    with pytest.raises(
+        RuntimeError,
+        match=(
+            r"cdm: job not found via Automation Manager but exists in database "
+            r"\(AM cache issue\): X"
+        ),
+    ):
+        _app_with_am(am).import_cdm_csv(str(csv_file), job="X")
+
+
+def test_import_cdm_csv_job_not_found_when_absent(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: pathlib.Path
+) -> None:
+    am = MagicMock()
+    monkeypatch.setattr("alphacam_cli.core.cdm_db.find_cdm_job", MagicMock(return_value=None))
+    monkeypatch.setattr(
+        "alphacam_cli.core.cdm_db.vdb5_job_defaults",
+        lambda: {"config_name": "Fronty", "material_id": None},
+    )
+    _mock_selected_import_setting(monkeypatch, create_job=False)
+    monkeypatch.setattr("alphacam_cli.core.cdm_db.job_count", MagicMock(return_value=0))
+    csv_file = tmp_path / "order.csv"
+    csv_file.write_text("P003,1,500,500,1;2;3\n", encoding="utf-8")
+    with pytest.raises(RuntimeError, match="cdm: job not found: X"):
+        _app_with_am(am).import_cdm_csv(str(csv_file), job="X")
+
+
+def test_import_cdm_csv_job_existence_check_failed(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: pathlib.Path
+) -> None:
+    am = MagicMock()
+    monkeypatch.setattr("alphacam_cli.core.cdm_db.find_cdm_job", MagicMock(return_value=None))
+    monkeypatch.setattr(
+        "alphacam_cli.core.cdm_db.vdb5_job_defaults",
+        lambda: {"config_name": "Fronty", "material_id": None},
+    )
+    _mock_selected_import_setting(monkeypatch, create_job=False)
+    monkeypatch.setattr("alphacam_cli.core.cdm_db.job_count", MagicMock(return_value=None))
+    csv_file = tmp_path / "order.csv"
+    csv_file.write_text("P003,1,500,500,1;2;3\n", encoding="utf-8")
+    with pytest.raises(RuntimeError, match="cdm: job existence check failed: X"):
+        _app_with_am(am).import_cdm_csv(str(csv_file), job="X")
 
 
 def test_import_cdm_preview_no_com(monkeypatch: pytest.MonkeyPatch, tmp_path: pathlib.Path) -> None:
@@ -1190,7 +1523,7 @@ def test_create_cdm_job_empty_job(monkeypatch: pytest.MonkeyPatch) -> None:
     am.NewCDMJob.return_value = job
     config_obj = MagicMock()
     am.ConfigurationSettings.GetByName.return_value = config_obj
-    monkeypatch.setattr("alphacam_cli.core.cdm_db.find_cdm_job", MagicMock(return_value=None))
+    monkeypatch.setattr("alphacam_cli.core.cdm_db.job_count", MagicMock(return_value=0))
     monkeypatch.setattr(
         "alphacam_cli.core.cdm_db.vdb5_job_defaults",
         lambda: {"config_name": "Fronty", "material_id": 4},
@@ -1222,13 +1555,91 @@ def test_create_cdm_job_empty_job(monkeypatch: pytest.MonkeyPatch) -> None:
 def test_create_cdm_job_job_duplicate(monkeypatch: pytest.MonkeyPatch) -> None:
     am = MagicMock()
     monkeypatch.setattr(
-        "alphacam_cli.core.cdm_db.find_cdm_job",
-        MagicMock(return_value=MagicMock()),
+        "alphacam_cli.core.cdm_db.job_count",
+        MagicMock(return_value=1),
     )
     app = _app_with_am(am)
     with pytest.raises(RuntimeError, match="cdm: job already exists: JOB-001"):
         app.create_cdm_job("JOB-001")
     am.NewCDMJob.assert_not_called()
+
+
+def test_create_cdm_job_existence_check_failed(monkeypatch: pytest.MonkeyPatch) -> None:
+    am = MagicMock()
+    monkeypatch.setattr("alphacam_cli.core.cdm_db.job_count", MagicMock(return_value=None))
+    app = _app_with_am(am)
+    with pytest.raises(RuntimeError, match="cdm: job existence check failed: JOB-001"):
+        app.create_cdm_job("JOB-001")
+    am.NewCDMJob.assert_not_called()
+
+
+def test_create_cdm_job_blank_name(monkeypatch: pytest.MonkeyPatch) -> None:
+    am = MagicMock()
+    monkeypatch.setattr("alphacam_cli.core.cdm_db.job_count", MagicMock(return_value=0))
+    app = _app_with_am(am)
+    with pytest.raises(RuntimeError, match="cdm: job_name is required"):
+        app.create_cdm_job("   ")
+    am.NewCDMJob.assert_not_called()
+
+
+def test_create_cdm_job_forbidden_name(monkeypatch: pytest.MonkeyPatch) -> None:
+    am = MagicMock()
+    monkeypatch.setattr("alphacam_cli.core.cdm_db.job_count", MagicMock(return_value=0))
+    app = _app_with_am(am)
+    with pytest.raises(
+        RuntimeError, match=r"invalid job name: 'Zadanie/1' \(forbidden characters: /\)"
+    ):
+        app.create_cdm_job("Zadanie/1")
+    am.NewCDMJob.assert_not_called()
+
+
+def test_create_cdm_job_dotdot_name(monkeypatch: pytest.MonkeyPatch) -> None:
+    am = MagicMock()
+    monkeypatch.setattr("alphacam_cli.core.cdm_db.job_count", MagicMock(return_value=0))
+    app = _app_with_am(am)
+    with pytest.raises(RuntimeError, match="forbidden characters: \\. \\.\\."):
+        app.create_cdm_job("..")
+    am.NewCDMJob.assert_not_called()
+
+
+def test_create_cdm_job_newline_name(monkeypatch: pytest.MonkeyPatch) -> None:
+    am = MagicMock()
+    monkeypatch.setattr("alphacam_cli.core.cdm_db.job_count", MagicMock(return_value=0))
+    app = _app_with_am(am)
+    with pytest.raises(RuntimeError, match="control characters are not allowed"):
+        app.create_cdm_job("Zadanie\n132")
+    am.NewCDMJob.assert_not_called()
+
+
+def test_create_cdm_job_too_long_name(monkeypatch: pytest.MonkeyPatch) -> None:
+    am = MagicMock()
+    monkeypatch.setattr("alphacam_cli.core.cdm_db.job_count", MagicMock(return_value=0))
+    app = _app_with_am(am)
+    with pytest.raises(RuntimeError, match="max 60 characters, got 61"):
+        app.create_cdm_job("J" * 61)
+    am.NewCDMJob.assert_not_called()
+
+
+def test_create_cdm_job_polish_name_passes(monkeypatch: pytest.MonkeyPatch) -> None:
+    am = MagicMock()
+    job = MagicMock()
+    am.NewCDMJob.return_value = job
+    monkeypatch.setattr("alphacam_cli.core.cdm_db.job_count", MagicMock(return_value=0))
+    monkeypatch.setattr(
+        "alphacam_cli.core.cdm_db.vdb5_job_defaults",
+        lambda: {"config_name": "Fronty", "material_id": 4},
+    )
+    monkeypatch.setattr(
+        "alphacam_cli.core.cdm_db.sheet_materials",
+        lambda: {"MDF18 - 2800 x 2070": 4},
+    )
+    monkeypatch.setattr("alphacam_cli.core.cdm_db.set_job_material", lambda jn, mid: True)
+    monkeypatch.setattr("alphacam_cli.core.cdm_db.finalize_cdm_job", lambda jn: True)
+    app = _app_with_am(am)
+    for name in ("Zadanie 132", "Nowy_projekt", "Material E2E 003"):
+        result = app.create_cdm_job(f"  {name}  ")
+        assert result["job_name"] == name
+    assert job.JobName == "Material E2E 003"
 
 
 def test_create_cdm_job_explicit_config_material(
@@ -1237,7 +1648,7 @@ def test_create_cdm_job_explicit_config_material(
     am = MagicMock()
     job = MagicMock()
     am.NewCDMJob.return_value = job
-    monkeypatch.setattr("alphacam_cli.core.cdm_db.find_cdm_job", MagicMock(return_value=None))
+    monkeypatch.setattr("alphacam_cli.core.cdm_db.job_count", MagicMock(return_value=0))
     monkeypatch.setattr("alphacam_cli.core.cdm_db.sheet_materials", lambda: {"MDF_18": 2})
     set_job_material = MagicMock(return_value=True)
     monkeypatch.setattr("alphacam_cli.core.cdm_db.set_job_material", set_job_material)
@@ -1259,7 +1670,7 @@ def test_create_cdm_job_config_not_found(monkeypatch: pytest.MonkeyPatch) -> Non
     job = MagicMock()
     am.NewCDMJob.return_value = job
     am.ConfigurationSettings.GetByName.side_effect = RuntimeError("boom")
-    monkeypatch.setattr("alphacam_cli.core.cdm_db.find_cdm_job", MagicMock(return_value=None))
+    monkeypatch.setattr("alphacam_cli.core.cdm_db.job_count", MagicMock(return_value=0))
     monkeypatch.setattr(
         "alphacam_cli.core.cdm_db.vdb5_job_defaults",
         lambda: {"config_name": "Fronty", "material_id": 4},
@@ -1273,7 +1684,7 @@ def test_create_cdm_job_config_not_found(monkeypatch: pytest.MonkeyPatch) -> Non
 
 def test_create_cdm_job_material_not_found(monkeypatch: pytest.MonkeyPatch) -> None:
     am = MagicMock()
-    monkeypatch.setattr("alphacam_cli.core.cdm_db.find_cdm_job", MagicMock(return_value=None))
+    monkeypatch.setattr("alphacam_cli.core.cdm_db.job_count", MagicMock(return_value=0))
     monkeypatch.setattr(
         "alphacam_cli.core.cdm_db.vdb5_job_defaults",
         lambda: {"config_name": "Fronty", "material_id": 4},
@@ -1287,7 +1698,7 @@ def test_create_cdm_job_material_not_found(monkeypatch: pytest.MonkeyPatch) -> N
 
 def test_create_cdm_job_no_default_config(monkeypatch: pytest.MonkeyPatch) -> None:
     am = MagicMock()
-    monkeypatch.setattr("alphacam_cli.core.cdm_db.find_cdm_job", MagicMock(return_value=None))
+    monkeypatch.setattr("alphacam_cli.core.cdm_db.job_count", MagicMock(return_value=0))
     monkeypatch.setattr(
         "alphacam_cli.core.cdm_db.vdb5_job_defaults",
         lambda: {"config_name": None, "material_id": 4},
@@ -1300,7 +1711,7 @@ def test_create_cdm_job_no_default_config(monkeypatch: pytest.MonkeyPatch) -> No
 
 def test_create_cdm_job_no_default_material(monkeypatch: pytest.MonkeyPatch) -> None:
     am = MagicMock()
-    monkeypatch.setattr("alphacam_cli.core.cdm_db.find_cdm_job", MagicMock(return_value=None))
+    monkeypatch.setattr("alphacam_cli.core.cdm_db.job_count", MagicMock(return_value=0))
     monkeypatch.setattr(
         "alphacam_cli.core.cdm_db.vdb5_job_defaults",
         lambda: {"config_name": "Fronty", "material_id": None},
@@ -1317,7 +1728,7 @@ def test_create_cdm_job_material_set_failed_removes_job(
     am = MagicMock()
     job = MagicMock()
     am.NewCDMJob.return_value = job
-    monkeypatch.setattr("alphacam_cli.core.cdm_db.find_cdm_job", MagicMock(return_value=None))
+    monkeypatch.setattr("alphacam_cli.core.cdm_db.job_count", MagicMock(return_value=0))
     monkeypatch.setattr(
         "alphacam_cli.core.cdm_db.vdb5_job_defaults",
         lambda: {"config_name": "Fronty", "material_id": 4},
@@ -1339,7 +1750,7 @@ def test_create_cdm_job_material_set_failed_cleanup_failed(
     am = MagicMock()
     job = MagicMock()
     am.NewCDMJob.return_value = job
-    monkeypatch.setattr("alphacam_cli.core.cdm_db.find_cdm_job", MagicMock(return_value=None))
+    monkeypatch.setattr("alphacam_cli.core.cdm_db.job_count", MagicMock(return_value=0))
     monkeypatch.setattr(
         "alphacam_cli.core.cdm_db.vdb5_job_defaults",
         lambda: {"config_name": "Fronty", "material_id": 4},
@@ -1358,7 +1769,7 @@ def test_create_cdm_job_metadata_com_setter(monkeypatch: pytest.MonkeyPatch) -> 
     am = MagicMock()
     job = MagicMock()
     am.NewCDMJob.return_value = job
-    monkeypatch.setattr("alphacam_cli.core.cdm_db.find_cdm_job", MagicMock(return_value=None))
+    monkeypatch.setattr("alphacam_cli.core.cdm_db.job_count", MagicMock(return_value=0))
     monkeypatch.setattr(
         "alphacam_cli.core.cdm_db.vdb5_job_defaults",
         lambda: {"config_name": "Fronty", "material_id": 4},
@@ -1423,7 +1834,7 @@ def test_create_cdm_job_metadata_db_fallback(monkeypatch: pytest.MonkeyPatch) ->
     am = MagicMock()
     job = _JobNoMeta()
     am.NewCDMJob.return_value = job
-    monkeypatch.setattr("alphacam_cli.core.cdm_db.find_cdm_job", MagicMock(return_value=None))
+    monkeypatch.setattr("alphacam_cli.core.cdm_db.job_count", MagicMock(return_value=0))
     monkeypatch.setattr(
         "alphacam_cli.core.cdm_db.vdb5_job_defaults",
         lambda: {"config_name": "Fronty", "material_id": 4},
@@ -1461,7 +1872,7 @@ def test_create_cdm_job_metadata_db_fallback_failed_warns(
     am = MagicMock()
     job = _JobNoMeta()
     am.NewCDMJob.return_value = job
-    monkeypatch.setattr("alphacam_cli.core.cdm_db.find_cdm_job", MagicMock(return_value=None))
+    monkeypatch.setattr("alphacam_cli.core.cdm_db.job_count", MagicMock(return_value=0))
     monkeypatch.setattr(
         "alphacam_cli.core.cdm_db.vdb5_job_defaults",
         lambda: {"config_name": "Fronty", "material_id": 4},
@@ -1501,7 +1912,7 @@ def test_create_cdm_job_customer_not_found(monkeypatch: pytest.MonkeyPatch) -> N
     am = MagicMock()
     job = MagicMock()
     am.NewCDMJob.return_value = job
-    monkeypatch.setattr("alphacam_cli.core.cdm_db.find_cdm_job", MagicMock(return_value=None))
+    monkeypatch.setattr("alphacam_cli.core.cdm_db.job_count", MagicMock(return_value=0))
     monkeypatch.setattr(
         "alphacam_cli.core.cdm_db.vdb5_job_defaults",
         lambda: {"config_name": "Fronty", "material_id": 4},
@@ -1520,7 +1931,7 @@ def test_create_cdm_job_customer_db_unavailable(monkeypatch: pytest.MonkeyPatch)
     am = MagicMock()
     job = MagicMock()
     am.NewCDMJob.return_value = job
-    monkeypatch.setattr("alphacam_cli.core.cdm_db.find_cdm_job", MagicMock(return_value=None))
+    monkeypatch.setattr("alphacam_cli.core.cdm_db.job_count", MagicMock(return_value=0))
     monkeypatch.setattr(
         "alphacam_cli.core.cdm_db.vdb5_job_defaults",
         lambda: {"config_name": "Fronty", "material_id": 4},
@@ -1537,7 +1948,7 @@ def test_create_cdm_job_customer_db_unavailable(monkeypatch: pytest.MonkeyPatch)
 
 def test_create_cdm_job_invalid_due_date(monkeypatch: pytest.MonkeyPatch) -> None:
     am = MagicMock()
-    monkeypatch.setattr("alphacam_cli.core.cdm_db.find_cdm_job", MagicMock(return_value=None))
+    monkeypatch.setattr("alphacam_cli.core.cdm_db.job_count", MagicMock(return_value=0))
     app = _app_with_am(am)
     with pytest.raises(RuntimeError, match="cdm: invalid due date"):
         app.create_cdm_job("JOB-001", due_date="2026-13-40")
@@ -1547,7 +1958,7 @@ def test_create_cdm_job_invalid_due_date(monkeypatch: pytest.MonkeyPatch) -> Non
 def test_create_cdm_job_create_failed(monkeypatch: pytest.MonkeyPatch) -> None:
     am = MagicMock()
     am.NewCDMJob.side_effect = RuntimeError("boom")
-    monkeypatch.setattr("alphacam_cli.core.cdm_db.find_cdm_job", MagicMock(return_value=None))
+    monkeypatch.setattr("alphacam_cli.core.cdm_db.job_count", MagicMock(return_value=0))
     monkeypatch.setattr(
         "alphacam_cli.core.cdm_db.vdb5_job_defaults",
         lambda: {"config_name": "Fronty", "material_id": 4},
@@ -1563,7 +1974,7 @@ def test_create_cdm_job_customer_com_setter_stripped(
     am = MagicMock()
     job = MagicMock()
     am.NewCDMJob.return_value = job
-    monkeypatch.setattr("alphacam_cli.core.cdm_db.find_cdm_job", MagicMock(return_value=None))
+    monkeypatch.setattr("alphacam_cli.core.cdm_db.job_count", MagicMock(return_value=0))
     monkeypatch.setattr(
         "alphacam_cli.core.cdm_db.vdb5_job_defaults",
         lambda: {"config_name": "Fronty", "material_id": 4},
@@ -1596,7 +2007,7 @@ def test_create_cdm_job_com_hasattr_error_uses_db_fallback(
     am = MagicMock()
     job = _JobHasattrBoom()
     am.NewCDMJob.return_value = job
-    monkeypatch.setattr("alphacam_cli.core.cdm_db.find_cdm_job", MagicMock(return_value=None))
+    monkeypatch.setattr("alphacam_cli.core.cdm_db.job_count", MagicMock(return_value=0))
     monkeypatch.setattr(
         "alphacam_cli.core.cdm_db.vdb5_job_defaults",
         lambda: {"config_name": "Fronty", "material_id": 4},
@@ -1618,7 +2029,7 @@ def test_create_cdm_job_material_label_defaults_id_fallback(
     am = MagicMock()
     job = MagicMock()
     am.NewCDMJob.return_value = job
-    monkeypatch.setattr("alphacam_cli.core.cdm_db.find_cdm_job", MagicMock(return_value=None))
+    monkeypatch.setattr("alphacam_cli.core.cdm_db.job_count", MagicMock(return_value=0))
     monkeypatch.setattr(
         "alphacam_cli.core.cdm_db.vdb5_job_defaults",
         lambda: {"config_name": "Fronty", "material_id": 4},
@@ -1647,179 +2058,29 @@ def test_import_cdm_csv_defaults_fetched_once(
         "alphacam_cli.core.cdm_db.sheet_materials",
         lambda: {"MDF18 - 2800 x 2070": 4},
     )
+    set_job_material = MagicMock(return_value=True)
+    monkeypatch.setattr("alphacam_cli.core.cdm_db.set_job_material", set_job_material)
+    set_order_detail_material = MagicMock(return_value=True)
+    monkeypatch.setattr(
+        "alphacam_cli.core.cdm_db.set_order_detail_material", set_order_detail_material
+    )
     _mock_selected_import_setting(monkeypatch)
     csv_file = tmp_path / "order.csv"
     csv_file.write_text("P003,1,500,500,1;18;0;0\n", encoding="utf-8")
     result = _app_with_am(am).import_cdm_csv(str(csv_file))
     assert result["success"] is True
-    assert result["material"] is None
+    assert result["material"] == "MDF18 - 2800 x 2070"
+    assert result["errors"] == []
     defaults.assert_called_once_with()
+    set_job_material.assert_called_once_with("order", 4)
+    set_order_detail_material.assert_called_once_with("order", 4)
     am.ConfigurationSettings.GetByName.assert_called_once_with("Fronty")
 
 
-# --- Application.process_cdm_job (headless) ---
+# --- Application.process_cdm_job (in-proc macro via gateway COM) ---
 
 
-def _mock_headless_process(
-    monkeypatch: pytest.MonkeyPatch,
-    *,
-    output_root: str | None = "C:/out",
-    count: int | None = 1,
-    run_result: object = None,
-    run_side_effect: Exception | None = None,
-    read_result: dict[str, object] | None = None,
-) -> tuple[MagicMock, MagicMock]:
-    monkeypatch.setattr("alphacam_cli.core.cdm_db.job_count", MagicMock(return_value=count))
-    monkeypatch.setattr(
-        "alphacam_cli.core.cdm_db.job_output_root", MagicMock(return_value=output_root)
-    )
-    run = MagicMock(return_value=run_result, side_effect=run_side_effect)
-    monkeypatch.setattr("alphacam_cli.core.application.headless.run_headless", run)
-    read = MagicMock(return_value=read_result)
-    monkeypatch.setattr(
-        "alphacam_cli.core.application.headless.read_job_result",
-        read,
-    )
-    return run, read
-
-
-def test_process_cdm_job_headless_success(monkeypatch: pytest.MonkeyPatch) -> None:
-    proc = MagicMock(returncode=0)
-    run, read = _mock_headless_process(
-        monkeypatch,
-        run_result=proc,
-        read_result={
-            "success": True,
-            "status": "Sukces",
-            "log": "Status przetwarzania zadania: Sukces",
-            "file_mtime": 1234.0,
-        },
-    )
-    result = Application(MagicMock()).process_cdm_job("JOB-001", method="vbs")
-    assert result == {
-        "success": True,
-        "job_name": "JOB-001",
-        "status": "Sukces",
-        "processed": True,
-        "method": "vbs",
-        "psexec_rc": 0,
-        "vbs_log": None,
-        "log": "Status przetwarzania zadania: Sukces",
-        "detail": None,
-    }
-    run.assert_called_once()
-    args, kwargs = run.call_args
-    assert args[0] == headless.DEFAULT_MACHINE
-    assert args[1].endswith(".vbs")
-    assert "vbs_hp_cli_" in args[1]
-    assert kwargs == {"timeout_seconds": 300}
-    read.assert_called_once_with("JOB-001", "C:/out", min_mtime=ANY)
-
-
-def test_process_cdm_job_headless_custom_machine(monkeypatch: pytest.MonkeyPatch) -> None:
-    proc = MagicMock(returncode=0)
-    run, _ = _mock_headless_process(
-        monkeypatch,
-        run_result=proc,
-        read_result={"success": True, "status": "Sukces", "log": ""},
-    )
-    machine = {"psexec": "C:/tools/PsExec.exe", "psexec_args": [], "cscript": "cscript"}
-    Application(MagicMock()).process_cdm_job(
-        "JOB-001",
-        machine=machine,
-        timeout_seconds=600,
-        output_root="C:/custom",
-        method="vbs",
-    )
-    args, kwargs = run.call_args
-    assert args[0] == machine
-    assert kwargs == {"timeout_seconds": 600}
-
-
-def test_process_cdm_job_no_output_root(monkeypatch: pytest.MonkeyPatch) -> None:
-    _mock_headless_process(monkeypatch, output_root=None)
-    with pytest.raises(RuntimeError, match="cdm: output root not found: JOB-001"):
-        Application(MagicMock()).process_cdm_job("JOB-001", method="vbs")
-
-
-def test_process_cdm_job_failure(monkeypatch: pytest.MonkeyPatch) -> None:
-    proc = MagicMock(returncode=1)
-    _mock_headless_process(
-        monkeypatch,
-        run_result=proc,
-        read_result={"success": False, "status": "Błąd", "log": "Status: Błąd"},
-    )
-    result = Application(MagicMock()).process_cdm_job("JOB-001", method="vbs")
-    assert result["success"] is False
-    assert result["processed"] is False
-    assert result["status"] == "Błąd"
-    assert result["psexec_rc"] == 1
-
-
-def test_process_cdm_job_missing_result(monkeypatch: pytest.MonkeyPatch) -> None:
-    _mock_headless_process(
-        monkeypatch,
-        run_result=MagicMock(returncode=0),
-        read_result={
-            "success": False,
-            "status": "missing",
-            "detail": "job log not found: C:/out/JOB-001/JOB-001.log",
-        },
-    )
-    result = Application(MagicMock()).process_cdm_job("JOB-001", method="vbs")
-    assert result["success"] is False
-    assert result["status"] == "missing"
-    assert result["log"] is None
-    assert result["detail"] == "job log not found: C:/out/JOB-001/JOB-001.log"
-
-
-def test_process_cdm_job_not_found(monkeypatch: pytest.MonkeyPatch) -> None:
-    _mock_headless_process(monkeypatch, count=0)
-    with pytest.raises(RuntimeError, match="cdm: job not found: JOB-001"):
-        Application(MagicMock()).process_cdm_job("JOB-001", method="vbs")
-
-
-def test_process_cdm_job_existence_check_failed(monkeypatch: pytest.MonkeyPatch) -> None:
-    _mock_headless_process(monkeypatch, count=None)
-    with pytest.raises(RuntimeError, match="cdm: job existence check failed: JOB-001"):
-        Application(MagicMock()).process_cdm_job("JOB-001", method="vbs")
-
-
-def test_process_cdm_job_empty_name() -> None:
-    app = Application(MagicMock())
-    with pytest.raises(RuntimeError, match="cdm: job_name is required"):
-        app.process_cdm_job("   ", method="vbs")
-
-
-def test_process_cdm_job_timeout(monkeypatch: pytest.MonkeyPatch) -> None:
-    import subprocess
-
-    _mock_headless_process(
-        monkeypatch,
-        run_side_effect=subprocess.TimeoutExpired(cmd=[], timeout=300),
-    )
-    with pytest.raises(RuntimeError, match="cdm: process job timed out after 300s"):
-        Application(MagicMock()).process_cdm_job("JOB-001", method="vbs")
-
-
-def test_process_cdm_job_subprocess_failure(monkeypatch: pytest.MonkeyPatch) -> None:
-    _mock_headless_process(
-        monkeypatch,
-        run_side_effect=FileNotFoundError("C:/temp/PsExec64.exe"),
-    )
-    with pytest.raises(RuntimeError, match="cdm: process job failed"):
-        Application(MagicMock()).process_cdm_job("JOB-001", method="vbs")
-
-
-def test_process_cdm_job_unknown_method(monkeypatch: pytest.MonkeyPatch) -> None:
-    with pytest.raises(RuntimeError, match=r"cdm: unknown method: xyz \(expected inproc\|vbs\)"):
-        Application(MagicMock()).process_cdm_job("JOB-001", method="xyz")
-
-
-# --- Application.process_cdm_job_inproc ---
-
-
-def _mock_inproc_process(
+def _mock_process(
     monkeypatch: pytest.MonkeyPatch,
     *,
     output_root: str | None = "C:/out",
@@ -1839,8 +2100,8 @@ def _mock_inproc_process(
     return run, read
 
 
-def test_process_cdm_job_inproc_success(monkeypatch: pytest.MonkeyPatch) -> None:
-    run, read = _mock_inproc_process(
+def test_process_cdm_job_success(monkeypatch: pytest.MonkeyPatch) -> None:
+    run, read = _mock_process(
         monkeypatch,
         read_result={
             "success": True,
@@ -1862,17 +2123,17 @@ def test_process_cdm_job_inproc_success(monkeypatch: pytest.MonkeyPatch) -> None
     read.assert_called_once_with("JOB-001", "C:/out", min_mtime=ANY)
 
 
-def test_process_cdm_job_inproc_default_is_inproc(monkeypatch: pytest.MonkeyPatch) -> None:
-    run, _ = _mock_inproc_process(monkeypatch, read_result={"success": False, "status": "missing"})
+def test_process_cdm_job_method_is_inproc(monkeypatch: pytest.MonkeyPatch) -> None:
+    run, _ = _mock_process(monkeypatch, read_result={"success": False, "status": "missing"})
     result = Application(run).process_cdm_job("JOB-001")
     assert result["method"] == "inproc"
     run.Run.assert_called_once()
 
 
-def test_process_cdm_job_inproc_com_error_propagates(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_process_cdm_job_com_error_propagates(monkeypatch: pytest.MonkeyPatch) -> None:
     import pythoncom
 
-    run, _ = _mock_inproc_process(monkeypatch)
+    run, _ = _mock_process(monkeypatch)
     run.Run.side_effect = pythoncom.com_error(
         -2147417842, "Aplikacja wywołała interfejs, który został skierowany na inny wątek"
     )
@@ -1881,8 +2142,71 @@ def test_process_cdm_job_inproc_com_error_propagates(monkeypatch: pytest.MonkeyP
     run.Run.assert_called_once_with("ApplyMachiningAfterNesting.Events.HeadlessProcess", "JOB-001")
 
 
-def test_process_cdm_job_inproc_com_failure(monkeypatch: pytest.MonkeyPatch) -> None:
-    run, _ = _mock_inproc_process(monkeypatch)
+def test_process_cdm_job_com_failure(monkeypatch: pytest.MonkeyPatch) -> None:
+    run, _ = _mock_process(monkeypatch)
     run.Run.side_effect = OSError("0x80004002")
     with pytest.raises(RuntimeError, match=r"cdm: process job failed: .*0x80004002"):
         Application(run).process_cdm_job("JOB-001")
+
+
+def test_process_cdm_job_no_output_root(monkeypatch: pytest.MonkeyPatch) -> None:
+    _mock_process(monkeypatch, output_root=None)
+    with pytest.raises(RuntimeError, match="cdm: output root not found: JOB-001"):
+        Application(MagicMock()).process_cdm_job("JOB-001")
+
+
+def test_process_cdm_job_failure(monkeypatch: pytest.MonkeyPatch) -> None:
+    _mock_process(
+        monkeypatch,
+        read_result={"success": False, "status": "Błąd", "log": "Status: Błąd"},
+    )
+    result = Application(MagicMock()).process_cdm_job("JOB-001")
+    assert result["success"] is False
+    assert result["processed"] is False
+    assert result["status"] == "Błąd"
+
+
+def test_process_cdm_job_missing_result(monkeypatch: pytest.MonkeyPatch) -> None:
+    _mock_process(
+        monkeypatch,
+        read_result={
+            "success": False,
+            "status": "missing",
+            "detail": "job log not found: C:/out/JOB-001/JOB-001.log",
+        },
+    )
+    result = Application(MagicMock()).process_cdm_job("JOB-001")
+    assert result["success"] is False
+    assert result["status"] == "missing"
+    assert result["log"] is None
+    assert result["detail"] == "job log not found: C:/out/JOB-001/JOB-001.log"
+
+
+def test_process_cdm_job_not_found(monkeypatch: pytest.MonkeyPatch) -> None:
+    _mock_process(monkeypatch, count=0)
+    with pytest.raises(RuntimeError, match="cdm: job not found: JOB-001"):
+        Application(MagicMock()).process_cdm_job("JOB-001")
+
+
+def test_process_cdm_job_existence_check_failed(monkeypatch: pytest.MonkeyPatch) -> None:
+    _mock_process(monkeypatch, count=None)
+    with pytest.raises(RuntimeError, match="cdm: job existence check failed: JOB-001"):
+        Application(MagicMock()).process_cdm_job("JOB-001")
+
+
+def test_process_cdm_job_empty_name() -> None:
+    app = Application(MagicMock())
+    with pytest.raises(RuntimeError, match="cdm: job_name is required"):
+        app.process_cdm_job("   ")
+
+
+def test_process_cdm_job_invalid_name_aborts_before_macro(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    job_count = MagicMock(return_value=1)
+    monkeypatch.setattr("alphacam_cli.core.cdm_db.job_count", job_count)
+    run = MagicMock()
+    with pytest.raises(RuntimeError, match=r"invalid job name: 'X/Y' \(forbidden characters: /\)"):
+        Application(run).process_cdm_job("X/Y")
+    job_count.assert_not_called()
+    run.Run.assert_not_called()

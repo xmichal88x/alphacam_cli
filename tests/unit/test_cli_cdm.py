@@ -154,6 +154,27 @@ def test_cdm_create_command_warnings() -> None:
     assert "cdm: customer not found: X" in result.stderr
 
 
+def test_cdm_create_command_failure() -> None:
+    from tests.unit.test_cli import _mock_com
+
+    with (
+        _mock_com(),
+        patch(
+            "alphacam_cli.core.application.Application.create_cdm_job",
+            return_value={
+                "success": False,
+                "job_name": "JOB-001",
+                "warnings": ["cdm: customer not found: X"],
+            },
+        ),
+    ):
+        result = runner.invoke(app, ["cdm", "create", "JOB-001"])
+    assert result.exit_code == 1
+    assert "CDM job creation failed: JOB-001" in result.stderr
+    assert "WARNING" in result.stderr
+    assert "cdm: customer not found: X" in result.stderr
+
+
 def test_cdm_create_command_invalid_due_date() -> None:
     from tests.unit.test_cli import _mock_com
 
@@ -481,6 +502,45 @@ def test_cdm_import_command_failure() -> None:
     assert "door type not found" in result.stderr
 
 
+def test_cdm_import_command_name_job_conflict() -> None:
+    from tests.unit.test_cli import _mock_com
+
+    with (
+        _mock_com(),
+        patch(
+            "alphacam_cli.core.application.Application.import_cdm_csv",
+        ) as mock_import,
+    ):
+        result = runner.invoke(
+            app,
+            ["cdm", "import", r"C:\temp\order.csv", "--name", "Zadanie 132", "--job", "JOB-001"],
+        )
+    assert result.exit_code == 2
+    assert "mutually exclusive" in result.stderr
+    mock_import.assert_not_called()
+
+
+def test_cdm_import_command_empty_csv() -> None:
+    from tests.unit.test_cli import _mock_com
+
+    with (
+        _mock_com(),
+        patch(
+            "alphacam_cli.core.application.Application.import_cdm_csv",
+            return_value={
+                "success": False,
+                "job_name": "order",
+                "items": 0,
+                "errors": [],
+            },
+        ),
+    ):
+        result = runner.invoke(app, ["cdm", "import", r"C:\temp\empty.csv"])
+    assert result.exit_code == 1
+    assert "No rows imported" in result.stderr
+    assert "empty CSV or no valid rows" in result.stderr
+
+
 def test_cdm_delete_command() -> None:
     from tests.unit.test_cli import _mock_com
 
@@ -494,6 +554,21 @@ def test_cdm_delete_command() -> None:
         result = runner.invoke(app, ["cdm", "delete", "JOB-001"])
     assert result.exit_code == 0
     assert "CDM job deleted: JOB-001" in result.stderr
+
+
+def test_cdm_delete_command_failure() -> None:
+    from tests.unit.test_cli import _mock_com
+
+    with (
+        _mock_com(),
+        patch(
+            "alphacam_cli.core.application.Application.delete_cdm_job",
+            return_value={"success": False, "job_name": "JOB-001"},
+        ),
+    ):
+        result = runner.invoke(app, ["cdm", "delete", "JOB-001"])
+    assert result.exit_code == 1
+    assert "CDM job deletion failed: JOB-001" in result.stderr
 
 
 def test_cdm_delete_command_error() -> None:
@@ -1558,7 +1633,7 @@ def test_cdm_process_command() -> None:
     mock_process.assert_called_once_with(job_name="JOB-001")
 
 
-def test_cdm_process_command_ignored_options_warning() -> None:
+def test_cdm_process_command_timeout_and_output_root() -> None:
     from tests.unit.test_cli import _mock_com
 
     with (
@@ -1568,10 +1643,49 @@ def test_cdm_process_command_ignored_options_warning() -> None:
             return_value={"success": True, "job_name": "JOB-001", "processed": True},
         ) as mock_process,
     ):
-        result = runner.invoke(app, ["cdm", "process", "JOB-001", "--timeout", "600"])
+        result = runner.invoke(
+            app,
+            ["cdm", "process", "JOB-001", "--timeout", "600", "--output-root", "C:/out"],
+        )
     assert result.exit_code == 0
-    assert "ignored with --method inproc" in result.stderr
-    mock_process.assert_called_once_with(job_name="JOB-001", timeout_seconds=600)
+    assert "ignored with --method" not in result.stderr
+    mock_process.assert_called_once_with(
+        job_name="JOB-001", timeout_seconds=600, output_root="C:/out"
+    )
+
+
+def test_cdm_process_command_method_flag_removed() -> None:
+    from tests.unit.test_cli import _mock_com
+
+    with (
+        _mock_com(),
+        patch(
+            "alphacam_cli.core.application.Application.process_cdm_job",
+            return_value={"success": True, "job_name": "JOB-001", "processed": True},
+        ) as mock_process,
+    ):
+        result = runner.invoke(app, ["cdm", "process", "JOB-001", "--method", "vbs"])
+    assert result.exit_code != 0
+    assert "No such option" in result.stderr
+    mock_process.assert_not_called()
+
+
+def test_cdm_process_command_psexec_flag_removed() -> None:
+    from tests.unit.test_cli import _mock_com
+
+    with (
+        _mock_com(),
+        patch(
+            "alphacam_cli.core.application.Application.process_cdm_job",
+            return_value={"success": True, "job_name": "JOB-001", "processed": True},
+        ) as mock_process,
+    ):
+        result = runner.invoke(
+            app, ["cdm", "process", "JOB-001", "--psexec", "C:/temp/PsExec64.exe"]
+        )
+    assert result.exit_code != 0
+    assert "No such option" in result.stderr
+    mock_process.assert_not_called()
 
 
 def test_cdm_process_command_failure() -> None:
@@ -1586,6 +1700,66 @@ def test_cdm_process_command_failure() -> None:
     ):
         result = runner.invoke(app, ["cdm", "process", "JOB-001"])
     assert result.exit_code == 1
+    assert "CDM job processing failed: JOB-001" in result.stderr
+
+
+def test_cdm_process_command_failure_detail_and_log() -> None:
+    from tests.unit.test_cli import _mock_com
+
+    with (
+        _mock_com(),
+        patch(
+            "alphacam_cli.core.application.Application.process_cdm_job",
+            return_value={
+                "success": False,
+                "job_name": "JOB-001",
+                "status": "Failed",
+                "processed": False,
+                "detail": "nesting error: sheet too small",
+                "log": "line1: macro started\nline2: nesting failed",
+            },
+        ),
+    ):
+        result = runner.invoke(app, ["cdm", "process", "JOB-001"])
+    assert result.exit_code == 1
+    assert "Status: Failed" in result.stderr
+    assert "Detail:" in result.stderr
+    assert "nesting error: sheet too small" in result.stderr
+    assert "Log:" in result.stderr
+    assert "line1: macro started" in result.stderr
+    assert "line2: nesting failed" in result.stderr
+
+
+def test_cdm_process_command_failure_no_detail_or_log() -> None:
+    from tests.unit.test_cli import _mock_com
+
+    with (
+        _mock_com(),
+        patch(
+            "alphacam_cli.core.application.Application.process_cdm_job",
+            return_value={"success": False, "job_name": "JOB-001", "processed": False},
+        ),
+    ):
+        result = runner.invoke(app, ["cdm", "process", "JOB-001"])
+    assert result.exit_code == 1
+    assert "CDM job processing failed: JOB-001" in result.stderr
+    assert "Detail:" not in result.stderr
+    assert "Log:" not in result.stderr
+
+
+def test_cdm_process_command_failure_broken_contract() -> None:
+    from tests.unit.test_cli import _mock_com
+
+    with (
+        _mock_com(),
+        patch(
+            "alphacam_cli.core.application.Application.process_cdm_job",
+            return_value={"success": False},
+        ),
+    ):
+        result = runner.invoke(app, ["cdm", "process", "JOB-001"])
+    assert result.exit_code == 1
+    assert "KeyError" not in result.stderr
     assert "CDM job processing failed: JOB-001" in result.stderr
 
 

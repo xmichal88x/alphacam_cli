@@ -274,17 +274,13 @@ class RemoteApplication:
     def process_cdm_job(
         self,
         job_name: str,
-        machine: dict[str, Any] | None = None,
         timeout_seconds: int = 300,
         output_root: str | None = None,
-        method: str | None = None,
     ) -> dict[str, Any]:
         return self._session.process_cdm_job(  # type: ignore[no-any-return]
             job_name=job_name,
-            machine=machine,
             timeout_seconds=timeout_seconds,
             output_root=output_root,
-            method=method,
         )
 
     def cdm_types(self) -> dict[str, Any]:

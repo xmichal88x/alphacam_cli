@@ -747,7 +747,7 @@ alphacam cdm create "Zamówienie 2026-08" --config "Fronty" --material MDF_18 --
 
 #### `process`
 
-Process a CDM job via the Automation Manager (`Job.Process()`, headless). Processing settings (post-processor, NC/report output paths) come from the job's configuration — nothing is passed here. The call is synchronous and may take a long time (geometry + toolpaths + nesting).
+Process a CDM job headlessly via the `ApplyMachiningAfterNesting.Events.HeadlessProcess` macro run in-proc on the gateway COM reference (no PsExec/VBScript). Processing settings (post-processor, NC/report output paths) come from the job's configuration — nothing is passed here. The call is synchronous and may take a long time (geometry + toolpaths + nesting, ~35-40 s).
 
 **Note:** over the gateway, a remote request has a **180 s timeout** (`RemoteSession.settimeout`); for longer jobs increase the remote request timeout (client). The gateway serves one request at a time — `process` blocks other requests for its whole duration.
 
@@ -757,10 +757,18 @@ Process a CDM job via the Automation Manager (`Job.Process()`, headless). Proces
 |----------|------|-------------|
 | `job_name` | `str` | CDM job name (required, must exist) |
 
+**Options:**
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `--timeout` | `int` | `300` | Processing timeout in seconds (client socket + server watchdog) |
+| `--output-root` | `str` | job config | Override the output root on the server |
+
 **Example:**
 
 ```bash
 alphacam cdm process "Zamowienie Test 01"
+alphacam cdm process "Zamowienie Test 01" --timeout 600 --output-root "C:/out"
 ```
 
 #### `types`

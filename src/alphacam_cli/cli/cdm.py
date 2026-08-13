@@ -15,7 +15,6 @@ from alphacam_cli.cli.common import (
     resolve_app,
 )
 from alphacam_cli.com.manager import alphacam_context
-from alphacam_cli.core import headless
 from alphacam_cli.core.application import _validate_due_date
 
 app = typer.Typer(help="Cabinet Door Manufacturing (CDM Automation Manager add-in)")
@@ -57,7 +56,14 @@ def create(
             due_date=due_date,
             description=description,
         )
-        console.print(f"[green]OK:[/green] CDM job created: {result['job_name']}")
+        if not result.get("success"):
+            console.print(
+                f"[red]Error:[/red] CDM job creation failed: {result.get('job_name') or job_name}"
+            )
+            for warning in result.get("warnings", []):
+                console.print(f"[yellow]WARNING:[/yellow] {warning}")
+            raise typer.Exit(code=1)
+        console.print(f"[green]OK:[/green] CDM job created: {result.get('job_name') or job_name}")
         console.print(f"     Config: {result.get('config') or '-'}")
         console.print(f"     Material: {result.get('material') or '-'}")
         for warning in result.get("warnings", []):
@@ -69,58 +75,44 @@ def create(
 def process(
     job_name: str = typer.Argument(..., help="CDM job name to process"),
     timeout: int = typer.Option(
-        300, "--timeout", help="Headless processing timeout in seconds (default: 300)"
+        300,
+        "--timeout",
+        help="Processing timeout in seconds (client socket + server watchdog)",
     ),
     output_root: str | None = typer.Option(
         None,
         "--output-root",
-        help="Override output root (default: from the job's configuration)",
-    ),
-    psexec: str | None = typer.Option(
-        None, "--psexec", help="Override PsExec executable path (default: C:/temp/PsExec64.exe)"
-    ),
-    method: str = typer.Option(
-        "inproc",
-        "--method",
-        help="Processing method: inproc (macro in-proc via gateway COM) or vbs (PsExec fallback)",
+        help="Override output root on the server (default: from the job's configuration)",
     ),
 ) -> None:
     """Process a CDM job headlessly.
 
-    inproc (default): HeadlessProcess macro run in-proc on the gateway COM
-    reference — no PsExec required. vbs: VBScript + PsExec in Session 1,
-    out-of-process fallback (no COM from this process).
+    The ``ApplyMachiningAfterNesting.Events.HeadlessProcess`` macro runs
+    in-proc on the gateway COM reference (no PsExec required).
     """
     require_platform()
-    if method == "inproc" and (timeout != 300 or psexec is not None):
-        console.print(
-            "[yellow]WARNING:[/yellow] --timeout/--psexec are ignored with --method inproc "
-            "(only used by vbs fallback)"
-        )
     kwargs: dict[str, Any] = {"job_name": job_name}
     if timeout != 300:
         kwargs["timeout_seconds"] = timeout
     if output_root is not None:
         kwargs["output_root"] = output_root
-    if method != "inproc":
-        kwargs["method"] = method
-    if psexec is not None:
-        kwargs["machine"] = {
-            "psexec": psexec,
-            "psexec_args": headless.DEFAULT_MACHINE["psexec_args"],
-            "cscript": headless.DEFAULT_MACHINE["cscript"],
-            "use_shell": False,
-        }
     with alphacam_context(visible=get_visible()) as raw:
         ac = resolve_app(raw)
         result = ac.process_cdm_job(**kwargs)
         if not result.get("success"):
-            console.print(f"[red]CDM job processing failed: {result['job_name']}[/red]")
+            job_display = result.get("job_name") or job_name
+            console.print(f"[red]CDM job processing failed: {job_display}[/red]")
             status = result.get("status")
             if status:
                 console.print(f"[red]Status: {status}[/red]")
+            detail = result.get("detail")
+            if detail:
+                console.print(f"[red]Detail:[/red] {detail}")
+            log = result.get("log")
+            if log:
+                console.print(f"[red]Log:[/red]\n{log}")
             raise typer.Exit(code=1)
-        console.print(f"[green]OK:[/green] CDM job processed: {result['job_name']}")
+        console.print(f"[green]OK:[/green] CDM job processed: {result.get('job_name') or job_name}")
         status = result.get("status")
         if status:
             console.print(f"[green]Status: {status}[/green]")
@@ -205,6 +197,9 @@ def import_csv(
     """Import a CSV door order into a single CDM job (headless, no dialogs)."""
     require_platform()
     job = (job or "").strip() or None
+    if job and name:
+        console.print("[red]Error:[/red] cdm: --name and --job are mutually exclusive")
+        raise typer.Exit(code=2)
     import_setting_key: str | int | None = (
         int(import_setting)
         if import_setting is not None and import_setting.isdigit()
@@ -236,12 +231,17 @@ def import_csv(
             import_setting=import_setting_key,
         )
         if not result.get("success"):
-            for err in result.get("errors", []):
-                console.print(f"[red]ERROR:[/red] {err}")
+            errors = result.get("errors", [])
+            if errors:
+                for err in errors:
+                    console.print(f"[red]ERROR:[/red] {err}")
+            else:
+                console.print("[red]ERROR:[/red] No rows imported (empty CSV or no valid rows)")
             raise typer.Exit(code=1)
         verb = "updated" if job else "created"
+        job_display = result.get("job_name") or name or job or csv
         console.print(
-            f"[green]OK:[/green] CDM job {verb}: {result['job_name']} ({result['items']} item(s))"
+            f"[green]OK:[/green] CDM job {verb}: {job_display} ({result.get('items', 0)} item(s))"
         )
         console.print(f"     Imported: {csv}")
         if result.get("material"):
@@ -260,7 +260,12 @@ def delete_job(
     with alphacam_context(visible=get_visible()) as raw:
         ac = resolve_app(raw)
         result = ac.delete_cdm_job(job_name=job_name)
-        console.print(f"[green]OK:[/green] CDM job deleted: {result['job_name']}")
+        if not result.get("success"):
+            console.print(
+                f"[red]Error:[/red] CDM job deletion failed: {result.get('job_name') or job_name}"
+            )
+            raise typer.Exit(code=1)
+        console.print(f"[green]OK:[/green] CDM job deleted: {result.get('job_name') or job_name}")
 
 
 @app.command("manifest")

@@ -98,6 +98,42 @@ def test_get_addins_failure(monkeypatch: pytest.MonkeyPatch) -> None:
         ac.get_addins()
 
 
+def test_get_cdm_automation_manager_retries_then_succeeds(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    gencache, pythoncom_mod, client_mod, addins_interface = _mock_addin_com(monkeypatch)
+    addins = MagicMock(name="IAddIns")
+    am = MagicMock(name="AutomationManager")
+    pythoncom_mod.CoCreateInstance.return_value = "co-created-instance"
+    addins_interface.GetAddInsInterface.return_value = addins
+    addins.GetAutomationManagerAddInGUI.return_value = am
+    gencache.EnsureDispatch.side_effect = [
+        RuntimeError("first"),
+        RuntimeError("second"),
+        "app-dispatch",
+    ]
+    monkeypatch.setattr("alphacam_cli.core.application.time.sleep", lambda _: None)
+
+    ac = Application(MagicMock())
+    result = ac.get_cdm_automation_manager()
+
+    assert result is am
+    assert gencache.EnsureDispatch.call_count == 3
+
+
+def test_get_cdm_automation_manager_retries_exhausted(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    gencache, _, _, _ = _mock_addin_com(monkeypatch)
+    gencache.EnsureDispatch.side_effect = RuntimeError("down")
+    monkeypatch.setattr("alphacam_cli.core.application.time.sleep", lambda _: None)
+
+    ac = Application(MagicMock())
+    with pytest.raises(RuntimeError, match="cdm: automation manager unavailable"):
+        ac.get_cdm_automation_manager()
+    assert gencache.EnsureDispatch.call_count == 3
+
+
 def _make_addins_mock(monkeypatch: pytest.MonkeyPatch, addins: MagicMock) -> None:
     _, _, _, addins_interface = _mock_addin_com(monkeypatch)
     addins_interface.GetAddInsInterface.return_value = addins
