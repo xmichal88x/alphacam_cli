@@ -222,6 +222,7 @@ The gateway uses **JSON-RPC 2.0** over TCP with length-prefixed frames.
 | `open_drawing` | `path` | `geometries_count, tool_paths_count` |
 | `save_active_drawing` | `path` | `success` |
 | `get_active_drawing` | `{}` | Info or `null` |
+| `drawing_query` | `file` | `{success, count}` |
 | `create_temp_drawing` | `{}` | `geometries_count` |
 | `zoom_all` | `{}` | `success` |
 | `list_tools` | `pattern` | `[path, ...]` |
@@ -235,6 +236,10 @@ The gateway uses **JSON-RPC 2.0** over TCP with length-prefixed frames.
 | `list_posts` | `{}` | `[{name, path}]` |
 | `select_post` | `name` | `success` |
 | `run_nest` | `parts, sheet_width, sheet_height` | `{count, success}` |
+| `create_cdm_job` | `job_name, config, material, customer, po, due_date, description` | `{success, job_name, config, material, warnings}` |
+| `process_cdm_job` | `job_name` | `{success, job_name, processed}` |
+
+> `process_cdm_job` is synchronous and may run long (geometry + toolpaths + nesting). The client's remote request has a **180 s timeout** (`RemoteSession.settimeout`) — for longer jobs increase the remote request timeout (client). The gateway serves one request at a time: `process_cdm_job` blocks the only STA thread for its whole duration, so other requests wait until it finishes.
 | `find_drawing_files` | `pattern` | `[path, ...]` |
 
 ### Error codes

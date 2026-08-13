@@ -13,6 +13,7 @@ from collections.abc import Callable
 from typing import Any, cast
 
 from alphacam_cli.core import cdm_db
+from alphacam_cli.core.application import _validate_due_date
 from alphacam_cli.gateway.protocol import (
     COM_ERROR,
     INTERNAL_ERROR,
@@ -80,6 +81,28 @@ _NEST_BOOL_OPTS = frozenset(
     }
 )
 
+
+def _as_bool(value: Any) -> bool:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        if value == 1:
+            return True
+        if value == 0:
+            return False
+    elif isinstance(value, str):
+        normalized = value.strip().lower()
+        if normalized in ("1", "true", "yes", "on"):
+            return True
+        if normalized in ("0", "false", "no", "off", ""):
+            return False
+    if value is not None:
+        logging.getLogger("alphacam.gateway").warning(
+            "ambiguous boolean value %r treated as False", value
+        )
+    return False
+
+
 _FIELD_SETTERS: dict[str, str] = {
     "door_customer_name": "CSV_CustomerName",
     "door_order_number": "CSV_OrderNumber",
@@ -102,8 +125,21 @@ def _resolve_cdm_import_setting(import_setting: str | int | None) -> dict[str, A
     setting = (
         cdm_db.find_import_setting(settings, import_setting) if import_setting is not None else None
     )
+    if setting is None and import_setting is None:
+        setting = next(
+            (s for s in settings if bool(s.get("selected")) and bool(s.get("is_cdm_import"))),
+            None,
+        )
     if setting is None:
-        raise COMError(f"cdm: import settings not found: {import_setting}")
+        if import_setting is not None:
+            raise COMError(f"cdm: import settings not found: {import_setting}")
+        available = ", ".join(
+            f"{s.get('id')} '{s.get('name')}'" for s in settings if bool(s.get("is_cdm_import"))
+        )
+        raise COMError(
+            "cdm: no import setting selected; pass --import-setting or select one in "
+            "Automation Manager" + (f" (available: {available})" if available else "")
+        )
     if not bool(setting.get("is_cdm_import")):
         name = setting.get("name") or import_setting
         raise COMError(f"cdm: import settings '{name}' is not a CDM import setting")
@@ -407,20 +443,20 @@ class GatewayServer:
             raise COMError(f"create_layer failed: {e}") from e
         return {"success": True, "layer": name}
 
-    def _handler_machining_pipeline(self, params: dict[str, Any]) -> dict[str, Any]:
+    def _handler_drawing_query(self, params: dict[str, Any]) -> dict[str, Any]:
         from alphacam_cli.gateway.server import _app as com_app
 
-        ara = str(params.get("ara", ""))
-        if not ara:
-            raise COMError("ara is required")
-        agq = str(params.get("agq", "")) or None
-        layer_map = str(params.get("layer_map", "")) or None
+        file = str(params.get("file", ""))
+        if not file:
+            raise COMError("file is required")
+        drw = com_app.get_active_drawing()
+        if drw is None:
+            raise COMError("No active drawing")
         try:
-            return com_app.machining_pipeline(  # type: ignore[no-any-return]
-                agq=agq, ara=ara, layer_map=layer_map
-            )
+            count = drw.run_query(file)
         except Exception as e:
-            raise COMError(f"machining pipeline failed: {e}") from e
+            raise COMError(f"drawing query failed: {e}") from e
+        return {"success": True, "count": int(count)}
 
     def _handler_probe_nest(self, params: dict[str, Any]) -> dict[str, str]:
         from alphacam_cli.gateway.server import _app as com_app
@@ -793,122 +829,69 @@ class GatewayServer:
         addins = ai.GetAddInsInterface(raw)
         return addins.GetAutomationManagerAddInGUI()
 
-    def _cdm_known_door_types(self, am: Any) -> set[str]:
-        types: set[str] = set()
-        try:
-            jobs = am.Jobs
-            for i in range(1, int(jobs.Count) + 1):
-                try:
-                    details = jobs.Item(i).CDMOrderDetails
-                except Exception:
-                    continue
-                for di in range(1, int(details.Count) + 1):
-                    try:
-                        types.add(str(details.Item(di).TypeName))
-                    except Exception:
-                        continue
-        except Exception as e:
-            self._logger.warning("cdm door types: read failed: %r", e)
-        return types
-
-    def _handler_run_cdm(self, params: dict[str, Any]) -> dict[str, Any]:
-        job_name = str(params.get("job_name", "")).strip()
+    def _handler_create_cdm_job(self, params: dict[str, Any]) -> dict[str, Any]:
+        job_name = str(params.get("job_name") or "").strip()
         if not job_name:
             raise COMError("cdm: job_name is required")
-        type_name = str(params.get("type_name", "")).strip()
-        if not type_name:
-            raise COMError("cdm: type_name is required")
+        config = str(params.get("config", "") or "").strip() or None
+        material = str(params.get("material", "") or "").strip() or None
+        customer = str(params.get("customer", "") or "").strip() or None
+        po = str(params.get("po", "") or "").strip() or None
+        due_date = str(params.get("due_date", "") or "").strip() or None
+        description = str(params.get("description", "") or "").strip() or None
+        if due_date is not None:
+            try:
+                _validate_due_date(due_date)
+            except RuntimeError as exc:
+                raise COMError(str(exc)) from None
+        from alphacam_cli.gateway.server import _app as com_app
+
         try:
-            width = float(params.get("width", 400))
-        except (TypeError, ValueError):
-            raise COMError("cdm: invalid width") from None
-        if width <= 0:
-            raise COMError("cdm: width must be positive")
-        try:
-            length = float(params.get("length", 300))
-        except (TypeError, ValueError):
-            raise COMError("cdm: invalid length") from None
-        if length <= 0:
-            raise COMError("cdm: length must be positive")
-        try:
-            quantity = int(params.get("quantity", 1))
-        except (TypeError, ValueError):
-            raise COMError("cdm: invalid quantity") from None
-        if quantity <= 0:
-            raise COMError("cdm: quantity must be positive")
-        bypass_nest = isinstance(params.get("bypass_nest"), bool) and params["bypass_nest"]
-        material_name = str(params.get("material", "")).strip() or None
-        try:
-            am = self._cdm_automation_manager()
-        except Exception as e:
-            raise COMError(f"cdm: automation manager unavailable: {e}") from e
-        if cdm_db.find_cdm_job(am, job_name) is not None:
-            raise COMError(f"cdm: job already exists: {job_name}")
-        materials = cdm_db.sheet_materials()
-        material_id: int | None = None
-        if material_name is not None:
-            material_id = materials.get(material_name)
-            if material_id is None:
-                raise COMError(f"cdm: material not found: {material_name}")
-        else:
-            material_id = cdm_db.vdb5_job_defaults().get("material_id")
-        material_label: str | None = material_name
-        if material_label is None and material_id is not None:
-            material_label = next(
-                (n for n, mid in materials.items() if mid == material_id),
-                None,
+            return com_app.create_cdm_job(  # type: ignore[no-any-return]
+                job_name=job_name,
+                config=config,
+                material=material,
+                customer=customer,
+                po=po,
+                due_date=due_date,
+                description=description,
             )
-        try:
-            job = am.NewCDMJob()
-            job.JobName = job_name
-            job.SaveToDatabase()
         except Exception as e:
-            raise COMError(f"cdm: create job failed: {e}") from e
-        material_error: str | None = None
-        if material_id is not None and not cdm_db.set_job_material(job_name, material_id):
-            material_error = "failed to set material"
+            raise COMError(str(e)) from e
+
+    def _handler_process_cdm_job(self, params: dict[str, Any]) -> dict[str, Any]:
+        job_name = str(params.get("job_name") or "").strip() or None
+        if not job_name:
+            raise COMError("cdm: job_name is required")
+        machine = params.get("machine")
+        if machine is not None and not isinstance(machine, dict):
+            raise COMError("cdm: machine must be a dict")
+        timeout_seconds = params.get("timeout_seconds")
+        if timeout_seconds is not None and not isinstance(timeout_seconds, int):
+            raise COMError("cdm: timeout_seconds must be an int")
+        output_root = params.get("output_root")
+        if output_root is not None and not isinstance(output_root, str):
+            raise COMError("cdm: output_root must be a str")
+        method = params.get("method")
+        if method is not None and not isinstance(method, str):
+            raise COMError("cdm: method must be a str")
+        if method is not None and method not in {"inproc", "vbs"}:
+            raise COMError("cdm: method must be 'inproc' or 'vbs'")
+        from alphacam_cli.gateway.server import _app as com_app
+
+        call_kwargs: dict[str, Any] = {"job_name": job_name}
+        if machine is not None:
+            call_kwargs["machine"] = machine
+        if timeout_seconds is not None:
+            call_kwargs["timeout_seconds"] = timeout_seconds
+        if output_root is not None:
+            call_kwargs["output_root"] = output_root
+        if method is not None:
+            call_kwargs["method"] = method
         try:
-            detail = job.AddCDMOrderDetail(type_name)
+            return com_app.process_cdm_job(**call_kwargs)  # type: ignore[no-any-return]
         except Exception as e:
-            deleted, reason = cdm_db.cleanup_created_job(
-                am,
-                job,
-                job_name,
-                log=lambda msg: self._logger.warning("cdm cleanup: %s", msg),
-            )
-            if not deleted:
-                self._logger.info("cdm cleanup: job '%s' not removed (%s)", job_name, reason)
-            if type_name not in self._cdm_known_door_types(am):
-                raise COMError(f"cdm: door type not found: {type_name}") from e
-            raise COMError(f"cdm: add order detail failed: {e}") from e
-        try:
-            detail.Width = width
-            detail.Length = length
-            detail.Quantity = quantity
-            detail.ByPassNest = bypass_nest
-            detail.SaveToDatabase()
-        except Exception as e:
-            deleted, reason = cdm_db.cleanup_created_job(
-                am,
-                job,
-                job_name,
-                log=lambda msg: self._logger.warning("cdm cleanup: %s", msg),
-            )
-            if not deleted:
-                self._logger.info("cdm cleanup: job '%s' not removed (%s)", job_name, reason)
-            raise COMError(f"cdm: save order detail failed: {e}") from e
-        result: dict[str, Any] = {
-            "success": True,
-            "job_name": job_name,
-            "type_name": type_name,
-            "width": width,
-            "length": length,
-            "quantity": quantity,
-            "material": material_label,
-        }
-        if material_error is not None:
-            result["material_error"] = material_error
-        return result
+            raise COMError(str(e)) from e
 
     def _handler_cdm_types(self, params: dict[str, Any]) -> dict[str, Any]:
         try:
@@ -959,15 +942,15 @@ class GatewayServer:
         csv_path = str(params.get("csv", "")).strip()
         if not csv_path:
             raise COMError("cdm: csv path is required")
-        job_param = str(params.get("job", "")).strip() or None
+        job_param = str(params.get("job") or "").strip() or None
         name_param = str(params.get("name", "")).strip() or None
         config_param = str(params.get("config") or "").strip()
         material_param = str(params.get("material", "")).strip() or None
         if job_param and name_param:
             raise COMError("cdm: --name and --job are mutually exclusive")
-        has_header = isinstance(params.get("has_header"), bool) and params["has_header"]
+        has_header = _as_bool(params.get("has_header"))
         import_setting = params.get("import_setting")
-        preview = isinstance(params.get("preview"), bool) and params["preview"]
+        preview = _as_bool(params.get("preview"))
         if not os.path.exists(csv_path):
             raise COMError(f"cdm: csv file not found: {csv_path}")
         if preview:
@@ -983,143 +966,18 @@ class GatewayServer:
                     "material": material_param,
                 }
             )
-        if import_setting is not None:
-            sep_param = params.get("separator")
-            separator = str(sep_param or "") or None
-            return self._import_cdm_csv_mapped(
-                csv_path=csv_path,
-                job_param=job_param,
-                name_param=name_param,
-                config_param=config_param,
-                material_param=material_param,
-                separator=separator,
-                has_header=has_header,
-                import_setting=import_setting,
-            )
-        separator = str(params.get("separator") or ",")
-        try:
-            rows = cdm_db.read_cdm_csv(csv_path, separator)
-        except Exception as e:
-            raise COMError(f"cdm: import csv failed: {e}") from e
-        details, errors = cdm_db.parse_cdm_rows(rows, has_header)
-        material_name = material_param
-        if material_name is None:
-            for n, row in enumerate(rows, start=1):
-                if has_header and n == 1:
-                    continue
-                if not any(str(cell).strip() for cell in row):
-                    continue
-                if len(row) > 5 and str(row[5]).strip():
-                    material_name = str(row[5]).strip()
-                    break
-        defaults: dict[str, Any] | None = None
-        materials = cdm_db.sheet_materials()
-        material_id: int | None = None
-        if material_name:
-            material_id = materials.get(material_name)
-            if material_id is None:
-                raise COMError(f"cdm: material not found: {material_name}")
-        else:
-            defaults = cdm_db.vdb5_job_defaults()
-            material_id = defaults.get("material_id")
-        material_label: str | None = material_name
-        if material_label is None and material_id is not None:
-            material_label = next(
-                (n for n, mid in materials.items() if mid == material_id),
-                None,
-            )
-        if not details:
-            return {
-                "success": False,
-                "job_name": job_param or "",
-                "items": 0,
-                "material": material_label,
-                "errors": errors,
-            }
-        try:
-            am = self._cdm_automation_manager()
-        except Exception as e:
-            raise COMError(f"cdm: automation manager unavailable: {e}") from e
-        job: Any = None
-        if job_param:
-            try:
-                job = cdm_db.find_cdm_job(am, job_param)
-            except Exception as e:
-                raise COMError(f"cdm: job lookup failed: {e}") from e
-            if job is None:
-                raise COMError(f"cdm: job not found: {job_param}")
-            job_name = job_param
-        else:
-            config_name = config_param
-            if not config_name:
-                if defaults is None:
-                    defaults = cdm_db.vdb5_job_defaults()
-                config_name = str(defaults.get("config_name") or "").strip()
-                if not config_name:
-                    raise COMError("cdm: no default configuration found")
-            default_job_name = os.path.splitext(os.path.basename(csv_path))[0]
-            job_name = (name_param or default_job_name)[:60]
-            try:
-                job = am.NewCDMJob()
-            except Exception as e:
-                raise COMError(f"cdm: create job failed: {e}") from e
-            job.JobName = job_name
-            if config_name:
-                try:
-                    job.ConfigurationSetting = am.ConfigurationSettings.GetByName(config_name)
-                except Exception as e:
-                    raise COMError(f"cdm: config not found: {config_name}") from e
-            try:
-                job.SaveToDatabase()
-            except Exception as e:
-                raise COMError(f"cdm: create job failed: {e}") from e
-        items = 0
-        for d in details:
-            try:
-                detail = job.AddCDMOrderDetail(d["style"])
-            except Exception:
-                errors.append(f"row {d['row']}: door type not found: {d['style']}")
-                continue
-            detail.Width = d["width"]
-            detail.Length = d["length"]
-            detail.Quantity = d["quantity"]
-            design_dims = d["design_dims"]
-            if design_dims:
-                parts = [p for p in design_dims.split(";") if p != ""]
-                if len(parts) < cdm_db.DESIGN_DIMS_FIELDS:
-                    parts += ["0"] * (cdm_db.DESIGN_DIMS_FIELDS - len(parts))
-                detail.UserVariableString = ";".join(parts)
-            try:
-                detail.SaveToDatabase()
-            except Exception as e:
-                errors.append(f"row {d['row']}: save order detail failed: {e}")
-                continue
-            items += 1
-        if material_id is not None:
-            if not cdm_db.set_job_material(job_name, material_id):
-                errors.append(f"job {job_name}: failed to set material")
-        elif material_name is None:
-            errors.append(f"job {job_name}: no material set (required for processing)")
-        if items == 0 and not job_param:
-            deleted, reason = cdm_db.cleanup_created_job(
-                am,
-                job,
-                job_name,
-                log=lambda msg: self._logger.warning("cdm import: cleanup failed: %s", msg),
-            )
-            if deleted:
-                errors.append(f"job {job_name}: no valid order details, deleted")
-            elif reason == "failed":
-                errors.append(f"job {job_name}: no valid order details, cleanup failed")
-            else:
-                errors.append(f"job {job_name}: no valid order details, cleanup unverified")
-        return {
-            "success": items > 0,
-            "job_name": job_name,
-            "items": items,
-            "material": material_label,
-            "errors": errors,
-        }
+        sep_param = params.get("separator")
+        separator = str(sep_param or "") or None
+        return self._import_cdm_csv_mapped(
+            csv_path=csv_path,
+            job_param=job_param,
+            name_param=name_param,
+            config_param=config_param,
+            material_param=material_param,
+            separator=separator,
+            has_header=has_header,
+            import_setting=import_setting,
+        )
 
     def _import_cdm_csv_mapped(
         self,
@@ -1130,9 +988,14 @@ class GatewayServer:
         material_param: str | None,
         separator: str | None,
         has_header: bool,
-        import_setting: str | int,
+        import_setting: str | int | None,
     ) -> dict[str, Any]:
         setting = _resolve_cdm_import_setting(import_setting)
+        setting_name = str(setting.get("name") or "")
+        if job_param is None and not bool(setting.get("create_job")):
+            raise COMError(
+                f"cdm: job is required (import setting '{setting_name}' does not create jobs)"
+            )
         eff_separator = (
             separator if separator is not None else str(setting.get("delimiter_char") or ",")
         )
@@ -1161,7 +1024,6 @@ class GatewayServer:
                 (n for n, mid in materials.items() if mid == material_id),
                 None,
             )
-        setting_name = str(setting.get("name") or "")
         if not details:
             return {
                 "success": False,
@@ -1279,74 +1141,69 @@ class GatewayServer:
             raise COMError("cdm: --name and --job are mutually exclusive")
         sep_param = params.get("separator")
         separator = str(sep_param or "") or None
-        has_header = isinstance(params.get("has_header"), bool) and params["has_header"]
+        has_header = _as_bool(params.get("has_header"))
         import_setting = params.get("import_setting")
         if not os.path.exists(csv_path):
             raise COMError(f"cdm: csv file not found: {csv_path}")
-        if import_setting is not None:
-            setting = _resolve_cdm_import_setting(import_setting)
-            eff_separator = (
-                separator if separator is not None else str(setting.get("delimiter_char") or ",")
+        setting = _resolve_cdm_import_setting(import_setting)
+        setting_name = str(setting.get("name") or "")
+        if job_param is None and not bool(setting.get("create_job")):
+            raise COMError(
+                f"cdm: job is required (import setting '{setting_name}' does not create jobs)"
             )
-            try:
-                rows = cdm_db.read_cdm_csv(csv_path, eff_separator)
-            except Exception as e:
-                raise COMError(f"cdm: import csv failed: {e}") from e
-            field_map = cdm_db.field_map_from_setting(setting)
-            details, errors = cdm_db.parse_cdm_rows_mapped(
-                rows, field_map, has_header or bool(setting.get("ignore_header", False))
-            )
-        else:
-            setting = None
-            field_map = {}
-            try:
-                rows = cdm_db.read_cdm_csv(csv_path, separator or ",")
-            except Exception as e:
-                raise COMError(f"cdm: import csv failed: {e}") from e
-            details, errors = cdm_db.parse_cdm_rows(rows, has_header)
+        eff_separator = (
+            separator if separator is not None else str(setting.get("delimiter_char") or ",")
+        )
+        try:
+            rows = cdm_db.read_cdm_csv(csv_path, eff_separator)
+        except Exception as e:
+            raise COMError(f"cdm: import csv failed: {e}") from e
+        field_map = cdm_db.field_map_from_setting(setting)
+        details, errors = cdm_db.parse_cdm_rows_mapped(
+            rows, field_map, has_header or bool(setting.get("ignore_header", False))
+        )
         defaults = cdm_db.vdb5_job_defaults()
+        materials = cdm_db.sheet_materials()
         material_name = _cdm_material_name(details, material_param)
-        if (
-            material_name is None and import_setting is None
-        ):  # legacy: scan column 6 like the import path
-            for n, row in enumerate(rows, start=1):
-                if has_header and n == 1:
-                    continue
-                if not any(str(cell).strip() for cell in row):
-                    continue
-                if len(row) > 5 and str(row[5]).strip():
-                    material_name = str(row[5]).strip()
-                    break
-        if material_name is None and defaults.get("material_id") is not None:
+        material_id: int | None = None
+        fatal_error = False
+        if material_name:
+            material_id = materials.get(material_name)
+            if material_id is None:
+                errors.append(f"cdm: material not found: {material_name}")
+                fatal_error = True
+        else:
+            material_id = defaults.get("material_id")
+        job_name = (
+            job_param if job_param is not None else _cdm_job_name(details, name_param, csv_path)
+        )
+        if material_name is None and material_id is None:
+            errors.append(f"job {job_name}: no material set (required for processing)")
+        elif material_name is None and material_id is not None:
             material_name = next(
-                (
-                    n
-                    for n, mid in cdm_db.sheet_materials().items()
-                    if mid == defaults.get("material_id")
-                ),
+                (n for n, mid in materials.items() if mid == material_id),
                 None,
             )
-        config_name = _cdm_config_name(details, config_param)
-        if not config_name:
-            config_name = str(defaults.get("config_name") or "").strip() or None
+        config_name = None
+        if not job_param:
+            config_name = _cdm_config_name(details, config_param)
+            if not config_name:
+                config_name = str(defaults.get("config_name") or "").strip() or None
+            if not config_name:
+                errors.append("cdm: no default configuration found")
+                fatal_error = True
         return {
-            "success": bool(details),
-            "setting": (
-                {
-                    "id": setting.get("id"),
-                    "name": setting.get("name"),
-                    "delimiter_char": setting.get("delimiter_char"),
-                    "sub_delimiter_char": setting.get("sub_delimiter_char"),
-                    "create_job": setting.get("create_job"),
-                    "selected": setting.get("selected"),
-                }
-                if setting is not None
-                else None
-            ),
+            "success": bool(details) and not fatal_error,
+            "setting": {
+                "id": setting.get("id"),
+                "name": setting.get("name"),
+                "delimiter_char": setting.get("delimiter_char"),
+                "sub_delimiter_char": setting.get("sub_delimiter_char"),
+                "create_job": setting.get("create_job"),
+                "selected": setting.get("selected"),
+            },
             "field_map": cdm_db.field_map_descriptions(field_map),
-            "job_name": (
-                job_param if job_param is not None else _cdm_job_name(details, name_param, csv_path)
-            ),
+            "job_name": job_name,
             "config": config_name,
             "material": material_name,
             "items": len(details),
@@ -1410,6 +1267,28 @@ class GatewayServer:
             return {"lookups": cdm_db.lookups()}
         except Exception as e:
             raise COMError(f"cdm: read lookups failed: {e}") from e
+
+    def _handler_manifest_list(self, params: dict[str, Any]) -> dict[str, Any]:
+        from alphacam_cli.gateway.server import _app as com_app
+
+        data_dir = str(params.get("data_dir")) if params.get("data_dir") else None
+        try:
+            return com_app.manifest_list(data_dir)  # type: ignore[no-any-return]
+        except Exception as e:
+            raise COMError(f"manifest: list failed: {e}") from e
+
+    def _handler_manifest_read(self, params: dict[str, Any]) -> dict[str, Any]:
+        from alphacam_cli.gateway.server import _app as com_app
+
+        job_name = str(params.get("job_name") or "").strip()
+        if not job_name:
+            raise COMError("manifest: job_name required")
+        material = str(params.get("material")) if params.get("material") else None
+        data_dir = str(params.get("data_dir")) if params.get("data_dir") else None
+        try:
+            return com_app.manifest_read(job_name, material, data_dir)  # type: ignore[no-any-return]
+        except Exception as e:
+            raise COMError(f"manifest: read failed: {e}") from e
 
     def _handler_cdm_delete_job(self, params: dict[str, Any]) -> dict[str, Any]:
         job_name = str(params.get("job_name", "")).strip()
@@ -1476,41 +1355,11 @@ class GatewayServer:
             raise COMError("width and height must be positive numbers")
         offset = float(params.get("offset", 50))
         fillet = float(params.get("fillet", 5))
-        depth = params.get("depth")
-        depth_val = float(depth) if depth is not None else None
-        if depth_val is not None and depth_val >= 0:
-            raise COMError("depth must be negative")
-        tool = params.get("tool")
-        tool_val = str(tool) if tool else None
-        spindle = params.get("spindle")
-        spindle_val = int(spindle) if spindle is not None else None
-        feed = params.get("feed")
-        feed_val = float(feed) if feed is not None else None
-        down_feed = params.get("down_feed")
-        down_feed_val = float(down_feed) if down_feed is not None else None
 
         drw = com_app.create_temp_drawing()
         if drw is None:
             raise COMError("Failed to create drawing")
         outer, inner = drw.create_panel(width, height, offset, fillet)
-        if depth_val is not None:
-            if tool_val:
-                com_app.select_tool(tool_val)
-            md = com_app.create_mill_data()
-            md.safe_rapid_level = 10.0
-            md.rapid_down_to = 2.0
-            md.material_top = 0.0
-            md.final_depth = depth_val
-            if spindle_val is not None:
-                md.spindle_speed = spindle_val
-            if feed_val is not None:
-                md.cut_feed = feed_val
-            if down_feed_val is not None:
-                md.down_feed = down_feed_val
-            for path in (outer, inner):
-                path.selected = True
-                md.rough_finish()
-                path.selected = False
         drw.zoom_all()
         return {
             "success": True,
@@ -1557,9 +1406,10 @@ class GatewayServer:
             raise COMError("path is required")
         if not fmt:
             raise COMError("fmt is required")
-        if bool(params.get("cabinets", False)):
+        cabinets = _as_bool(params.get("cabinets"))
+        if cabinets:
             com_app.set_dxf_cabinets(True)
-        drw = com_app.open_cad_file(path, fmt, clear=bool(params.get("clear", False)))
+        drw = com_app.open_cad_file(path, fmt, clear=_as_bool(params.get("clear")))
         if drw is None:
             raise COMError(f"Failed to open CAD file: {path}")
         return {"geometries_count": drw.geometries_count, "tool_paths_count": drw.tool_paths_count}
@@ -1604,6 +1454,14 @@ class GatewayServer:
         if drw is None:
             return None
         return {"geometries_count": drw.geometries_count, "tool_paths_count": drw.tool_paths_count}
+
+    def _handler_nest_inspect(self, params: dict[str, Any]) -> dict[str, Any]:
+        from alphacam_cli.gateway.server import _app as com_app
+
+        try:
+            return com_app.nest_inspect()  # type: ignore[no-any-return]
+        except Exception as e:
+            raise COMError(str(e)) from e
 
     def _handler_list_tools(self, params: dict[str, Any]) -> list[str]:
         from alphacam_cli.gateway.server import _app as com_app
@@ -1867,10 +1725,13 @@ class GatewayServer:
     def _handler_batch_process(self, params: dict[str, Any]) -> list[dict[str, Any]]:
         from alphacam_cli.gateway.server import _app as com_app
 
-        files: list[str] = list(params.get("files", []))
+        raw_files = params.get("files")
+        if not isinstance(raw_files, list):
+            raise COMError("batch: invalid files")
+        files: list[str] = list(raw_files)
         output_dir = str(params.get("output_dir", ""))
         post = str(params.get("post", ""))
-        continue_on_error = bool(params.get("continue_on_error", False))
+        continue_on_error = _as_bool(params.get("continue_on_error"))
         if not files:
             raise COMError("files list is required")
         if post:
@@ -1984,14 +1845,28 @@ class GatewayServer:
     def _handler_run_nest(self, params: dict[str, Any]) -> dict[str, Any]:
         from alphacam_cli.gateway.server import _app as com_app
 
-        parts: list[dict[str, Any]] = list(params.get("parts", []))
+        raw_parts = params.get("parts", [])
+        if not isinstance(raw_parts, list) or not all(isinstance(p, dict) for p in raw_parts):
+            raise COMError("nest: invalid parts")
+        parts: list[dict[str, Any]] = list(raw_parts)
+        try:
+            part_counts = [int(p.get("count", 1)) for p in parts]
+        except (TypeError, ValueError):
+            raise COMError("nest: invalid part count") from None
         output_dir = str(params.get("output_dir", ""))
-        sheet_width = float(params.get("sheet_width", 2440))
-        sheet_height = float(params.get("sheet_height", 1220))
+        try:
+            sheet_width = float(params.get("sheet_width", 2440))
+        except (TypeError, ValueError):
+            raise COMError("nest: invalid sheet_width") from None
+        try:
+            sheet_height = float(params.get("sheet_height", 1220))
+        except (TypeError, ValueError):
+            raise COMError("nest: invalid sheet_height") from None
         sheet_name = str(params.get("sheet_name", ""))
         if not parts:
             raise COMError("parts list is required")
-        if bool(params.get("advanced", False)):
+        advanced = _as_bool(params.get("advanced"))
+        if advanced:
             return self._run_nest_advanced(
                 params, parts, output_dir, sheet_name, sheet_width, sheet_height
             )
@@ -2005,12 +1880,10 @@ class GatewayServer:
             nd = drw.create_nest_data(nest_path)
         except Exception as e:
             raise COMError(f"nest: create_nest_data failed: {e}") from e
-        if parts:
-            print(f"nest: parts not added via nest list (diagnostic): {parts}")
         if parts and hasattr(nd, "AddPart"):
             try:
-                for part in parts:
-                    nd.AddPart(str(part.get("name", "")), int(part.get("count", 1)))  # type: ignore[attr-defined]
+                for part, count in zip(parts, part_counts, strict=True):
+                    nd.AddPart(str(part.get("name", "")), count)  # type: ignore[attr-defined]
             except Exception as e:
                 raise COMError(f"nest: add_part failed: {e}") from e
         try:
@@ -2056,7 +1929,25 @@ class GatewayServer:
             nd.DoNest()  # type: ignore[attr-defined]
         except Exception as e:
             raise COMError(f"nest: do_nest failed: {e}") from e
-        result: dict[str, Any] = {"success": True, "count": 1}
+        count = sum(part_counts)
+        result: dict[str, Any] = {"success": True, "count": count}
+        save_ard = params.get("save_ard")
+        if save_ard:
+            save_path = str(save_ard)
+            parent = os.path.dirname(save_path)
+            if parent:
+                os.makedirs(parent, exist_ok=True)
+            try:
+                drw.save_as(save_path)
+            except Exception as e:
+                raise COMError(f"nest: save_ard failed: {e}") from e
+            result["save_ard"] = save_path
+        try:
+            inspected = com_app.nest_inspect()
+            if isinstance(inspected, dict):
+                result["nest"] = inspected
+        except Exception as e:
+            result["nest"] = {"success": False, "error": str(e)}
         if parts and not hasattr(nd, "AddPart"):
             result["parts"] = parts
         return result
@@ -2075,7 +1966,7 @@ class GatewayServer:
                 elif name in _NEST_INT_OPTS:
                     setattr(nl, prop, int(value))
                 elif name in _NEST_BOOL_OPTS:
-                    setattr(nl, prop, bool(value))
+                    setattr(nl, prop, _as_bool(value))
             except Exception as e:
                 raise COMError(f"nest[advanced]: set option failed ({name}): {e}") from e
 
@@ -2111,9 +2002,13 @@ class GatewayServer:
         except Exception as e:
             raise COMError(f"nest[advanced]: new_nest_list failed: {e}") from e
         try:
-            for part in parts:
+            required_counts = [int(part.get("count", 1)) for part in parts]
+        except (TypeError, ValueError):
+            raise COMError("nest[advanced]: invalid part count") from None
+        try:
+            for part, required in zip(parts, required_counts, strict=True):
                 nest_part = nl.AddFile(str(part.get("name", "")))
-                nest_part.Required = int(part.get("count", 1))
+                nest_part.Required = required
         except Exception as e:
             raise COMError(f"nest[advanced]: add_file failed: {e}") from e
         self._set_nest_list_options(nl, params)
@@ -2142,12 +2037,35 @@ class GatewayServer:
             raise COMError(f"nest[advanced]: add_sheet failed: {e}") from e
         try:
             result = nesting.Nest(nl, sl)
+            try:
+                count = int(result.Count)
+            except (TypeError, AttributeError, ValueError):
+                self._logger.warning("nest[advanced]: result.Count unavailable, using count=0")
+                count = 0
         except Exception as e:
             raise COMError(f"nest[advanced]: nest failed: {e}") from e
         finally:
             with contextlib.suppress(Exception):
                 nesting.DeleteAllNestLists()
-        return {"success": True, "count": int(result.Count), "parts": parts}
+        out: dict[str, Any] = {"success": True, "count": count, "parts": parts}
+        save_ard = params.get("save_ard")
+        if save_ard:
+            save_path = str(save_ard)
+            parent = os.path.dirname(save_path)
+            if parent:
+                os.makedirs(parent, exist_ok=True)
+            try:
+                drw.save_as(save_path)
+            except Exception as e:
+                raise COMError(f"nest[advanced]: save_ard failed: {e}") from e
+            out["save_ard"] = save_path
+        try:
+            inspected = com_app.nest_inspect()
+            if isinstance(inspected, dict):
+                out["nest"] = inspected
+        except Exception as e:
+            out["nest"] = {"success": False, "error": str(e)}
+        return out
 
     def _handler_find_drawing_files(self, params: dict[str, Any]) -> list[str]:
         from alphacam_cli.gateway.server import _app as com_app

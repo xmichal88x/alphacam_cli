@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Any
 
 import typer
@@ -14,6 +15,8 @@ from alphacam_cli.cli.common import (
     resolve_app,
 )
 from alphacam_cli.com.manager import alphacam_context
+from alphacam_cli.core import headless
+from alphacam_cli.core.application import _validate_due_date
 
 app = typer.Typer(help="Cabinet Door Manufacturing (CDM Automation Manager add-in)")
 
@@ -22,37 +25,100 @@ app = typer.Typer(help="Cabinet Door Manufacturing (CDM Automation Manager add-i
 @handle_com_errors
 def create(
     job_name: str = typer.Argument(..., help="CDM job name"),
-    type_name: str = typer.Argument(..., help="Door type name (e.g. 'Typ Frontu 1')"),
-    width: float = typer.Option(400, "--width", "-w", help="Door width (mm)"),
-    length: float = typer.Option(300, "--length", "-l", help="Door length (mm)"),
-    quantity: int = typer.Option(1, "--quantity", "-q", help="Door quantity"),
-    bypass_nest: bool = typer.Option(False, "--bypass-nest", help="Bypass nesting"),
-    material: str | None = typer.Option(
-        None, "--material", help="Material name (AM_Materials) for the job; default from database"
+    config: str | None = typer.Option(
+        None, "--config", help="Configuration name (default: from database)"
     ),
+    material: str | None = typer.Option(
+        None, "--material", help="Material name (AM_Materials); default from database"
+    ),
+    customer: str | None = typer.Option(
+        None, "--customer", help="Customer name (AM_CustomerDetails)"
+    ),
+    po: str | None = typer.Option(None, "--po", help="Purchase order number"),
+    due_date: str | None = typer.Option(None, "--due-date", help="Due date (YYYY-MM-DD)"),
+    description: str | None = typer.Option(None, "--description", help="Job description"),
 ) -> None:
-    """Create a CDM job with a single order detail (headless, no dialogs)."""
+    """Create an empty CDM job (no order details; add patterns via cdm import)."""
     require_platform()
+    if due_date is not None:
+        try:
+            _validate_due_date(due_date)
+        except RuntimeError as exc:
+            console.print(f"[red]Error:[/red] {exc}")
+            raise typer.Exit(code=2) from None
     with alphacam_context(visible=get_visible()) as raw:
         ac = resolve_app(raw)
-        result = ac.run_cdm(
+        result = ac.create_cdm_job(
             job_name=job_name,
-            type_name=type_name,
-            width=width,
-            length=length,
-            quantity=quantity,
-            bypass_nest=bypass_nest,
+            config=config,
             material=material,
+            customer=customer,
+            po=po,
+            due_date=due_date,
+            description=description,
         )
         console.print(f"[green]OK:[/green] CDM job created: {result['job_name']}")
-        console.print(f"     Door type: {result['type_name']}")
-        console.print(
-            f"     Size: {result['width']}x{result['length']}, quantity: {result['quantity']}"
-        )
-        if result.get("material"):
-            console.print(f"     Material: {result['material']}")
-        if result.get("material_error"):
-            console.print(f"[yellow]WARNING:[/yellow] {result['material_error']}")
+        console.print(f"     Config: {result.get('config') or '-'}")
+        console.print(f"     Material: {result.get('material') or '-'}")
+        for warning in result.get("warnings", []):
+            console.print(f"[yellow]WARNING:[/yellow] {warning}")
+
+
+@app.command()
+@handle_com_errors
+def process(
+    job_name: str = typer.Argument(..., help="CDM job name to process"),
+    timeout: int = typer.Option(
+        300, "--timeout", help="Headless processing timeout in seconds (default: 300)"
+    ),
+    output_root: str | None = typer.Option(
+        None,
+        "--output-root",
+        help="Override output root (default: from the job's configuration)",
+    ),
+    psexec: str | None = typer.Option(
+        None, "--psexec", help="Override PsExec executable path (default: C:/temp/PsExec64.exe)"
+    ),
+    method: str = typer.Option(
+        "inproc",
+        "--method",
+        help="Processing method: inproc (macro in-proc via gateway COM) or vbs (PsExec fallback)",
+    ),
+) -> None:
+    """Process a CDM job headlessly.
+
+    inproc (default): HeadlessProcess macro run in-proc on the gateway COM
+    reference — no PsExec required. vbs: VBScript + PsExec in Session 1,
+    out-of-process fallback (no COM from this process).
+    """
+    require_platform()
+    kwargs: dict[str, Any] = {"job_name": job_name}
+    if timeout != 300:
+        kwargs["timeout_seconds"] = timeout
+    if output_root is not None:
+        kwargs["output_root"] = output_root
+    if method != "inproc":
+        kwargs["method"] = method
+    if psexec is not None:
+        kwargs["machine"] = {
+            "psexec": psexec,
+            "psexec_args": headless.DEFAULT_MACHINE["psexec_args"],
+            "cscript": headless.DEFAULT_MACHINE["cscript"],
+            "use_shell": False,
+        }
+    with alphacam_context(visible=get_visible()) as raw:
+        ac = resolve_app(raw)
+        result = ac.process_cdm_job(**kwargs)
+        if not result.get("success"):
+            console.print(f"[red]CDM job processing failed: {result['job_name']}[/red]")
+            status = result.get("status")
+            if status:
+                console.print(f"[red]Status: {status}[/red]")
+            raise typer.Exit(code=1)
+        console.print(f"[green]OK:[/green] CDM job processed: {result['job_name']}")
+        status = result.get("status")
+        if status:
+            console.print(f"[green]Status: {status}[/green]")
 
 
 @app.command("types")
@@ -117,17 +183,23 @@ def import_csv(
     ),
     header: bool = typer.Option(False, "--header", help="CSV has a header row"),
     material: str | None = typer.Option(
-        None, "--material", help="Material name (AM_Materials) for the job; overrides CSV column 6"
+        None,
+        "--material",
+        help="Material name (AM_Materials) for the job; overrides the mapped material column",
     ),
     import_setting: str | None = typer.Option(
         None,
         "--import-setting",
-        help="Import setting id or name from the database (defines column map, separator)",
+        help=(
+            "Import setting id or name from the database "
+            "(default: selected setting, AM_ImportSettings.Selected)"
+        ),
     ),
     preview: bool = typer.Option(False, "--preview", help="Dry run preview without creating a job"),
 ) -> None:
     """Import a CSV door order into a single CDM job (headless, no dialogs)."""
     require_platform()
+    job = (job or "").strip() or None
     import_setting_key: str | int | None = (
         int(import_setting)
         if import_setting is not None and import_setting.isdigit()
@@ -184,6 +256,130 @@ def delete_job(
         ac = resolve_app(raw)
         result = ac.delete_cdm_job(job_name=job_name)
         console.print(f"[green]OK:[/green] CDM job deleted: {result['job_name']}")
+
+
+@app.command("manifest")
+@handle_com_errors
+def manifest(
+    job_name: str | None = typer.Argument(None, help="Job name (manifest list if omitted)"),
+    material: str | None = typer.Option(
+        None, "--material", "-m", help="Filter by material (sheet database name)"
+    ),
+    data_dir: str | None = typer.Option(
+        None,
+        "--dir",
+        help="Override reports data directory (default: LICOMDIR\\Reports\\Data on server)",
+    ),
+    json_out: bool = typer.Option(False, "--json", help="Output raw JSON"),
+) -> None:
+    """Show nesting results manifests (.acrepd) for CDM jobs."""
+    require_platform()
+    with alphacam_context(visible=get_visible()) as raw:
+        ac = resolve_app(raw)
+        if job_name:
+            _print_manifest(ac, job_name, material, data_dir, json_out)
+        else:
+            if material:
+                console.print("[yellow]WARNING:[/yellow] --material ignored without job name")
+            _print_manifest_list(ac, data_dir, json_out)
+
+
+def _manifest_size_kb(size: Any) -> str:
+    try:
+        return f"{float(size) / 1024:.1f}"
+    except (TypeError, ValueError):
+        return str(size)
+
+
+def _manifest_mtime(mtime: Any) -> str:
+    try:
+        return datetime.fromtimestamp(float(mtime)).strftime("%Y-%m-%d %H:%M")
+    except (TypeError, ValueError, OSError):
+        return str(mtime)
+
+
+def _print_manifest_list(ac: Any, data_dir: str | None, json_out: bool) -> None:
+    data = ac.manifest_list(data_dir)
+    if json_out:
+        console.print_json(data=data)
+        return
+    manifests = data.get("manifests", [])
+    if not manifests:
+        console.print("[yellow]No manifests found[/yellow]")
+        return
+    t = Table(title="CDM Nesting Manifests")
+    t.add_column("Job", style="green")
+    t.add_column("Material")
+    t.add_column("Size (kB)", justify="right")
+    t.add_column("Modified")
+    t.add_column("Path", style="dim")
+    for m in manifests:
+        t.add_row(
+            str(m.get("job_name", "") or ""),
+            str(m.get("material", "") or ""),
+            _manifest_size_kb(m.get("size")),
+            _manifest_mtime(m.get("mtime")),
+            str(m.get("path", "") or ""),
+        )
+    console.print(t)
+
+
+def _print_manifest(
+    ac: Any, job_name: str, material: str | None, data_dir: str | None, json_out: bool
+) -> None:
+    data = ac.manifest_read(job_name, material, data_dir)
+    if json_out:
+        console.print_json(data=data)
+        return
+    manifest = data.get("manifest", {})
+    header = f"[cyan]Manifest:[/cyan] {manifest.get('job_name') or job_name}"
+    if manifest.get("material"):
+        header += f" [dim]({manifest.get('material')})[/dim]"
+    console.print(header)
+    console.print(f"     Total parts: {manifest.get('total_parts', 0)}")
+    unmatched = manifest.get("unmatched_parts", [])
+    console.print(
+        f"     Unmatched parts: {len(unmatched) if isinstance(unmatched, list) else unmatched}"
+    )
+    for sheet in manifest.get("sheets", []):
+        console.print(
+            f"\n[bold]Arkusz {sheet.get('name', '')}[/bold] "
+            f"{sheet.get('database_name', '') or ''} "
+            f"{str(sheet.get('width', '') or '')}x{str(sheet.get('length', '') or '')}"
+            f"x{str(sheet.get('thickness', '') or '')} mm, części: {sheet.get('part_count', 0)}"
+        )
+        parts = sheet.get("parts", [])
+        if not parts:
+            console.print("[dim]No parts on sheet[/dim]")
+            continue
+        t = Table()
+        t.add_column("Część", style="green")
+        t.add_column("Ilość", justify="right")
+        t.add_column("X", justify="right")
+        t.add_column("Y", justify="right")
+        t.add_column("Rot", justify="right")
+        t.add_column("WxL", justify="right")
+        t.add_column("Handle")
+        t.add_column("CSV order/item")
+        for part in parts:
+            csv_ref = ""
+            if part.get("csv_order_number") or part.get("csv_item_number"):
+                csv_ref = " / ".join(
+                    str(part.get(k) or "")
+                    for k in ("csv_order_number", "csv_item_number")
+                    if part.get(k)
+                )
+            t.add_row(
+                str(part.get("name", "") or ""),
+                str(part.get("quantity_on_sheet", "") or ""),
+                str(part.get("x", "") or ""),
+                str(part.get("y", "") or ""),
+                str(part.get("rotation", "") or ""),
+                f"{str(part.get('width', '') or '')}x{str(part.get('length', '') or '')}",
+                str(part.get("handle_name", "") or ""),
+                csv_ref,
+            )
+        console.print(t)
 
 
 import_settings_app = typer.Typer(help="CDM import settings")
@@ -286,11 +482,13 @@ def _print_import_preview(result: dict[str, Any]) -> None:
                 str(job_ref),
             )
         console.print(t)
-    for err in result.get("errors", []):
-        console.print(f"[yellow]WARNING:[/yellow] {err}")
     if not result.get("success"):
+        for err in result.get("errors", []):
+            console.print(f"[red]ERROR:[/red] {err}")
         console.print("[red]ERROR:[/red] Preview failed")
         raise typer.Exit(code=1)
+    for err in result.get("errors", []):
+        console.print(f"[yellow]WARNING:[/yellow] {err}")
     if result.get("items", 0) == 0:
         console.print("[red]ERROR:[/red] No items to import")
         raise typer.Exit(code=1)

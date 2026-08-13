@@ -286,20 +286,16 @@ def test_drawing_parametric_handler(server_app: MagicMock) -> None:
     drw.zoom_all.assert_called_once()
 
 
-def test_drawing_parametric_handler_machines(server_app: MagicMock) -> None:
+def test_drawing_parametric_handler_ignores_machining_params(server_app: MagicMock) -> None:
     drw = MagicMock()
     drw.geometries_count = 2
-    drw.tool_paths_count = 2
+    drw.tool_paths_count = 0
     server_app.create_temp_drawing.return_value = drw
     outer = MagicMock()
     inner = MagicMock()
     outer.tool_in_out = -1
     inner.tool_in_out = 1
     drw.create_panel.return_value = (outer, inner)
-    from alphacam_cli.core.machining import MillData
-
-    md = MillData(MagicMock())
-    server_app.create_mill_data.return_value = md
     gw = GatewayServer()
     result = gw._handler_drawing_parametric(
         {
@@ -312,30 +308,17 @@ def test_drawing_parametric_handler_machines(server_app: MagicMock) -> None:
             "down_feed": 1500,
         }
     )
-    server_app.select_tool.assert_called_once_with("Flat - 20mm")
-    assert md._md.SafeRapidLevel == 10
-    assert md._md.RapidDownTo == 2
-    assert md._md.MaterialTop == 0
-    assert md._md.FinalDepth == -19
-    assert md._md.SpindleSpeed == 18000
-    assert md._md.CutFeed == 4000
-    assert md._md.DownFeed == 1500
-    assert md._md.RoughFinish.call_count == 2
-    assert outer.selected is False
-    assert inner.selected is False
-    assert result["tool_paths_count"] == 2
+    assert result["success"] is True
+    assert result["tool_paths_count"] == 0
+    server_app.select_tool.assert_not_called()
+    server_app.create_mill_data.assert_not_called()
+    drw.create_panel.assert_called_once_with(800, 400, 50, 5)
 
 
 def test_drawing_parametric_handler_invalid_size(server_app: MagicMock) -> None:
     gw = GatewayServer()
     with pytest.raises(COMError, match="width and height must be positive"):
         gw._handler_drawing_parametric({"width": 0, "height": 400})
-
-
-def test_drawing_parametric_handler_positive_depth(server_app: MagicMock) -> None:
-    gw = GatewayServer()
-    with pytest.raises(COMError, match="depth must be negative"):
-        gw._handler_drawing_parametric({"width": 800, "height": 400, "depth": 5})
 
 
 def test_output_nc_handler(server_app: MagicMock, tmp_path: pathlib.Path) -> None:
@@ -481,7 +464,7 @@ def test_run_nest_handler(server_app: MagicMock) -> None:
         }
     )
 
-    assert result == {"count": 1, "success": True}
+    assert result == {"count": 3, "success": True}
     drw.create_nest_data.assert_called_once_with("nest.anl")
     drw.create_rectangle.assert_called_once_with(0, 0, 2440, 1220)
     nd.AddSheet.assert_called_once_with(sheet_geo.raw_dispatch, "MDF", 18, 1)
@@ -625,6 +608,9 @@ def test_run_nest_handler_advanced(server_app: MagicMock, monkeypatch: pytest.Mo
 
     _, nesting = _mock_nest_com(monkeypatch)
     nl = MagicMock(name="NestList")
+    part1_nest = MagicMock(name="NestPart1", Required=-1)
+    part2_nest = MagicMock(name="NestPart2", Required=-1)
+    nl.AddFile.side_effect = [part1_nest, part2_nest]
     sl = MagicMock(name="SheetList")
     nest_result = MagicMock(name="NestResult")
     nest_result.Count = 1
@@ -655,7 +641,8 @@ def test_run_nest_handler_advanced(server_app: MagicMock, monkeypatch: pytest.Mo
     assert nesting.SuppressDialogs is True
     nesting.NewNestList.assert_called_once_with("nest_full.anl")
     assert nl.AddFile.call_args_list == [mock.call("part1.amd"), mock.call("part2.amd")]
-    assert nl.AddFile.return_value.Required == 1
+    assert part1_nest.Required == 2
+    assert part2_nest.Required == 1
     assert nl.PartGap == 5.0
     assert nl.OptimiseLevel == 1
     assert nl.UseSubroutines is False
@@ -774,6 +761,112 @@ def test_run_nest_handler_advanced_add_file_failed(
             }
         )
     nesting.DeleteAllNestLists.assert_not_called()
+
+
+def test_run_nest_handler_save_ard(server_app: MagicMock, tmp_path: pathlib.Path) -> None:
+    drw = MagicMock()
+    server_app.create_temp_drawing.return_value = drw
+    nd = MagicMock(name="NestData")
+    drw.create_nest_data.return_value = nd
+    drw.create_rectangle.return_value = MagicMock()
+    server_app.nest_inspect.return_value = {"success": True, "sheets": [], "total_parts": 0}
+
+    save_path = tmp_path / "nested" / "x.ard"
+    gw = GatewayServer()
+    result = gw._handler_run_nest(
+        {
+            "parts": [{"name": "part.amd", "count": 1}],
+            "output_dir": "",
+            "sheet_width": 2440,
+            "sheet_height": 1220,
+            "save_ard": str(save_path),
+        }
+    )
+
+    assert save_path.parent.exists()
+    drw.save_as.assert_called_once_with(str(save_path))
+    assert result["save_ard"] == str(save_path)
+    assert result["nest"] == {"success": True, "sheets": [], "total_parts": 0}
+    assert result["success"] is True
+
+
+def test_run_nest_handler_nest_results(server_app: MagicMock) -> None:
+    drw = MagicMock()
+    server_app.create_temp_drawing.return_value = drw
+    nd = MagicMock(name="NestData")
+    drw.create_nest_data.return_value = nd
+    drw.create_rectangle.return_value = MagicMock()
+    inspected = {"success": True, "sheets": [], "total_parts": 0}
+    server_app.nest_inspect.return_value = inspected
+
+    gw = GatewayServer()
+    result = gw._handler_run_nest(
+        {
+            "parts": [{"name": "part.amd", "count": 1}],
+            "output_dir": "",
+            "sheet_width": 2440,
+            "sheet_height": 1220,
+        }
+    )
+
+    assert result["nest"] == inspected
+    server_app.nest_inspect.assert_called_once()
+    assert result["success"] is True
+
+
+def test_run_nest_handler_nest_results_fallback(server_app: MagicMock) -> None:
+    drw = MagicMock()
+    server_app.create_temp_drawing.return_value = drw
+    nd = MagicMock(name="NestData")
+    drw.create_nest_data.return_value = nd
+    drw.create_rectangle.return_value = MagicMock()
+    server_app.nest_inspect.side_effect = Exception("boom")
+
+    gw = GatewayServer()
+    result = gw._handler_run_nest(
+        {
+            "parts": [{"name": "part.amd", "count": 1}],
+            "output_dir": "",
+            "sheet_width": 2440,
+            "sheet_height": 1220,
+        }
+    )
+
+    assert result["success"] is True
+    assert result["nest"] == {"success": False, "error": "boom"}
+
+
+def test_run_nest_handler_advanced_save_ard(
+    server_app: MagicMock, monkeypatch: pytest.MonkeyPatch, tmp_path: pathlib.Path
+) -> None:
+    drw = MagicMock()
+    server_app.create_temp_drawing.return_value = drw
+    drw.create_rectangle.return_value = MagicMock()
+    server_app.nest_inspect.return_value = {"success": True, "sheets": [], "total_parts": 0}
+
+    _, nesting = _mock_nest_com(monkeypatch)
+    nl = MagicMock(name="NestList")
+    sl = MagicMock(name="SheetList")
+    nesting.NewNestList.return_value = nl
+    nesting.NewSheetList.return_value = sl
+    nesting.Nest.return_value = MagicMock(Count=1)
+
+    save_path = tmp_path / "nested" / "x.ard"
+    gw = GatewayServer()
+    result = gw._handler_run_nest(
+        {
+            "parts": [{"name": "part.amd", "count": 1}],
+            "advanced": True,
+            "save_ard": str(save_path),
+        }
+    )
+
+    assert save_path.parent.exists()
+    drw.save_as.assert_called_once_with(str(save_path))
+    assert result["save_ard"] == str(save_path)
+    assert result["nest"] == {"success": True, "sheets": [], "total_parts": 0}
+    assert result["success"] is True
+    assert result["count"] == 1
 
 
 def test_mill_saw_handler(server_app: MagicMock) -> None:
@@ -946,49 +1039,37 @@ def test_create_layer_handler_failure(server_app: MagicMock) -> None:
         gw._handler_create_layer({"name": "KONTUR"})
 
 
-def test_machining_pipeline_handler(server_app: MagicMock) -> None:
-    server_app.machining_pipeline.return_value = {
-        "success": True,
-        "geometries_count": 2,
-        "tool_paths_count": 4,
-    }
+def test_drawing_query_handler(server_app: MagicMock) -> None:
+    drw = MagicMock()
+    drw.run_query.return_value = 7
+    server_app.get_active_drawing.return_value = drw
     gw = GatewayServer()
-    result = gw._handler_machining_pipeline(
-        {
-            "agq": r"C:\ALPHACAM\LICOMDIR\Queries\test.agq",
-            "ara": r"C:\ALPHACAM\LICOMDIR\Styles\Fronty_AutoStyl.ara",
-            "layer_map": "KONTUR:1,2;EDGE_F45:3",
-        }
-    )
-    assert result == {"success": True, "geometries_count": 2, "tool_paths_count": 4}
-    server_app.machining_pipeline.assert_called_once_with(
-        agq=r"C:\ALPHACAM\LICOMDIR\Queries\test.agq",
-        ara=r"C:\ALPHACAM\LICOMDIR\Styles\Fronty_AutoStyl.ara",
-        layer_map="KONTUR:1,2;EDGE_F45:3",
-    )
+    result = gw._handler_drawing_query({"file": r"C:\ALPHACAM\LICOMDIR\Queries\test.agq"})
+    assert result == {"success": True, "count": 7}
+    drw.run_query.assert_called_once_with(r"C:\ALPHACAM\LICOMDIR\Queries\test.agq")
 
 
-def test_machining_pipeline_handler_optional_params(server_app: MagicMock) -> None:
-    server_app.machining_pipeline.return_value = {"success": True}
+def test_drawing_query_handler_missing_file(server_app: MagicMock) -> None:
     gw = GatewayServer()
-    gw._handler_machining_pipeline({"ara": r"C:\styles\auto.ara"})
-    server_app.machining_pipeline.assert_called_once_with(
-        agq=None, ara=r"C:\styles\auto.ara", layer_map=None
-    )
+    with pytest.raises(COMError, match="file is required"):
+        gw._handler_drawing_query({})
+    server_app.get_active_drawing.assert_not_called()
 
 
-def test_machining_pipeline_handler_missing_ara(server_app: MagicMock) -> None:
+def test_drawing_query_handler_no_drawing(server_app: MagicMock) -> None:
+    server_app.get_active_drawing.return_value = None
     gw = GatewayServer()
-    with pytest.raises(COMError, match="ara is required"):
-        gw._handler_machining_pipeline({})
-    server_app.machining_pipeline.assert_not_called()
+    with pytest.raises(COMError, match="No active drawing"):
+        gw._handler_drawing_query({"file": r"C:\ALPHACAM\LICOMDIR\Queries\test.agq"})
 
 
-def test_machining_pipeline_handler_failure(server_app: MagicMock) -> None:
-    server_app.machining_pipeline.side_effect = RuntimeError("boom")
+def test_drawing_query_handler_failure(server_app: MagicMock) -> None:
+    drw = MagicMock()
+    drw.run_query.side_effect = RuntimeError("boom")
+    server_app.get_active_drawing.return_value = drw
     gw = GatewayServer()
-    with pytest.raises(COMError, match=r"machining pipeline failed: boom"):
-        gw._handler_machining_pipeline({"ara": r"C:\styles\auto.ara"})
+    with pytest.raises(COMError, match=r"drawing query failed: boom"):
+        gw._handler_drawing_query({"file": r"C:\ALPHACAM\LICOMDIR\Queries\test.agq"})
 
 
 def _mock_cdm_com(monkeypatch: pytest.MonkeyPatch) -> tuple[MagicMock, MagicMock, MagicMock]:
@@ -1026,272 +1107,104 @@ def _mock_vdb5_run(
     return run
 
 
-def test_run_cdm_handler(server_app: MagicMock, monkeypatch: pytest.MonkeyPatch) -> None:
-    _, _, am = _mock_cdm_com(monkeypatch)
-    job = MagicMock()
-    detail = MagicMock()
-    am.NewCDMJob.return_value = job
-    job.AddCDMOrderDetail.return_value = detail
-    monkeypatch.setattr(
-        "alphacam_cli.core.cdm_db.vdb5_job_defaults",
-        lambda: {"config_name": None, "material_id": None},
-    )
+def test_create_cdm_job_handler(server_app: MagicMock) -> None:
+    server_app.create_cdm_job.return_value = {
+        "success": True,
+        "job_name": "JOB-001",
+        "config": "Fronty",
+        "material": "MDF_18",
+        "warnings": [],
+    }
     gw = GatewayServer()
-    result = gw._handler_run_cdm(
+    result = gw._handler_create_cdm_job(
         {
             "job_name": "JOB-001",
-            "type_name": "Typ Frontu 1",
-            "width": 500,
-            "length": 320,
-            "quantity": 2,
-            "bypass_nest": True,
+            "config": "Fronty",
+            "material": "MDF_18",
+            "customer": "Klient A",
+            "po": "PO-1",
+            "due_date": "2026-08-10",
+            "description": "opis",
         }
     )
     assert result == {
         "success": True,
         "job_name": "JOB-001",
-        "type_name": "Typ Frontu 1",
-        "width": 500.0,
-        "length": 320.0,
-        "quantity": 2,
-        "material": None,
+        "config": "Fronty",
+        "material": "MDF_18",
+        "warnings": [],
     }
-    assert job.JobName == "JOB-001"
-    job.SaveToDatabase.assert_called_once_with()
-    job.AddCDMOrderDetail.assert_called_once_with("Typ Frontu 1")
-    assert detail.Width == 500.0
-    assert detail.Length == 320.0
-    assert detail.Quantity == 2
-    assert detail.ByPassNest is True
-    detail.SaveToDatabase.assert_called_once_with()
-
-
-def test_run_cdm_handler_defaults(server_app: MagicMock, monkeypatch: pytest.MonkeyPatch) -> None:
-    _, _, am = _mock_cdm_com(monkeypatch)
-    job = MagicMock()
-    detail = MagicMock()
-    am.NewCDMJob.return_value = job
-    job.AddCDMOrderDetail.return_value = detail
-    monkeypatch.setattr(
-        "alphacam_cli.core.cdm_db.vdb5_job_defaults",
-        lambda: {"config_name": None, "material_id": None},
+    server_app.create_cdm_job.assert_called_once_with(
+        job_name="JOB-001",
+        config="Fronty",
+        material="MDF_18",
+        customer="Klient A",
+        po="PO-1",
+        due_date="2026-08-10",
+        description="opis",
     )
+
+
+def test_create_cdm_job_handler_defaults(server_app: MagicMock) -> None:
+    server_app.create_cdm_job.return_value = {"success": True}
     gw = GatewayServer()
-    result = gw._handler_run_cdm({"job_name": "JOB-001", "type_name": "Typ Frontu 1"})
-    assert result["width"] == 400.0
-    assert result["length"] == 300.0
-    assert result["quantity"] == 1
-    assert result["material"] is None
-    assert detail.ByPassNest is False
-
-
-def test_run_cdm_handler_width_zero(server_app: MagicMock) -> None:
-    gw = GatewayServer()
-    with pytest.raises(COMError, match="cdm: width must be positive"):
-        gw._handler_run_cdm({"job_name": "JOB-001", "type_name": "Typ Frontu 1", "width": 0})
-
-
-def test_run_cdm_handler_length_zero(server_app: MagicMock) -> None:
-    gw = GatewayServer()
-    with pytest.raises(COMError, match="cdm: length must be positive"):
-        gw._handler_run_cdm({"job_name": "JOB-001", "type_name": "Typ Frontu 1", "length": -10})
-
-
-def test_run_cdm_handler_quantity_negative(server_app: MagicMock) -> None:
-    gw = GatewayServer()
-    with pytest.raises(COMError, match="cdm: quantity must be positive"):
-        gw._handler_run_cdm({"job_name": "JOB-001", "type_name": "Typ Frontu 1", "quantity": -1})
-
-
-def test_run_cdm_handler_job_duplicate(
-    server_app: MagicMock, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    _, _, am = _mock_cdm_com(monkeypatch)
-    monkeypatch.setattr("alphacam_cli.core.cdm_db.find_cdm_job", lambda am, name: MagicMock())
-    gw = GatewayServer()
-    with pytest.raises(COMError, match="cdm: job already exists: JOB-001"):
-        gw._handler_run_cdm({"job_name": "JOB-001", "type_name": "Typ Frontu 1"})
-    am.NewCDMJob.assert_not_called()
-
-
-def test_run_cdm_handler_material(server_app: MagicMock, monkeypatch: pytest.MonkeyPatch) -> None:
-    _, _, am = _mock_cdm_com(monkeypatch)
-    job = MagicMock()
-    detail = MagicMock()
-    am.NewCDMJob.return_value = job
-    job.AddCDMOrderDetail.return_value = detail
-    monkeypatch.setattr("alphacam_cli.core.cdm_db.sheet_materials", lambda: {"MDF_18": 2})
-    set_job_material = MagicMock(return_value=True)
-    monkeypatch.setattr("alphacam_cli.core.cdm_db.set_job_material", set_job_material)
-    gw = GatewayServer()
-    result = gw._handler_run_cdm(
-        {"job_name": "JOB-001", "type_name": "Typ Frontu 1", "material": "MDF_18"}
+    result = gw._handler_create_cdm_job({"job_name": "JOB-001"})
+    assert result == {"success": True}
+    server_app.create_cdm_job.assert_called_once_with(
+        job_name="JOB-001",
+        config=None,
+        material=None,
+        customer=None,
+        po=None,
+        due_date=None,
+        description=None,
     )
-    assert result["material"] == "MDF_18"
-    assert "material_error" not in result
-    set_job_material.assert_called_once_with("JOB-001", 2)
 
 
-def test_run_cdm_handler_material_not_found(
-    server_app: MagicMock, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    _, _, am = _mock_cdm_com(monkeypatch)
-    monkeypatch.setattr("alphacam_cli.core.cdm_db.sheet_materials", lambda: {"MDF_18": 2})
+def test_create_cdm_job_handler_blank_params(server_app: MagicMock) -> None:
+    server_app.create_cdm_job.return_value = {"success": True}
     gw = GatewayServer()
-    with pytest.raises(COMError, match="cdm: material not found: X"):
-        gw._handler_run_cdm({"job_name": "JOB-001", "type_name": "Typ Frontu 1", "material": "X"})
-    am.NewCDMJob.assert_not_called()
-
-
-def test_run_cdm_handler_material_set_failed(
-    server_app: MagicMock, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    _, _, am = _mock_cdm_com(monkeypatch)
-    job = MagicMock()
-    am.NewCDMJob.return_value = job
-    monkeypatch.setattr("alphacam_cli.core.cdm_db.sheet_materials", lambda: {"MDF_18": 2})
-    monkeypatch.setattr("alphacam_cli.core.cdm_db.set_job_material", lambda job_name, mid: False)
-    gw = GatewayServer()
-    result = gw._handler_run_cdm(
-        {"job_name": "JOB-001", "type_name": "Typ Frontu 1", "material": "MDF_18"}
+    gw._handler_create_cdm_job(
+        {
+            "job_name": " JOB-001 ",
+            "config": "  ",
+            "material": "",
+            "customer": " ",
+            "po": "",
+            "due_date": " ",
+            "description": "",
+        }
     )
-    assert result["success"] is True
-    assert result["material"] == "MDF_18"
-    assert result["material_error"] == "failed to set material"
-
-
-def test_run_cdm_handler_default_material(
-    server_app: MagicMock, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    _, _, am = _mock_cdm_com(monkeypatch)
-    job = MagicMock()
-    detail = MagicMock()
-    am.NewCDMJob.return_value = job
-    job.AddCDMOrderDetail.return_value = detail
-    monkeypatch.setattr(
-        "alphacam_cli.core.cdm_db.vdb5_job_defaults",
-        lambda: {"config_name": None, "material_id": 4},
+    server_app.create_cdm_job.assert_called_once_with(
+        job_name="JOB-001",
+        config=None,
+        material=None,
+        customer=None,
+        po=None,
+        due_date=None,
+        description=None,
     )
-    monkeypatch.setattr(
-        "alphacam_cli.core.cdm_db.sheet_materials",
-        lambda: {"MDF18 - 2800 x 2070": 4},
-    )
-    set_job_material = MagicMock(return_value=True)
-    monkeypatch.setattr("alphacam_cli.core.cdm_db.set_job_material", set_job_material)
-    gw = GatewayServer()
-    result = gw._handler_run_cdm({"job_name": "JOB-001", "type_name": "Typ Frontu 1"})
-    assert result["material"] == "MDF18 - 2800 x 2070"
-    assert "material_error" not in result
-    set_job_material.assert_called_once_with("JOB-001", 4)
 
 
-def test_run_cdm_handler_missing_job_name(server_app: MagicMock) -> None:
+def test_create_cdm_job_handler_missing_job_name(server_app: MagicMock) -> None:
     gw = GatewayServer()
     with pytest.raises(COMError, match="cdm: job_name is required"):
-        gw._handler_run_cdm({"type_name": "Typ Frontu 1"})
+        gw._handler_create_cdm_job({})
+    server_app.create_cdm_job.assert_not_called()
 
 
-def test_run_cdm_handler_missing_type_name(server_app: MagicMock) -> None:
+def test_create_cdm_job_handler_invalid_due_date(server_app: MagicMock) -> None:
     gw = GatewayServer()
-    with pytest.raises(COMError, match="cdm: type_name is required"):
-        gw._handler_run_cdm({"job_name": "JOB-001"})
+    with pytest.raises(COMError, match="cdm: invalid due date"):
+        gw._handler_create_cdm_job({"job_name": "JOB-001", "due_date": "2026-13-40"})
+    server_app.create_cdm_job.assert_not_called()
 
 
-def test_run_cdm_handler_am_unavailable(
-    server_app: MagicMock, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    _, addins, _ = _mock_cdm_com(monkeypatch)
-    addins.GetAutomationManagerAddInGUI.side_effect = RuntimeError("no license")
+def test_create_cdm_job_handler_com_failure(server_app: MagicMock) -> None:
+    server_app.create_cdm_job.side_effect = RuntimeError("cdm: job already exists: JOB-001")
     gw = GatewayServer()
-    with pytest.raises(COMError, match="cdm: automation manager unavailable"):
-        gw._handler_run_cdm({"job_name": "JOB-001", "type_name": "Typ Frontu 1"})
-
-
-def test_run_cdm_handler_job_failed(server_app: MagicMock, monkeypatch: pytest.MonkeyPatch) -> None:
-    _, _, am = _mock_cdm_com(monkeypatch)
-    am.NewCDMJob.side_effect = RuntimeError("db locked")
-    gw = GatewayServer()
-    with pytest.raises(COMError, match="cdm: create job failed: db locked"):
-        gw._handler_run_cdm({"job_name": "JOB-001", "type_name": "Typ Frontu 1"})
-
-
-def test_run_cdm_handler_door_type_not_found(
-    server_app: MagicMock, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    _, _, am = _mock_cdm_com(monkeypatch)
-    job = MagicMock()
-    job.AddCDMOrderDetail.side_effect = RuntimeError("FOREIGN KEY constraint failed")
-    am.NewCDMJob.return_value = job
-    am.Jobs.Count = 0
-    cleanup = MagicMock(return_value=(True, ""))
-    monkeypatch.setattr("alphacam_cli.core.cdm_db.cleanup_created_job", cleanup)
-    gw = GatewayServer()
-    with pytest.raises(COMError, match="cdm: door type not found: XYZ"):
-        gw._handler_run_cdm({"job_name": "JOB-001", "type_name": "XYZ"})
-    args, kwargs = cleanup.call_args
-    assert args == (am, job, "JOB-001")
-    assert callable(kwargs.get("log"))
-
-
-def test_run_cdm_handler_save_detail_failed_cleans_up(
-    server_app: MagicMock, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    _, _, am = _mock_cdm_com(monkeypatch)
-    job = MagicMock()
-    detail = MagicMock()
-    detail.SaveToDatabase.side_effect = RuntimeError("db locked")
-    am.NewCDMJob.return_value = job
-    job.AddCDMOrderDetail.return_value = detail
-    monkeypatch.setattr(
-        "alphacam_cli.core.cdm_db.vdb5_job_defaults",
-        lambda: {"config_name": None, "material_id": None},
-    )
-    cleanup = MagicMock(return_value=(False, "failed"))
-    monkeypatch.setattr("alphacam_cli.core.cdm_db.cleanup_created_job", cleanup)
-    gw = GatewayServer()
-    with pytest.raises(COMError, match="cdm: save order detail failed: db locked"):
-        gw._handler_run_cdm({"job_name": "JOB-001", "type_name": "Typ Frontu 1"})
-    args, kwargs = cleanup.call_args
-    assert args == (am, job, "JOB-001")
-    assert callable(kwargs.get("log"))
-
-
-def test_run_cdm_handler_bypass_nest_string_false(
-    server_app: MagicMock, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    _, _, am = _mock_cdm_com(monkeypatch)
-    job = MagicMock()
-    detail = MagicMock()
-    am.NewCDMJob.return_value = job
-    job.AddCDMOrderDetail.return_value = detail
-    monkeypatch.setattr(
-        "alphacam_cli.core.cdm_db.vdb5_job_defaults",
-        lambda: {"config_name": None, "material_id": None},
-    )
-    gw = GatewayServer()
-    result = gw._handler_run_cdm(
-        {"job_name": "JOB-001", "type_name": "Typ Frontu 1", "bypass_nest": "false"}
-    )
-    assert result["success"] is True
-    assert detail.ByPassNest is False
-
-
-def test_run_cdm_handler_invalid_width(server_app: MagicMock) -> None:
-    gw = GatewayServer()
-    with pytest.raises(COMError, match="cdm: invalid width"):
-        gw._handler_run_cdm({"job_name": "JOB-001", "type_name": "X", "width": "abc"})
-
-
-def test_run_cdm_handler_invalid_length(server_app: MagicMock) -> None:
-    gw = GatewayServer()
-    with pytest.raises(COMError, match="cdm: invalid length"):
-        gw._handler_run_cdm({"job_name": "JOB-001", "type_name": "X", "length": "abc"})
-
-
-def test_run_cdm_handler_invalid_quantity(server_app: MagicMock) -> None:
-    gw = GatewayServer()
-    with pytest.raises(COMError, match="cdm: invalid quantity"):
-        gw._handler_run_cdm({"job_name": "JOB-001", "type_name": "X", "quantity": "abc"})
+    with pytest.raises(COMError, match=r"^cdm: job already exists: JOB-001$"):
+        gw._handler_create_cdm_job({"job_name": "JOB-001", "config": "Fronty"})
 
 
 def test_cdm_types_handler(server_app: MagicMock, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -1595,6 +1508,7 @@ def test_cdm_import_csv_handler_single_job(
     job.AddCDMOrderDetail.return_value = detail
     csv_file = tmp_path / "order.csv"
     csv_file.write_text("P003,1,500,500,1;18;0;0\n", encoding="utf-8")
+    _mock_selected_import_setting(monkeypatch)
     gw = GatewayServer()
     monkeypatch.setattr(
         "alphacam_cli.core.cdm_db.vdb5_job_defaults",
@@ -1607,6 +1521,7 @@ def test_cdm_import_csv_handler_single_job(
         "items": 1,
         "material": None,
         "errors": ["job order: no material set (required for processing)"],
+        "import_setting": "Fronty CSV",
     }
     assert job.JobName == "order"
     job.SaveToDatabase.assert_called_once_with()
@@ -1628,6 +1543,7 @@ def test_cdm_import_csv_handler_auto_create_with_name(
     am.NewCDMJob.return_value = job
     csv_file = tmp_path / "order.csv"
     csv_file.write_text("P003,1,500,500,1;18;0;0\n", encoding="utf-8")
+    _mock_selected_import_setting(monkeypatch)
     gw = GatewayServer()
     monkeypatch.setattr(
         "alphacam_cli.core.cdm_db.vdb5_job_defaults",
@@ -1647,6 +1563,7 @@ def test_cdm_import_csv_handler_auto_create_with_config(
     am.NewCDMJob.return_value = job
     csv_file = tmp_path / "order.csv"
     csv_file.write_text("P003,1,500,500,1;18;0;0\n", encoding="utf-8")
+    _mock_selected_import_setting(monkeypatch)
     gw = GatewayServer()
     monkeypatch.setattr(
         "alphacam_cli.core.cdm_db.vdb5_job_defaults",
@@ -1666,6 +1583,7 @@ def test_cdm_import_csv_handler_default_config(
     am.NewCDMJob.return_value = job
     csv_file = tmp_path / "order.csv"
     csv_file.write_text("P003,1,500,500,1;18;0;0\n", encoding="utf-8")
+    _mock_selected_import_setting(monkeypatch)
     gw = GatewayServer()
     monkeypatch.setattr(
         "alphacam_cli.core.cdm_db.vdb5_job_defaults",
@@ -1693,6 +1611,7 @@ def test_cdm_import_csv_handler_defaults_material(
     am.NewCDMJob.return_value = job
     csv_file = tmp_path / "order.csv"
     csv_file.write_text("P003,1,500,500,1;18;0;0\n", encoding="utf-8")
+    _mock_selected_import_setting(monkeypatch)
     gw = GatewayServer()
     monkeypatch.setattr(
         "alphacam_cli.core.cdm_db.vdb5_job_defaults",
@@ -1723,6 +1642,7 @@ def test_cdm_import_csv_handler_defaults_fetched_once(
     job.AddCDMOrderDetail.return_value = detail
     csv_file = tmp_path / "order.csv"
     csv_file.write_text("P003,1,500,500,1;18;0;0\n", encoding="utf-8")
+    _mock_selected_import_setting(monkeypatch)
     gw = GatewayServer()
     defaults = MagicMock(return_value={"config_name": "Fronty", "material_id": 4})
     monkeypatch.setattr("alphacam_cli.core.cdm_db.vdb5_job_defaults", defaults)
@@ -1744,6 +1664,7 @@ def test_cdm_import_csv_handler_no_defaults(
     am.NewCDMJob.return_value = job
     csv_file = tmp_path / "order.csv"
     csv_file.write_text("P003,1,500,500,1;18;0;0\n", encoding="utf-8")
+    _mock_selected_import_setting(monkeypatch)
     gw = GatewayServer()
     monkeypatch.setattr(
         "alphacam_cli.core.cdm_db.vdb5_job_defaults",
@@ -1761,6 +1682,7 @@ def test_cdm_import_csv_handler_config_flag_overrides_default(
     am.NewCDMJob.return_value = job
     csv_file = tmp_path / "order.csv"
     csv_file.write_text("P003,1,500,500,1;18;0;0,MDF_18\n", encoding="utf-8")
+    _mock_selected_import_setting(monkeypatch, fields=_LEGACY_FIELDS_MATERIAL)
     gw = GatewayServer()
     monkeypatch.setattr("alphacam_cli.core.cdm_db.sheet_materials", lambda: {"MDF_18": 3})
     defaults = MagicMock(return_value={"config_name": "Fronty", "material_id": 4})
@@ -1786,6 +1708,7 @@ def test_cdm_import_csv_handler_job_lookup(
     am.Jobs = jobs
     csv_file = tmp_path / "order.csv"
     csv_file.write_text("P003,1,500,500,1;18;0;0\n", encoding="utf-8")
+    _mock_selected_import_setting(monkeypatch)
     gw = GatewayServer()
     monkeypatch.setattr(
         "alphacam_cli.core.cdm_db.vdb5_job_defaults",
@@ -1798,6 +1721,7 @@ def test_cdm_import_csv_handler_job_lookup(
         "items": 1,
         "material": None,
         "errors": ["job X: no material set (required for processing)"],
+        "import_setting": "Fronty CSV",
     }
     am.NewCDMJob.assert_not_called()
     job.SaveToDatabase.assert_not_called()
@@ -1814,6 +1738,7 @@ def test_cdm_import_csv_handler_job_not_found(
     am.Jobs = jobs
     csv_file = tmp_path / "order.csv"
     csv_file.write_text("P003,1,500,500,1;18;0;0\n", encoding="utf-8")
+    _mock_selected_import_setting(monkeypatch)
     gw = GatewayServer()
     monkeypatch.setattr(
         "alphacam_cli.core.cdm_db.vdb5_job_defaults",
@@ -1845,6 +1770,7 @@ def test_cdm_import_csv_handler_multi_row_single_job(
         "P003,1,500,500,1;18;0;0\nP004,2,600,400,1;0\nP005,1,300,300,\n",
         encoding="utf-8",
     )
+    _mock_selected_import_setting(monkeypatch)
     gw = GatewayServer()
     monkeypatch.setattr(
         "alphacam_cli.core.cdm_db.vdb5_job_defaults",
@@ -1872,6 +1798,7 @@ def test_cdm_import_csv_handler_extra_columns_ignored(
     job.AddCDMOrderDetail.return_value = detail
     csv_file = tmp_path / "order.csv"
     csv_file.write_text("P003,1,500,500,1;18;0;0,MDF_18,ImportE2E 001,Fronty\n", encoding="utf-8")
+    _mock_selected_import_setting(monkeypatch, fields=_LEGACY_FIELDS_MATERIAL)
     gw = GatewayServer()
     monkeypatch.setattr(
         "alphacam_cli.core.cdm_db.vdb5_job_defaults",
@@ -1898,6 +1825,7 @@ def test_cdm_import_csv_handler_bad_type(
     am.NewCDMJob.return_value = job
     csv_file = tmp_path / "order.csv"
     csv_file.write_text("XYZ,1,500,500,1;2;3\n", encoding="utf-8")
+    _mock_selected_import_setting(monkeypatch)
     gw = GatewayServer()
     monkeypatch.setattr(
         "alphacam_cli.core.cdm_db.vdb5_job_defaults",
@@ -1924,6 +1852,7 @@ def test_cdm_import_csv_handler_all_details_fail_deletes_job(
     monkeypatch.setattr("alphacam_cli.core.cdm_db.cleanup_created_job", cleanup)
     csv_file = tmp_path / "order.csv"
     csv_file.write_text("P003,1,500,500,1;2;3\nP004,1,600,400,1;2;3\n", encoding="utf-8")
+    _mock_selected_import_setting(monkeypatch)
     gw = GatewayServer()
     monkeypatch.setattr(
         "alphacam_cli.core.cdm_db.vdb5_job_defaults",
@@ -1956,6 +1885,7 @@ def test_cdm_import_csv_handler_all_details_fail_delete_via_lookup(
     monkeypatch.setattr("alphacam_cli.core.cdm_db.cleanup_created_job", cleanup)
     csv_file = tmp_path / "order.csv"
     csv_file.write_text("P003,1,500,500,1;2;3\n", encoding="utf-8")
+    _mock_selected_import_setting(monkeypatch)
     gw = GatewayServer()
     monkeypatch.setattr(
         "alphacam_cli.core.cdm_db.vdb5_job_defaults",
@@ -1982,6 +1912,7 @@ def test_cdm_import_csv_handler_all_details_fail_cleanup_still_present(
     monkeypatch.setattr("alphacam_cli.core.cdm_db.cleanup_created_job", cleanup)
     csv_file = tmp_path / "order.csv"
     csv_file.write_text("P003,1,500,500,1;2;3\n", encoding="utf-8")
+    _mock_selected_import_setting(monkeypatch)
     gw = GatewayServer()
     monkeypatch.setattr(
         "alphacam_cli.core.cdm_db.vdb5_job_defaults",
@@ -2009,6 +1940,7 @@ def test_cdm_import_csv_handler_all_details_fail_cleanup_unverified(
     monkeypatch.setattr("alphacam_cli.core.cdm_db.cleanup_created_job", cleanup)
     csv_file = tmp_path / "order.csv"
     csv_file.write_text("P003,1,500,500,1;2;3\n", encoding="utf-8")
+    _mock_selected_import_setting(monkeypatch)
     gw = GatewayServer()
     monkeypatch.setattr(
         "alphacam_cli.core.cdm_db.vdb5_job_defaults",
@@ -2036,6 +1968,7 @@ def test_cdm_import_csv_handler_all_details_fail_keeps_existing_job(
     am.Jobs = jobs
     csv_file = tmp_path / "order.csv"
     csv_file.write_text("P003,1,500,500,1;2;3\nP004,1,600,400,1;2;3\n", encoding="utf-8")
+    _mock_selected_import_setting(monkeypatch)
     gw = GatewayServer()
     monkeypatch.setattr(
         "alphacam_cli.core.cdm_db.vdb5_job_defaults",
@@ -2067,6 +2000,7 @@ def test_cdm_import_csv_handler_cleanup_failure(
     )
     csv_file = tmp_path / "order.csv"
     csv_file.write_text("P003,1,500,500,1;2;3\n", encoding="utf-8")
+    _mock_selected_import_setting(monkeypatch)
     gw = GatewayServer()
     monkeypatch.setattr(
         "alphacam_cli.core.cdm_db.vdb5_job_defaults",
@@ -2092,6 +2026,7 @@ def test_cdm_import_csv_handler_all_rows_invalid(
     _, _, am = _mock_cdm_com(monkeypatch)
     csv_file = tmp_path / "order.csv"
     csv_file.write_text("P003,1\nP004,abc,400,300,0\n", encoding="utf-8")
+    _mock_selected_import_setting(monkeypatch)
     gw = GatewayServer()
     monkeypatch.setattr(
         "alphacam_cli.core.cdm_db.vdb5_job_defaults",
@@ -2101,7 +2036,7 @@ def test_cdm_import_csv_handler_all_rows_invalid(
     assert result["success"] is False
     assert result["items"] == 0
     assert result["job_name"] == ""
-    assert any("expected at least 5 columns" in e for e in result["errors"])
+    assert any("expected at least 3 columns" in e for e in result["errors"])
     assert any("invalid quantity" in e for e in result["errors"])
     am.NewCDMJob.assert_not_called()
 
@@ -2123,6 +2058,7 @@ def test_cdm_import_csv_handler_header(
         "Style,Quantity,Width,Length,DesignDimensions\nP003,1,500,500,1;18;0;0\n",
         encoding="utf-8",
     )
+    _mock_selected_import_setting(monkeypatch)
     gw = GatewayServer()
     monkeypatch.setattr(
         "alphacam_cli.core.cdm_db.vdb5_job_defaults",
@@ -2146,6 +2082,7 @@ def test_cdm_import_csv_handler_short_row(
         "P003,1\nP004,2,600,400,1;2;3;4;5;6;7,MDF,JOB-A,Fronty\n",
         encoding="utf-8",
     )
+    _mock_selected_import_setting(monkeypatch, fields=_LEGACY_FIELDS_MATERIAL)
     gw = GatewayServer()
     monkeypatch.setattr(
         "alphacam_cli.core.cdm_db.vdb5_job_defaults",
@@ -2157,7 +2094,7 @@ def test_cdm_import_csv_handler_short_row(
     assert result["success"] is True
     assert result["items"] == 1
     assert result["material"] == "MDF"
-    assert any("expected at least 5 columns" in e for e in result["errors"])
+    assert any("expected at least 3 columns" in e for e in result["errors"])
 
 
 def test_cdm_import_csv_handler_material_from_csv(
@@ -2172,6 +2109,7 @@ def test_cdm_import_csv_handler_material_from_csv(
     csv_file.write_text(
         "P003,1,500,500,1;18;0;0,MDF_18\nP004,2,600,400,1;0,MDF_18\n", encoding="utf-8"
     )
+    _mock_selected_import_setting(monkeypatch, fields=_LEGACY_FIELDS_MATERIAL)
     gw = GatewayServer()
     monkeypatch.setattr(
         "alphacam_cli.core.cdm_db.vdb5_job_defaults",
@@ -2201,6 +2139,7 @@ def test_cdm_import_csv_handler_material_cli_overrides(
     job.AddCDMOrderDetail.return_value = detail
     csv_file = tmp_path / "order.csv"
     csv_file.write_text("P003,1,500,500,1;18;0;0,MDF_18\n", encoding="utf-8")
+    _mock_selected_import_setting(monkeypatch, fields=_LEGACY_FIELDS_MATERIAL)
     gw = GatewayServer()
     monkeypatch.setattr(
         "alphacam_cli.core.cdm_db.vdb5_job_defaults",
@@ -2229,6 +2168,7 @@ def test_cdm_import_csv_handler_material_not_found(
     am.NewCDMJob.return_value = job
     csv_file = tmp_path / "order.csv"
     csv_file.write_text("P003,1,500,500,1;18;0;0\n", encoding="utf-8")
+    _mock_selected_import_setting(monkeypatch)
     gw = GatewayServer()
     monkeypatch.setattr("alphacam_cli.core.cdm_db.sheet_materials", lambda: {})
     with pytest.raises(COMError, match="cdm: material not found: MDF_18"):
@@ -2243,6 +2183,7 @@ def test_cdm_import_csv_handler_material_warning(
     am.NewCDMJob.return_value = job
     csv_file = tmp_path / "order.csv"
     csv_file.write_text("P003,1,500,500,1;18;0;0\n", encoding="utf-8")
+    _mock_selected_import_setting(monkeypatch)
     gw = GatewayServer()
     monkeypatch.setattr(
         "alphacam_cli.core.cdm_db.vdb5_job_defaults",
@@ -2315,6 +2256,40 @@ def test_cdm_delete_job_handler_no_delete_method(
     gw = GatewayServer()
     with pytest.raises(COMError, match="cdm: DeleteFromDB unavailable on job"):
         gw._handler_cdm_delete_job({"job_name": "JOB-001"})
+
+
+_LEGACY_FIELDS = [
+    (1, 256),
+    (2, 259),
+    (3, 257),
+    (4, 258),
+    (5, 264),
+]
+_LEGACY_FIELDS_MATERIAL = _LEGACY_FIELDS + [(6, 524)]
+
+
+def _mock_selected_import_setting(
+    monkeypatch: pytest.MonkeyPatch,
+    *,
+    create_job: bool = True,
+    fields: list[tuple[int, int]] | None = None,
+) -> dict[str, Any]:
+    setting = {
+        "id": 1,
+        "name": "Fronty CSV",
+        "delimiter_char": ",",
+        "sub_delimiter_char": ";",
+        "create_job": create_job,
+        "selected": True,
+        "ignore_header": False,
+        "is_cdm_import": True,
+        "fields": [
+            {"column_number": col, "parameter_type": ptype}
+            for col, ptype in (fields or _LEGACY_FIELDS)
+        ],
+    }
+    monkeypatch.setattr("alphacam_cli.core.cdm_db.import_settings", lambda: [setting])
+    return setting
 
 
 def _fake_import_setting() -> dict[str, Any]:
@@ -2460,6 +2435,7 @@ def test_cdm_import_csv_handler_preview(
         "alphacam_cli.core.cdm_db.vdb5_job_defaults",
         lambda: {"config_name": "Fronty", "material_id": None},
     )
+    monkeypatch.setattr("alphacam_cli.core.cdm_db.sheet_materials", lambda: {"MDF_18": 2})
     am_getter = MagicMock()
     monkeypatch.setattr(gw, "_cdm_automation_manager", am_getter)
     result = gw._handler_cdm_import_csv(
@@ -2493,6 +2469,7 @@ def test_cdm_import_preview_handler(
         "alphacam_cli.core.cdm_db.vdb5_job_defaults",
         lambda: {"config_name": "Fronty", "material_id": None},
     )
+    monkeypatch.setattr("alphacam_cli.core.cdm_db.sheet_materials", lambda: {"MDF_18": 2})
     am_getter = MagicMock()
     monkeypatch.setattr(gw, "_cdm_automation_manager", am_getter)
     result = gw._handler_cdm_import_preview({"csv": str(csv_file), "import_setting": "Fronty CSV"})
@@ -2508,21 +2485,25 @@ def test_cdm_import_preview_handler(
     assert am.NewCDMJob.call_count == 0
 
 
-def test_cdm_import_preview_handler_no_setting(
+def test_cdm_import_preview_handler_no_setting_uses_selected(
     server_app: MagicMock, monkeypatch: pytest.MonkeyPatch, tmp_path: pathlib.Path
 ) -> None:
     _, _, am = _mock_cdm_com(monkeypatch)
     csv_file = tmp_path / "order.csv"
     csv_file.write_text("P003,1,500,500,1;2;3\n", encoding="utf-8")
+    _mock_selected_import_setting(monkeypatch)
     monkeypatch.setattr(
         "alphacam_cli.core.cdm_db.vdb5_job_defaults",
         lambda: {"config_name": None, "material_id": None},
     )
     gw = GatewayServer()
     result = gw._handler_cdm_import_preview({"csv": str(csv_file)})
-    assert result["success"] is True
-    assert result["setting"] is None
-    assert result["field_map"] == []
+    assert result["success"] is False
+    assert result["setting"]["id"] == 1
+    assert result["setting"]["name"] == "Fronty CSV"
+    assert result["setting"]["create_job"] is True
+    assert result["setting"]["selected"] is True
+    assert len(result["field_map"]) == 5
     assert "job" in result
     assert result["job"] is None
     assert result["job_name"] == "order"
@@ -2530,28 +2511,217 @@ def test_cdm_import_preview_handler_no_setting(
     assert result["material"] is None
     assert result["items"] == 1
     assert result["rows"][0]["style"] == "P003"
-    assert result["errors"] == []
+    assert result["errors"] == [
+        "job order: no material set (required for processing)",
+        "cdm: no default configuration found",
+    ]
     assert am.NewCDMJob.call_count == 0
 
 
-def test_cdm_import_preview_handler_legacy_material_scan(
+def test_cdm_import_csv_handler_create_job_false_requires_job(
     server_app: MagicMock, monkeypatch: pytest.MonkeyPatch, tmp_path: pathlib.Path
 ) -> None:
     _, _, am = _mock_cdm_com(monkeypatch)
     csv_file = tmp_path / "order.csv"
-    csv_file.write_text("P003,1,500,500,1;2;3,MDF_18\n", encoding="utf-8")
-    monkeypatch.setattr("alphacam_cli.core.cdm_db.sheet_materials", lambda: {"MDF_18": 2})
+    csv_file.write_text("P003,1,500,500,1;2;3\n", encoding="utf-8")
+    _mock_selected_import_setting(monkeypatch, create_job=False)
+    gw = GatewayServer()
+    with pytest.raises(
+        COMError,
+        match="cdm: job is required \\(import setting 'Fronty CSV' does not create jobs\\)",
+    ):
+        gw._handler_cdm_import_csv({"csv": str(csv_file)})
+    assert am.NewCDMJob.call_count == 0
+
+
+def test_cdm_import_preview_handler_create_job_false_requires_job(
+    server_app: MagicMock, monkeypatch: pytest.MonkeyPatch, tmp_path: pathlib.Path
+) -> None:
+    _, _, am = _mock_cdm_com(monkeypatch)
+    csv_file = tmp_path / "order.csv"
+    csv_file.write_text("P003,1,500,500,1;2;3\n", encoding="utf-8")
+    _mock_selected_import_setting(monkeypatch, create_job=False)
+    gw = GatewayServer()
+    with pytest.raises(
+        COMError,
+        match="cdm: job is required \\(import setting 'Fronty CSV' does not create jobs\\)",
+    ):
+        gw._handler_cdm_import_preview({"csv": str(csv_file)})
+    assert am.NewCDMJob.call_count == 0
+
+
+def test_cdm_import_preview_handler_create_job_false_with_job_succeeds(
+    server_app: MagicMock, monkeypatch: pytest.MonkeyPatch, tmp_path: pathlib.Path
+) -> None:
+    _, _, am = _mock_cdm_com(monkeypatch)
+    csv_file = tmp_path / "order.csv"
+    csv_file.write_text("P003,1,500,500,1;2;3\n", encoding="utf-8")
+    _mock_selected_import_setting(monkeypatch, create_job=False)
     monkeypatch.setattr(
         "alphacam_cli.core.cdm_db.vdb5_job_defaults",
         lambda: {"config_name": None, "material_id": None},
     )
     gw = GatewayServer()
+    result = gw._handler_cdm_import_preview({"csv": str(csv_file), "job": "EXISTING"})
+    assert result["success"] is True
+    assert result["items"] == 1
+    assert result["job_name"] == "EXISTING"
+    assert result["job"] == "EXISTING"
+    assert result["config"] is None
+    assert result["errors"] == ["job EXISTING: no material set (required for processing)"]
+    assert am.NewCDMJob.call_count == 0
+
+
+def test_cdm_import_preview_handler_empty_job_string_requires_job(
+    server_app: MagicMock, monkeypatch: pytest.MonkeyPatch, tmp_path: pathlib.Path
+) -> None:
+    _, _, am = _mock_cdm_com(monkeypatch)
+    csv_file = tmp_path / "order.csv"
+    csv_file.write_text("P003,1,500,500,1;2;3\n", encoding="utf-8")
+    _mock_selected_import_setting(monkeypatch, create_job=False)
+    gw = GatewayServer()
+    with pytest.raises(
+        COMError,
+        match="cdm: job is required \\(import setting 'Fronty CSV' does not create jobs\\)",
+    ):
+        gw._handler_cdm_import_preview({"csv": str(csv_file), "job": ""})
+    assert am.NewCDMJob.call_count == 0
+
+
+def test_cdm_import_csv_handler_create_job_false_with_job_succeeds(
+    server_app: MagicMock, monkeypatch: pytest.MonkeyPatch, tmp_path: pathlib.Path
+) -> None:
+    _, _, am = _mock_cdm_com(monkeypatch)
+    job = MagicMock()
+    detail = MagicMock()
+    job.JobName = "X"
+    job.AddCDMOrderDetail.return_value = detail
+    jobs = MagicMock()
+    jobs.Count = 1
+    jobs.Item.return_value = job
+    am.Jobs = jobs
+    csv_file = tmp_path / "order.csv"
+    csv_file.write_text("P003,1,500,500,1;2;3\n", encoding="utf-8")
+    _mock_selected_import_setting(monkeypatch, create_job=False)
+    gw = GatewayServer()
+    monkeypatch.setattr(
+        "alphacam_cli.core.cdm_db.vdb5_job_defaults",
+        lambda: {"config_name": "Fronty", "material_id": None},
+    )
+    result = gw._handler_cdm_import_csv({"csv": str(csv_file), "job": "X"})
+    assert result == {
+        "success": True,
+        "job_name": "X",
+        "items": 1,
+        "material": None,
+        "errors": ["job X: no material set (required for processing)"],
+        "import_setting": "Fronty CSV",
+    }
+    am.NewCDMJob.assert_not_called()
+    job.SaveToDatabase.assert_not_called()
+    job.AddCDMOrderDetail.assert_called_once_with("P003")
+
+
+def test_cdm_import_csv_handler_empty_job_string_requires_job(
+    server_app: MagicMock, monkeypatch: pytest.MonkeyPatch, tmp_path: pathlib.Path
+) -> None:
+    _, _, am = _mock_cdm_com(monkeypatch)
+    csv_file = tmp_path / "order.csv"
+    csv_file.write_text("P003,1,500,500,1;2;3\n", encoding="utf-8")
+    _mock_selected_import_setting(monkeypatch, create_job=False)
+    gw = GatewayServer()
+    with pytest.raises(
+        COMError,
+        match="cdm: job is required \\(import setting 'Fronty CSV' does not create jobs\\)",
+    ):
+        gw._handler_cdm_import_csv({"csv": str(csv_file), "job": ""})
+    assert am.NewCDMJob.call_count == 0
+
+
+def test_cdm_import_preview_handler_material_not_found(
+    server_app: MagicMock, monkeypatch: pytest.MonkeyPatch, tmp_path: pathlib.Path
+) -> None:
+    _, _, am = _mock_cdm_com(monkeypatch)
+    csv_file = tmp_path / "order.csv"
+    csv_file.write_text(_MAPPED_CSV_ROW + "\n", encoding="utf-8")
+    gw = GatewayServer()
+    monkeypatch.setattr(
+        "alphacam_cli.core.cdm_db.import_settings", lambda: [_fake_import_setting()]
+    )
+    monkeypatch.setattr("alphacam_cli.core.cdm_db.sheet_materials", lambda: {})
+    am_getter = MagicMock()
+    monkeypatch.setattr(gw, "_cdm_automation_manager", am_getter)
+    result = gw._handler_cdm_import_preview({"csv": str(csv_file), "import_setting": 3})
+    assert result["success"] is False
+    assert result["errors"] == ["cdm: material not found: MDF_18"]
+    assert result["material"] == "MDF_18"
+    am_getter.assert_not_called()
+
+
+def test_cdm_import_preview_handler_no_default_config(
+    server_app: MagicMock, monkeypatch: pytest.MonkeyPatch, tmp_path: pathlib.Path
+) -> None:
+    _, _, am = _mock_cdm_com(monkeypatch)
+    csv_file = tmp_path / "order.csv"
+    csv_file.write_text("P003,1,500,500,1;2;3\n", encoding="utf-8")
+    _mock_selected_import_setting(monkeypatch)
+    monkeypatch.setattr(
+        "alphacam_cli.core.cdm_db.vdb5_job_defaults",
+        lambda: {"config_name": None, "material_id": 4},
+    )
+    monkeypatch.setattr(
+        "alphacam_cli.core.cdm_db.sheet_materials", lambda: {"MDF18 - 2800 x 2070": 4}
+    )
+    gw = GatewayServer()
+    result = gw._handler_cdm_import_preview({"csv": str(csv_file)})
+    assert result["success"] is False
+    assert result["errors"] == ["cdm: no default configuration found"]
+    assert result["config"] is None
+    assert result["material"] == "MDF18 - 2800 x 2070"
+    assert am.NewCDMJob.call_count == 0
+
+
+def test_cdm_import_preview_handler_material_from_defaults(
+    server_app: MagicMock, monkeypatch: pytest.MonkeyPatch, tmp_path: pathlib.Path
+) -> None:
+    _, _, am = _mock_cdm_com(monkeypatch)
+    csv_file = tmp_path / "order.csv"
+    csv_file.write_text("P003,1,500,500,1;2;3\n", encoding="utf-8")
+    _mock_selected_import_setting(monkeypatch)
+    monkeypatch.setattr(
+        "alphacam_cli.core.cdm_db.vdb5_job_defaults",
+        lambda: {"config_name": "Fronty", "material_id": 4},
+    )
+    monkeypatch.setattr(
+        "alphacam_cli.core.cdm_db.sheet_materials", lambda: {"MDF18 - 2800 x 2070": 4}
+    )
+    gw = GatewayServer()
     result = gw._handler_cdm_import_preview({"csv": str(csv_file)})
     assert result["success"] is True
-    assert result["setting"] is None
-    assert result["material"] == "MDF_18"
-    assert result["items"] == 1
     assert result["errors"] == []
+    assert result["config"] == "Fronty"
+    assert result["material"] == "MDF18 - 2800 x 2070"
+    assert am.NewCDMJob.call_count == 0
+
+
+def test_cdm_import_csv_handler_no_selected_setting_lists_available(
+    server_app: MagicMock, monkeypatch: pytest.MonkeyPatch, tmp_path: pathlib.Path
+) -> None:
+    _, _, am = _mock_cdm_com(monkeypatch)
+    csv_file = tmp_path / "order.csv"
+    csv_file.write_text("P003,1,500,500,1;2;3\n", encoding="utf-8")
+    setting = _fake_import_setting()
+    setting["selected"] = False
+    monkeypatch.setattr("alphacam_cli.core.cdm_db.import_settings", lambda: [setting])
+    gw = GatewayServer()
+    with pytest.raises(
+        COMError,
+        match=(
+            "cdm: no import setting selected; pass --import-setting or select one in "
+            "Automation Manager \\(available: 3 'Fronty CSV'\\)"
+        ),
+    ):
+        gw._handler_cdm_import_csv({"csv": str(csv_file)})
     assert am.NewCDMJob.call_count == 0
 
 
@@ -2723,3 +2893,227 @@ def test_cdm_import_csv_handler_setter_warning_keeps_detail(
     assert result["items"] == 1
     assert any("CSV_CustomerName failed: boom" in e for e in result["errors"])
     detail.SaveToDatabase.assert_called_once_with()
+
+
+def test_manifest_list_handler(server_app: MagicMock) -> None:
+    server_app.manifest_list.return_value = {
+        "success": True,
+        "directory": r"C:\Reports\Data",
+        "manifests": [
+            {
+                "path": r"C:\Reports\Data\Fronty - MDF_18.acrepd",
+                "job_name": "Fronty",
+                "material": "MDF_18",
+                "size": 1000,
+                "mtime": 1700000000.0,
+            }
+        ],
+    }
+    gw = GatewayServer()
+    result = gw._handler_manifest_list({"data_dir": r"C:\Reports\Data"})
+    assert result == server_app.manifest_list.return_value
+    server_app.manifest_list.assert_called_once_with(r"C:\Reports\Data")
+
+
+def test_manifest_list_handler_no_params(server_app: MagicMock) -> None:
+    server_app.manifest_list.return_value = {"success": True, "manifests": []}
+    gw = GatewayServer()
+    result = gw._handler_manifest_list({})
+    assert result == {"success": True, "manifests": []}
+    server_app.manifest_list.assert_called_once_with(None)
+
+
+def test_manifest_list_handler_failure(server_app: MagicMock) -> None:
+    server_app.manifest_list.side_effect = RuntimeError("boom")
+    gw = GatewayServer()
+    with pytest.raises(COMError, match=r"manifest: list failed: boom"):
+        gw._handler_manifest_list({})
+    server_app.manifest_list.assert_called_once_with(None)
+
+
+def test_manifest_read_handler(server_app: MagicMock) -> None:
+    server_app.manifest_read.return_value = {
+        "success": True,
+        "manifest": {
+            "job_name": "Fronty",
+            "material": "MDF_18",
+            "sheets": [],
+            "total_parts": 0,
+            "unmatched_parts": [],
+            "path": r"C:\Reports\Data\Fronty - MDF_18.acrepd",
+        },
+    }
+    gw = GatewayServer()
+    result = gw._handler_manifest_read(
+        {"job_name": "Fronty", "material": "MDF_18", "data_dir": r"C:\Reports\Data"}
+    )
+    assert result == server_app.manifest_read.return_value
+    server_app.manifest_read.assert_called_once_with("Fronty", "MDF_18", r"C:\Reports\Data")
+
+
+def test_manifest_read_handler_no_params(server_app: MagicMock) -> None:
+    server_app.manifest_read.return_value = {"success": True, "manifest": {}}
+    gw = GatewayServer()
+    with pytest.raises(COMError, match=r"manifest: job_name required"):
+        gw._handler_manifest_read({})
+    server_app.manifest_read.assert_not_called()
+
+
+def test_manifest_read_handler_failure(server_app: MagicMock) -> None:
+    server_app.manifest_read.side_effect = RuntimeError("boom")
+    gw = GatewayServer()
+    with pytest.raises(COMError, match=r"manifest: read failed: boom"):
+        gw._handler_manifest_read({"job_name": "Fronty"})
+    server_app.manifest_read.assert_called_once_with("Fronty", None, None)
+
+
+def test_set_nest_list_options_bool_false_strings() -> None:
+    nl = MagicMock(name="NestList")
+    gw = GatewayServer()
+    gw._set_nest_list_options(nl, {"use_subroutines": "false", "inner_first": "off"})
+    assert nl.UseSubroutines is False
+    assert nl.InnerFirst is False
+
+
+def test_set_nest_list_options_bool_none_skipped() -> None:
+    nl = MagicMock(name="NestList")
+    gw = GatewayServer()
+    gw._set_nest_list_options(nl, {"use_subroutines": None})
+    nl.UseSubroutines.assert_not_called()
+
+
+def test_nest_inspect_handler_single_prefix(server_app: MagicMock) -> None:
+    server_app.nest_inspect.side_effect = RuntimeError("nest: inspect failed: boom")
+    gw = GatewayServer()
+    with pytest.raises(COMError, match=r"^nest: inspect failed: boom$"):
+        gw._handler_nest_inspect({})
+    server_app.nest_inspect.assert_called_once_with()
+
+
+def test_batch_process_handler_null_files(server_app: MagicMock) -> None:
+    gw = GatewayServer()
+    with pytest.raises(COMError, match=r"batch: invalid files"):
+        gw._handler_batch_process({"files": None})
+    server_app.open_drawing.assert_not_called()
+
+
+def test_process_cdm_job_handler(server_app: MagicMock) -> None:
+    server_app.process_cdm_job.return_value = {
+        "success": True,
+        "job_name": "JOB-001",
+        "processed": True,
+    }
+    gw = GatewayServer()
+    result = gw._handler_process_cdm_job({"job_name": "JOB-001"})
+    assert result == {"success": True, "job_name": "JOB-001", "processed": True}
+    server_app.process_cdm_job.assert_called_once_with(job_name="JOB-001")
+
+
+def test_process_cdm_job_handler_strips_whitespace(server_app: MagicMock) -> None:
+    server_app.process_cdm_job.return_value = {
+        "success": True,
+        "job_name": "JOB-001",
+        "processed": True,
+    }
+    gw = GatewayServer()
+    result = gw._handler_process_cdm_job({"job_name": "  JOB-001  "})
+    assert result == {"success": True, "job_name": "JOB-001", "processed": True}
+    server_app.process_cdm_job.assert_called_once_with(job_name="JOB-001")
+
+
+def test_process_cdm_job_handler_missing_job_name(server_app: MagicMock) -> None:
+    gw = GatewayServer()
+    with pytest.raises(COMError, match="cdm: job_name is required"):
+        gw._handler_process_cdm_job({})
+    server_app.process_cdm_job.assert_not_called()
+
+
+def test_process_cdm_job_handler_blank_job_name(server_app: MagicMock) -> None:
+    gw = GatewayServer()
+    with pytest.raises(COMError, match="cdm: job_name is required"):
+        gw._handler_process_cdm_job({"job_name": "   "})
+    server_app.process_cdm_job.assert_not_called()
+
+
+def test_process_cdm_job_handler_com_failure(server_app: MagicMock) -> None:
+    server_app.process_cdm_job.side_effect = RuntimeError("cdm: job not found: NOPE")
+    gw = GatewayServer()
+    with pytest.raises(COMError, match=r"^cdm: job not found: NOPE$"):
+        gw._handler_process_cdm_job({"job_name": "NOPE"})
+
+
+def test_process_cdm_job_handler_full_params(server_app: MagicMock) -> None:
+    server_app.process_cdm_job.return_value = {
+        "success": True,
+        "job_name": "JOB-001",
+        "processed": True,
+    }
+    machine = {
+        "psexec": "C:/temp/PsExec64.exe",
+        "psexec_args": ["-accepteula", "-i", "1", "-s"],
+        "cscript": "cscript",
+        "use_shell": False,
+    }
+    gw = GatewayServer()
+    result = gw._handler_process_cdm_job(
+        {
+            "job_name": "JOB-001",
+            "machine": machine,
+            "timeout_seconds": 600,
+            "output_root": "C:/out",
+        }
+    )
+    assert result == {"success": True, "job_name": "JOB-001", "processed": True}
+    server_app.process_cdm_job.assert_called_once_with(
+        job_name="JOB-001",
+        machine=machine,
+        timeout_seconds=600,
+        output_root="C:/out",
+    )
+
+
+def test_process_cdm_job_handler_invalid_machine_type(server_app: MagicMock) -> None:
+    gw = GatewayServer()
+    with pytest.raises(COMError, match="cdm: machine must be a dict"):
+        gw._handler_process_cdm_job({"job_name": "JOB-001", "machine": "PsExec64.exe"})
+    server_app.process_cdm_job.assert_not_called()
+
+
+def test_process_cdm_job_handler_invalid_timeout_type(server_app: MagicMock) -> None:
+    gw = GatewayServer()
+    with pytest.raises(COMError, match="cdm: timeout_seconds must be an int"):
+        gw._handler_process_cdm_job({"job_name": "JOB-001", "timeout_seconds": "600"})
+    server_app.process_cdm_job.assert_not_called()
+
+
+def test_process_cdm_job_handler_invalid_output_root_type(server_app: MagicMock) -> None:
+    gw = GatewayServer()
+    with pytest.raises(COMError, match="cdm: output_root must be a str"):
+        gw._handler_process_cdm_job({"job_name": "JOB-001", "output_root": 123})
+    server_app.process_cdm_job.assert_not_called()
+
+
+def test_process_cdm_job_handler_method(server_app: MagicMock) -> None:
+    server_app.process_cdm_job.return_value = {
+        "success": True,
+        "job_name": "JOB-001",
+        "processed": True,
+    }
+    gw = GatewayServer()
+    result = gw._handler_process_cdm_job({"job_name": "JOB-001", "method": "vbs"})
+    assert result == {"success": True, "job_name": "JOB-001", "processed": True}
+    server_app.process_cdm_job.assert_called_once_with(job_name="JOB-001", method="vbs")
+
+
+def test_process_cdm_job_handler_invalid_method_type(server_app: MagicMock) -> None:
+    gw = GatewayServer()
+    with pytest.raises(COMError, match="cdm: method must be a str"):
+        gw._handler_process_cdm_job({"job_name": "JOB-001", "method": 123})
+    server_app.process_cdm_job.assert_not_called()
+
+
+def test_process_cdm_job_handler_invalid_method_value(server_app: MagicMock) -> None:
+    gw = GatewayServer()
+    with pytest.raises(COMError, match="cdm: method must be 'inproc' or 'vbs'"):
+        gw._handler_process_cdm_job({"job_name": "JOB-001", "method": "xyz"})
+    server_app.process_cdm_job.assert_not_called()

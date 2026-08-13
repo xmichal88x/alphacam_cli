@@ -194,7 +194,7 @@ def run(
                 nl.InnerFirst = True
             if preserve_sheet_edge:
                 nl.PreserveSheetEdge = True
-            if gap is not None:
+            if gap is not None and part_gap is None:
                 nl.PartGap = float(gap)
             if edge_gap is not None:
                 nl.EdgeGap = float(edge_gap)
@@ -221,12 +221,16 @@ def run(
             nest_sheet.Required = 1
             try:
                 result = nesting.Nest(nl, sl)
+                try:
+                    count = int(result.Count)
+                except (TypeError, AttributeError, ValueError):
+                    count = 0
             finally:
                 with suppress(Exception):
                     nesting.DeleteAllNestLists()
             console.print("[green]OK:[/green] Nesting completed")
             console.print(f"     Total parts: {sum(p['count'] for p in parts)}")
-            console.print(f"     Un-nested parts: {int(result.Count)}")
+            console.print(f"     Un-nested parts: {count}")
             return
 
         if gap is not None:

@@ -66,17 +66,18 @@ def parametric(
     offset: float = typer.Option(50, "--offset", help="Inset of the inner contour"),
     fillet: float = typer.Option(5, "--fillet", "-f", help="Corner fillet radius"),
     depth: float | None = typer.Option(
-        None, "--depth", "-d", help="Machining depth (negative); enables machining"
+        None, "--depth", "-d", help="DEPRECATED: ignored — use mill rough"
     ),
-    tool: str | None = typer.Option(None, "--tool", "-t", help="Tool name or path"),
-    spindle: int | None = typer.Option(None, "--spindle", "-s", help="Spindle speed RPM"),
-    feed: float | None = typer.Option(None, "--feed", help="Cut feed rate"),
-    down_feed: float | None = typer.Option(None, "--down-feed", help="Plunge feed rate"),
 ) -> None:
-    """Create a parametric door/frame panel (outer filleted rectangle + inner arched contour)."""
-    if depth is not None and depth >= 0:
-        console.print(f"[red]Depth must be negative (got: {depth})[/red]")
-        raise typer.Exit(code=2)
+    """Create a parametric door/frame panel geometry.
+
+    Outer filleted rectangle + inner arched contour.
+    """
+    if depth is not None:
+        console.print(
+            "[yellow]Warning:[/yellow] --depth is deprecated: machining is now a separate block "
+            "(use 'alphacam mill rough')"
+        )
     require_platform()
     with alphacam_context(visible=get_visible()) as raw:
         ac = resolve_app(raw)
@@ -85,11 +86,6 @@ def parametric(
             height,
             offset=offset,
             fillet=fillet,
-            depth=depth,
-            tool=tool,
-            spindle=spindle,
-            feed=feed,
-            down_feed=down_feed,
         )
         console.print(
             f"[green]OK:[/green] Panel {width:g}x{height:g} created "
@@ -99,8 +95,6 @@ def parametric(
             f"      Geometries: {result['geometries_count']}, "
             f"ToolPaths: {result['tool_paths_count']}"
         )
-        if depth is not None:
-            console.print(f"[green]OK:[/green] Panel machined at depth={depth:g}")
 
 
 @app.command()
@@ -117,6 +111,28 @@ def layer(name: str = typer.Argument(..., help="Layer name (max 31 characters)")
 
         drw.create_layer(name)
         console.print(f"[green]OK:[/green] Layer created: {name}")
+
+
+@app.command()
+@handle_com_errors
+def query(
+    file: str = typer.Argument(..., help="Path to the geometry query (.agq) file"),
+) -> None:
+    """Run a geometry query (.agq) on the active drawing."""
+    require_platform()
+    if not os.path.isfile(file):
+        console.print(f"[red]Query file not found: {file}[/red]")
+        raise typer.Exit(code=1)
+    with alphacam_context(visible=get_visible()) as raw:
+        ac = resolve_app(raw)
+        drw = ac.get_active_drawing()
+        if drw is None:
+            console.print("[red]No active drawing[/red]")
+            raise typer.Exit(code=1)
+
+        count = drw.run_query(file)
+        console.print(f"[green]OK:[/green] Query executed: {file}")
+        console.print(f"      Matched: {count}")
 
 
 @app.command()

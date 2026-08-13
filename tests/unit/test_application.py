@@ -112,48 +112,27 @@ def test_drawing_parametric_creates_panel(mock_com: MagicMock) -> None:
             raw.CreateMillData.assert_not_called()
 
 
-def test_drawing_parametric_machines(mock_com: MagicMock) -> None:
+def test_drawing_parametric_geometry_only(mock_com: MagicMock) -> None:
     with mock_com:
         from alphacam_cli.com.manager import alphacam_context
 
         with alphacam_context() as raw:
             ac = Application(raw)
-            result = ac.drawing_parametric(
-                800,
-                400,
-                offset=60,
-                fillet=3,
-                depth=-19,
-                tool="Flat - 20mm",
-                spindle=18000,
-                feed=4000,
-                down_feed=1500,
-            )
+            result = ac.drawing_parametric(800, 400, offset=60, fillet=3)
             assert result["success"] is True
-            raw.SelectTool.assert_called_once_with("Flat - 20mm")
+            raw.SelectTool.assert_not_called()
+            raw.CreateMillData.assert_not_called()
             md = raw.CreateMillData.return_value
-            assert md.SafeRapidLevel == 10
-            assert md.RapidDownTo == 2
-            assert md.MaterialTop == 0
-            assert md.FinalDepth == -19
-            assert md.SpindleSpeed == 18000
-            assert md.CutFeed == 4000
-            assert md.DownFeed == 1500
-            assert md.RoughFinish.call_count == 2
-            assert raw.ActiveDrawing.CreateRectangle.return_value.Selected is False
-            assert (
-                raw.ActiveDrawing.Create2DGeometry.return_value.CloseAndFinishLine.return_value.Selected
-                is False
-            )
+            assert md.RoughFinish.call_count == 0
 
 
-def test_drawing_parametric_no_machining_without_depth(mock_com: MagicMock) -> None:
+def test_drawing_parametric_no_machining(mock_com: MagicMock) -> None:
     with mock_com:
         from alphacam_cli.com.manager import alphacam_context
 
         with alphacam_context() as raw:
             ac = Application(raw)
-            ac.drawing_parametric(800, 400, spindle=18000)
+            ac.drawing_parametric(800, 400)
             raw.SelectTool.assert_not_called()
             raw.CreateMillData.assert_not_called()
 

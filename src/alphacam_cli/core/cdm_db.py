@@ -43,61 +43,6 @@ def read_cdm_csv(path: str, separator: str) -> list[list[str]]:
     return list(csv.reader(io.StringIO(text), delimiter=separator))
 
 
-def parse_cdm_rows(
-    rows: list[list[str]], has_header: bool
-) -> tuple[list[dict[str, Any]], list[str]]:
-    """Parse CSV rows into (details, errors); only valid rows become details."""
-    details: list[dict[str, Any]] = []
-    errors: list[str] = []
-    for n, row in enumerate(rows, start=1):
-        if has_header and n == 1:
-            continue
-        if not any(str(cell).strip() for cell in row):
-            continue
-        if len(row) < 5:
-            errors.append(f"row {n}: expected at least 5 columns, got {len(row)}")
-            continue
-        style = str(row[0]).strip()
-        if not style:
-            errors.append(f"row {n}: style is required")
-            continue
-        try:
-            quantity = int(str(row[1]).strip())
-        except ValueError:
-            errors.append(f"row {n}: invalid quantity: {row[1]!r}")
-            continue
-        if quantity <= 0:
-            errors.append(f"row {n}: quantity must be positive")
-            continue
-        try:
-            width = float(str(row[2]).strip())
-        except ValueError:
-            errors.append(f"row {n}: invalid width: {row[2]!r}")
-            continue
-        if width <= 0:
-            errors.append(f"row {n}: width must be positive")
-            continue
-        try:
-            length = float(str(row[3]).strip())
-        except ValueError:
-            errors.append(f"row {n}: invalid length: {row[3]!r}")
-            continue
-        if length <= 0:
-            errors.append(f"row {n}: length must be positive")
-            continue
-        details.append(
-            {
-                "row": n,
-                "style": style,
-                "quantity": quantity,
-                "width": width,
-                "length": length,
-                "design_dims": str(row[4]).strip(),
-            }
-        )
-    return details, errors
-
-
 def sheet_materials() -> dict[str, int]:
     """Material name -> sheet/material ID from SQLite sheet database."""
     script_path = os.path.join(_scripts_dir(), "sheet_materials.py")
@@ -143,6 +88,47 @@ def sheet_materials() -> dict[str, int]:
             if name_key not in materials:
                 materials[name_key] = mid_int
     return materials
+
+
+def customers() -> dict[str, int]:
+    """Customer name -> id from AM_CustomerDetails; empty dict on read failure."""
+    script_path = os.path.join(_scripts_dir(), "vdb5_customers.ps1")
+    try:
+        proc = subprocess.run(
+            ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", script_path],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=20,
+            check=False,
+        )
+        if proc.returncode != 0 or not proc.stdout.strip():
+            return {}
+        data = json.loads(proc.stdout)
+    except Exception as e:
+        logger.warning("cdm customers: vdb5 read failed: %r", e)
+        return {}
+    if isinstance(data, dict) and "value" in data:
+        data = data["value"]
+    if not isinstance(data, list):
+        return {}
+    result: dict[str, int] = {}
+    for row in data:
+        if not isinstance(row, dict):
+            continue
+        name = row.get("name")
+        cid = row.get("id")
+        if not isinstance(name, str) or not name.strip():
+            continue
+        if cid is None:
+            continue
+        try:
+            cid_int = int(cid)
+        except (TypeError, ValueError):
+            continue
+        result[name.strip()] = cid_int
+    return result
 
 
 def vdb5_job_defaults() -> dict[str, Any]:
@@ -212,6 +198,136 @@ def set_job_material(job_name: str, material_id: int) -> bool:
     return bool(match and int(match.group(1)) > 0)
 
 
+def set_order_detail_material(job_name: str, material_id: int) -> bool:
+    """Set CDM_OrderDetails.fkMaterialID for a job by name; True when rows updated."""
+    script_path = os.path.join(_scripts_dir(), "vdb5_set_order_detail_material.ps1")
+    try:
+        proc = subprocess.run(
+            [
+                "powershell",
+                "-NoProfile",
+                "-ExecutionPolicy",
+                "Bypass",
+                "-File",
+                script_path,
+                f"-JobName:{job_name}",
+                f"-MaterialID:{material_id}",
+            ],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=20,
+            check=False,
+        )
+    except Exception as e:
+        logger.warning("cdm detail material: vdb5 update failed: %r", e)
+        return False
+    if proc.returncode != 0:
+        logger.warning("cdm detail material: vdb5 update failed: %s", proc.stdout.strip())
+        return False
+    match = re.search(r"(?m)^detail_rows:\s*(\d+)", proc.stdout)
+    return bool(match and int(match.group(1)) > 0)
+
+
+def set_order_details_active(job_name: str) -> bool:
+    """Set CDM_OrderDetails.ActiveInProcess=1 for a job by name; True when rows updated."""
+    script_path = os.path.join(_scripts_dir(), "vdb5_set_order_details_active.ps1")
+    try:
+        proc = subprocess.run(
+            [
+                "powershell",
+                "-NoProfile",
+                "-ExecutionPolicy",
+                "Bypass",
+                "-File",
+                script_path,
+                f"-JobName:{job_name}",
+            ],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=20,
+            check=False,
+        )
+    except Exception as e:
+        logger.warning("cdm detail active: vdb5 update failed: %r", e)
+        return False
+    if proc.returncode != 0:
+        logger.warning("cdm detail active: vdb5 update failed: %s", proc.stdout.strip())
+        return False
+    match = re.search(r"(?m)^rows:\s*(\d+)", proc.stdout)
+    return bool(match and int(match.group(1)) > 0)
+
+
+JOB_FIELD_COLUMNS: tuple[str, ...] = (
+    "fkCustomerID",
+    "PurchaseOrderNumber",
+    "DueDate",
+    "JobDescription",
+)
+
+
+def set_job_field(job_name: str, column: str, value: str) -> bool:
+    """Update a single AM_JobDetails column for a job by name; True when a row changed.
+
+    ``column`` must be one of :data:`JOB_FIELD_COLUMNS` (SQL injection guard).
+    """
+    if column not in JOB_FIELD_COLUMNS:
+        logger.warning("cdm field: refusing unknown column %r", column)
+        return False
+    script_path = os.path.join(_scripts_dir(), "vdb5_set_job_field.ps1")
+    try:
+        proc = subprocess.run(
+            [
+                "powershell",
+                "-NoProfile",
+                "-ExecutionPolicy",
+                "Bypass",
+                "-File",
+                script_path,
+                f"-JobName:{job_name}",
+                f"-Column:{column}",
+                f"-Value:{value}",
+            ],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=20,
+            check=False,
+        )
+    except Exception as e:
+        logger.warning("cdm field: vdb5 update failed: %r", e)
+        return False
+    if proc.returncode != 0:
+        logger.warning("cdm field: vdb5 update failed: %s", proc.stdout.strip())
+        return False
+    match = re.search(r"(?m)^rows:\s*(\d+)", proc.stdout)
+    return bool(match and int(match.group(1)) > 0)
+
+
+def set_job_customer(job_name: str, customer_id: int) -> bool:
+    """Set AM_JobDetails.fkCustomerID for a job by name; True when a row changed."""
+    return set_job_field(job_name, "fkCustomerID", str(customer_id))
+
+
+def set_job_po(job_name: str, po: str) -> bool:
+    """Set AM_JobDetails.PurchaseOrderNumber for a job by name; True when a row changed."""
+    return set_job_field(job_name, "PurchaseOrderNumber", po)
+
+
+def set_job_due_date(job_name: str, date_str: str) -> bool:
+    """Set AM_JobDetails.DueDate for a job by name; True when a row changed."""
+    return set_job_field(job_name, "DueDate", date_str)
+
+
+def set_job_description(job_name: str, desc: str) -> bool:
+    """Set AM_JobDetails.JobDescription for a job by name; True when a row changed."""
+    return set_job_field(job_name, "JobDescription", desc)
+
+
 def set_has_drilling(job_name: str, values: list[bool]) -> bool:
     """Set CDM_OrderDetails.HasDrilling per detail for a job; True when rows updated."""
     script_path = os.path.join(_scripts_dir(), "vdb5_set_has_drilling.ps1")
@@ -241,6 +357,37 @@ def set_has_drilling(job_name: str, values: list[bool]) -> bool:
         logger.warning("cdm drilling: vdb5 update failed: %s", proc.stdout.strip())
         return False
     match = re.search(r"(?m)^rows:\s*(\d+)", proc.stdout)
+    return bool(match and int(match.group(1)) > 0)
+
+
+def finalize_cdm_job(job_name: str) -> bool:
+    """Set AM_JobDetails.JobType=1 and copy default sheets; True when finalized."""
+    script_path = os.path.join(_scripts_dir(), "vdb5_finalize_job.ps1")
+    try:
+        proc = subprocess.run(
+            [
+                "powershell",
+                "-NoProfile",
+                "-ExecutionPolicy",
+                "Bypass",
+                "-File",
+                script_path,
+                f"-JobName:{job_name}",
+            ],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=20,
+            check=False,
+        )
+    except Exception as e:
+        logger.warning("cdm finalize: vdb5 update failed: %r", e)
+        return False
+    if proc.returncode != 0:
+        logger.warning("cdm finalize: vdb5 update failed: %s", proc.stdout.strip())
+        return False
+    match = re.search(r"(?m)^job_rows:\s*(\d+)", proc.stdout)
     return bool(match and int(match.group(1)) > 0)
 
 
@@ -274,6 +421,49 @@ def job_count(job_name: str) -> int | None:
     if match is None:
         return None
     return int(match.group(1))
+
+
+def job_output_root(job_name: str) -> str | None:
+    """Read the output root for a job from its configuration; None when missing.
+
+    The value is the job configuration's ``DrawingFileOutputLocation``
+    (AM_ConfigurationSettings). Relative paths (``LICOMDIR\\...``) are
+    prefixed with ``C:\\ALPHACAM\\``; None when the job has no
+    configuration or the read fails.
+    """
+    script_path = os.path.join(_scripts_dir(), "vdb5_job_output_root.ps1")
+    try:
+        proc = subprocess.run(
+            [
+                "powershell",
+                "-NoProfile",
+                "-ExecutionPolicy",
+                "Bypass",
+                "-File",
+                script_path,
+                f"-JobName:{job_name}",
+            ],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=20,
+            check=False,
+        )
+    except Exception as e:
+        logger.warning("cdm output root: vdb5 read failed: %r", e)
+        return None
+    if proc.returncode != 0 or not proc.stdout.strip():
+        return None
+    match = re.search(r"(?m)^output:\s*(.*)$", proc.stdout)
+    if match is None:
+        return None
+    path = match.group(1).strip()
+    if not path:
+        return None
+    if not re.match(r"^[A-Za-z]:", path):
+        path = "C:\\ALPHACAM\\" + path
+    return path
 
 
 def _door_type_name(row: dict[str, Any]) -> str:

@@ -740,3 +740,351 @@ Pułapki FAZA 2:
 - Liczby wierszy weryfikować licznikiem: `... | grep -cE "^│"` (34 doorpaths, 28 machining, 265 doorstyles — potwierdzone)
 - VistaDB nie ma INFORMATION_SCHEMA ("Invalid schema name. DBO must be used") — nazwy tabel z skryptów ps1
 - **NOTKA:** w bazie jest **32 historycznych jobów** (F_01, PS_03 itd. z wcześniejszych testów/sesji) — NIEUŻYWANE w tym teście (dane świeże tylko); do ewentualnego posprzątania przez użytkownika w GUI AlphaCAM
+
+### ⚠️ SESSION 2026-08-10 — CDM PROCESS() ZAGADKA: dialog VBA + klik "End" (ROZWIĄZANE, ale "łatka" — do naprawy bez klikania)
+
+**Cel:** uruchomić `job.Process()` dla istniejącego zadania "Zamowienie Test 01" (job 207, config Fronty/41, fkMaterialID=2 MDF_18, 1 detal P003 qty1 500x500) w Session 0 na laptop-monika.
+
+**Ustalenia z typelibu (gen_py A87DD4DB..., /tmp/opencode/addins_typelib.py):**
+- `IAutomationManagerJob.Process()` — bez parametrów, void; brak flag silent/headless
+- `IAutomationManagerJob.PopulateJobDetails()` — uzupełnia JobData+JobFiles z bazy (DZIAŁA headless, 0.188s)
+- Job ma material w bazie (fkMaterialID=2) i w COM (NestMaterialDatabaseSheet=MDF_18 id 2 po PopulateJobDetails) — materiał NIE był przyczyną
+- `IAutomationManagerConfigurationSetting`: DisableScreenUpdates, ReportsSilentReportGeneration, CustomVBAMacro (wszystkie settable, ale nie pomogły)
+
+**Diagnoza (probe_cdm_process.py + watch-windows + psexec -i 0):**
+1. `job.Process()` przez schtasks /ru SYSTEM (window station Service-0x0-3e7$) → wyjątek `System.Windows.Forms ... UserInteractive` (0.7s) — .NET nie może pokazać modalnego okna w nieinteraktywnej stacji. To NIE wiszenie — dialog nie może się pokazać.
+2. `PsExec64.exe -i 0 -s` (interaktywna window station WinSta0\Default sesji 0) → dialog SIĘ pojawia: `#32770 'Microsoft Visual Basic'` z tekstem:
+   **"Run-time error '-2147467262 (80004002)': Nie można rzutować obiektu typu 'System.__ComObject' na typ 'Alphacam.AddIns.AutomationManagerExtensionDataRow'."** (przyciski Continue/End/Debug/Help)
+3. Kliknięcie "End" (SendMessage BM_CLICK na przycisk '&End') → dialog znika, **procesowanie KONTYNUUJE i kończy się SUKCESEM**:
+   - `...\Zamowienie Test 01\Zamowienie Test 01.log` → "Status przetwarzania zadania: Sukces"
+   - `Rysunki Części\Zamowienie Test 01_P003_1..6.ard` (6 rysunków)
+   - `Rysunki Nestingu\MDF_18 MDF_18.ard`
+   - `Pliki Kodu NC dla Nestingu\MDF_18_MDF_18.nc` (poprawny NC: T08 D08, S18000, MDF_18)
+   - `MDF_18 MDF_18.anl` (nest list)
+4. **COM call Process() NIE WRACA nawet po sukcesie** (probe ubity watchdogiem 600s; ActiveInProcess=True zostaje w bazie) — wynik weryfikować po plikach/logu, nie po powrocie calla.
+
+**Źródło błędu (niedokończone — do naprawy profesjonalnie, bez dialogu i klikania):**
+- Błąd 80004002 E_NOINTERFACE przy rzutowaniu na `AutomationManagerExtensionDataRow` — typ istnieje w AcamAddIns.dll (stringi: ExtensionDataRow_*, GetExtensionDataRow, IAutomationManagerExtensionDataRow) oraz tabela **`AM_ExtensionDataRow` w AutomationManager.vdb5 (66 wierszy!)** — to DANE rozszerzeń (extension id 3..20, klucze k0..k201, wartości "2 Heads", 400/300, ShowDialog1="Not Configured"...) — szablon/systemowy zestaw.
+- CustomVBAMacro na configu 41 = PUSTE; CDM_ConfigurationSettings.CustomMacro = PUSTE; żadne makro w LICOMDIR/VBMacros ani AM_AddIns NIE zawiera stringa "ExtensionDataRow" (skan ASCII + UTF-16, pliki .arb/.aeb/.amb + DLL) — **błąd pochodzi z wewnętrznego kodu AcamAddIns.dll / VBA hosta**, nie z makra użytkownika.
+- Kandydujące tropy: `AutomationManagerExtensionDataRowType`, `CallCustomMacroOrExtension`, `RunEventsAndExtensions`, CDM_CustomMacro/RunCDMCustomMacro, "Automation Manager Event Extender" (AMEE_Call_V1.arb — handler AutomationManagerBeforeProcessingStart itd. — to przykładowy szablon Hexagon), tabela AM_ExtensionDataRow z 66 wierszami (może job/order detail wymaga parowania z wierszem rozszerzenia).
+
+**Recepta E2E (łatka — DO ZASTĄPIENIA):**
+```
+PsExec64.exe -accepteula -i 0 -s run_probe.cmd   # probe: Dispatch → AddInsInterface → GetAutomationManagerAddInGUI → find job → PopulateJobDetails → Process()
+# równolegle auto_clicker.py: EnumWindows #32770 'Microsoft Visual Basic' → BM_CLICK na '&End' co 1s
+# wynik: C:/temp/probe_cdm_process_out.json + log Automation Managera + pliki w ...\Zamowienie Test 01\
+```
+- Pliki probe na maszynie: C:/temp/probe_cdm_process.py, auto_clicker.py, run_probe_long.cmd, clicker0.cmd, PsExec64.exe; wyniki: probe_cdm_process_out.json, probe_cdm_process.log
+- **Do zrobienia (bez klikanie):** ustalić DLACZEGO Process() odpala VBA/ExtensionDataRow (który składnik: Event Extender? AMEE? wiersze AM_ExtensionDataRow? CustomVBAMacro na innym poziomie?) i wyeliminować źródło; sprawdzić czy zadziała DisableScreenUpdates/ReportsSilentReportGeneration na configu 41 zapisane do bazy, czy job.Process() z pustym job.JobFiles (CDM generuje z CDMOrderDetails — JobFiles count=0 jest OK).
+
+---
+
+# SESSION 2026-08-11 — ROOT CAUSE 80004002 ZNALEZIONY + TESTY (NIE POWIELAĆ)
+
+## STAN MASZYNY NA KONIEC SESJI (WAŻNE — przywrócić/zweryfikować!)
+
+1. **ApplyMachiningAfterNesting.arb w SysMacro jest PODMIENIONY** na `AMA_nopass2.arb` (hasło wyzerowane: `DPB=""` + padding spacje, długość 436B zachowana). Oryginał: `C:\temp\AMA_haslo_backup.arb` (i `C:\temp\AMA_orig.arb`). **Jeśli nie zweryfikowano że działa — przywrócić oryginał.**
+2. **7 folderów rozszerzeń przeniesionych z SysMacro do `C:\temp\backup_amext\`** (MultipleHeadNesting, MultipleNCOutput, NestingFillerParts, OutputNestedJobFileNC, ProcessWaste, ProcessWasteNonNested, RollingNest). W SysMacro został TYLKO `ApplyMachiningAfterNesting\`.
+3. **OpenRB_AddIn.arb przeniesiony z `VBMacros\Startup\Open_project\` do `C:\temp\OpenRB_AddIn_moved.arb`** (backup: `C:\temp\backup_OpenRB_AddIn.arb`).
+4. **DB AutomationManager.vdb5 — zmodyfikowana**: 
+   - `AM_Extensions`: usunięto 10 wierszy config 41; dodano 1 wiersz (ExtensionID=21, cfg=41, VBAProjectName=ApplyMachiningAfterNesting, Active=0, Version=1, Order=1). Zostało: 10 wierszy cfg=40 + 1 wiersz cfg=41.
+   - `AM_ExtensionDataRow`: usunięto 66 wierszy; dodano 1 (ext=21, key=k0, def=1, user=1). Aktualnie 1 wiersz.
+   - `AM_ExtensionData`: 0 wierszy (było 0).
+   - **Backup bazy sprzed czyszczenia: `C:\temp\AutomationManager_backup_before_ext_cleanup.vdb5`** (miała 66 wierszy AM_ExtensionDataRow + 20 wierszy AM_Extensions).
+5. Usługa AlphaCAMGateway restartowana wielokrotnie; Acam.exe ubijany `taskkill /f /im acam.exe`. Ostatni stan: START_PENDING (przerwano).
+
+## ROOT CAUSE 80004002 — POTWIERDZONY W 100%
+
+**Winowajca: systemowe rozszerzenie `ApplyMachiningAfterNesting`** (`C:\Program Files\Hexagon\ALPHACAM 2025\SysMacro\AutomationManager\AutomationManagerExtensions\ApplyMachiningAfterNesting\ApplyMachiningAfterNesting.arb`).
+
+Jego kod VBA (moduł Events) ma:
+```vba
+Sub AutomationManagerExtensionSetProcessingData(Extension As AutomationManagerExtension, AutomationManager As AutomationManager)
+  Dim ExtensionRow As AutomationManagerExtensionDataRow   ← EARLY BINDING!
+  For Each ExtensionRow In Extension                      ← ITERACJA PO KOLEKCJI
+    Select Case ExtensionRow.Caption
+      Case LayerMappingSetup: SetupName = ExtensionRow.UserValue ...
+```
+`For Each ExtensionRow In Extension` — przy wywołaniu PRZEZ COM cross-process obiekt `Extension` trafia do VBA jako `System.__ComObject`, którego VBA nie może rzutować na `AutomationManagerExtensionDataRow` → **InvalidCastException 0x80004002** → dialog VBA → Process wisi.
+
+**Mechanizm (analiza IL AcamAddIns.dll 2025.2.0.103, 15MB .NET):**
+```
+Process (RVA 0x180674) → ProcessJobs (rid 1084, RVA 102684) → CallExtensions (rid 1170, RVA 141340)
+→ CallCustomMacroOrExtension (0x6000496) → App.Run("<Project>.Events.AutomationManagerExtensionSetProcessingData", Extension, ...) przez REFLECTION
+```
+- CallExtensions wywoływany z: ProcessJobs (0x1949e/0x1a38e/0x1a533), **Nest (0x184658/0x184b97)**, addMachiningOperations (0x4bbc9), processPart_InsertDrawing (0x4b4c2), OutputNC (0x23796), RunEventsAndExtensions itd.
+- InitialiseExtensions (rid 1303, RVA 174028) — skanuje foldery `SysMacro\...\AutomationManagerExtensions` + `LICOMDIR\AutomationManagerExtensions` + GetCustomVBAMacros; wywoływany z `.ctor` klasy AutomationManager (rid 84, RVA 19828) → **przy KAŻDYM nowym obiekcie AM (każdy Dispatch!)**
+- GetAutomationManagerAddIn/GUI = gettery static field (singleton) — nie tworzą nowych obiektów
+- SynchroniseExtensionData (rid 1307) — isinst na AutomationManagerExtensionDataRow (TypeDef 180, token 0x020000B4); jedyny caller: CheckAndAddExtensionOrMacro
+- FuncInsertAMExtensionDataRow (RVA 1075164) — buduje obiekty EDR przez REFLECTION (GetTypeFromHandle/Create/Invoke/SetMember) z polami @ExtensionDataRow_ExtensionID/Key/DefaultValue/UserValue
+- barButtonProcessJob_ItemClick (rid 5595) = STUB 9 bajtów (mock devowy)
+- RunEventsandExtensions (rid 6556) → callers TYLKO: AddToNestedReportsJob/GenerateReport/ExportAndCreateReportsJob (raporty, NIE Process)
+- LocalServer32 Acam: `"C:\Program Files\Hexagon\ALPHACAM 2025\acam.exe" /R /Auto` — Dispatch ZAWSZE tworzy nowy proces
+
+## TESTY WYKONANE (NIE POWIELAĆ — wszystkie negatywne lub potwierdzające)
+
+| # | Test | Wynik |
+|---|---|---|
+| 1 | Usunięcie OpenRB_AddIn z Startup (restart usługi) | ❌ Błąd ZOSTAŁ — OpenRB_AddIn niewinny (VBA IDE tytuł był tylko "ostatnio aktywnym projektem") |
+| 2 | Usunięcie 10 wierszy AM_Extensions cfg 41 + restart | ❌ Błąd ZOSTAŁ — dane DB nie mają znaczenia |
+| 3 | Usunięcie 66 wierszy AM_ExtensionDataRow + restart | ❌ Błąd ZOSTAŁ |
+| 4 | Dodanie danych (ext 21 + k0) do AM_Extensions/AM_ExtensionDataRow | ❌ Błąd ZOSTAŁ |
+| 5 | **Usunięcie WSZYSTKICH 8 folderów rozszerzeń z SysMacro + restart** | ✅ **Błąd ZNIKNĄŁ** (ale procesowanie stanęło — brak AfterNestingMaterial; log: "Przetwa zadania" bez postępu, CPU ~0) |
+| 6 | Przywrócenie TYLKO ApplyMachiningAfterNesting | ✅ **Błąd WRÓCIŁ** — 100% potwierdzenie winowajcy |
+| 7 | OpenVBAPost / OpenVBAProject (otwarcie .arb w VBE) | Oba otwierają **READ-ONLY** ("VBA Project Opened Read-Only" dialog) — nie do edycji |
+| 8 | Edycja VBE headless: keybd_event, WM_COPY, WM_GETTEXT, clip | ❌ Nie działa w Session 0 (fg tid=0, brak realnego inputu; VBMdiChildHack = własna kontrolka) |
+| 9 | GetActiveObject("Ar5axaps.Application") | ❌ -2147221021 (Acam usługi NIE w ROT) — nie da się podpiąć do istniejącego procesu |
+| 10 | Gateway (Python COM, `_handler_process_cdm_job` → `job.Process()`) | ❌ Ta sama granica COM — ten sam błąd; gateway NIE rozwiązuje |
+| 11 | AlphacamSDK (.NET wrapper) | ❌ To też COM interop (Interop.AlphaCAM*.dll) — nie in-proc |
+| 12 | Patch usunięcia hasła #1 (usunięcie linii CMG/DPB/GC) | ❌ "Projekt niedostępny" (VBE nie akceptuje usuniętych linii przy tej samej długości) |
+| 13 | Patch usunięcia hasła #2 (DPB="" + padding spacje, 436B zachowane) | ⏳ **NIE ZWERYFIKOWANY** — patrz STAN MASZYNY pkt 1 |
+| 14 | Złamanie hasła DPB | ❌ SHA1(salt 6c7d1374+pw)=660e6302...; brute 1-4 znaki + common FAIL; 1.2M/s Python; 6 znaków ~30min/rdzeń, 7+ ~18h — praktycznie nie do złamania |
+| 15 | Skan wszystkich .arb (olevba, 412 plików) pod kątem ExtensionDataRow | ❌ 0 hitów (poza DB) — kod jest TYLKO w rozszerzeniach systemowych SysMacro |
+
+## KLUCZOWE FAKTY
+
+- **Wszystkie pliki .arb mają hasło VBA** (ApplyMachiningAfterNesting, CDM.arb, CDM_Zdarzenia, OpenRB_AddIn, Front, test, PS_03 — DPB/CMG/GC w PROJECT stream).
+- **GUI Automation Manager działa bez błędu** (potwierdzone przez użytkownika) — bo Process() wykonuje się IN-PROC (w procesie Acam, obiekty .NET nie przechodzą przez marshaler). To samo makro, ta sama ścieżka — różnica tylko w granicy procesu.
+- **Rozszerzenia z SysMacro są ładowane ZAWSZE** (InitialiseExtensions przy ctor AM) — niezależnie od Extension_Active w DB. Usunięcie folderów = brak wywołań = brak błędu.
+- Wiersze AM_ExtensionDataRow (66) z backupu: ext 3..10 i 13..20, klucze k0..k201, wartości "2 Heads"/400/300/"Not Configured" — to domyślne dane UI rozszerzeń, NIE związane z błędem.
+- Metody DLL: `AutomationManagerExtensionSetProcessingData`, `AutomationManagerExtensionInitialise`, `AutomationManagerAfterNestingMaterial`, `AutomationManagerBeforeOutputNc` — konwencje wywoływane przez AM przez reflection (nazwy w #Strings, NIE w #US).
+
+## CO JESZCZE NIE ZOSTAŁO PRZETESTOWANE (kandydaci dla nowej sesji)
+
+1. **Makro VBA in-proc**: dodać makro do projektu VBA, które przez `AcamAddIns.Addins.GetAutomationManagerAddInGUI()` + `job.Process()` wykona procesowanie IN-PROC (jak GUI). CDM.arb ma już referencję `AcamAddIns.Addins` (linie 11869+) — potwierdza, że typelib Addins jest dostępny z VBA. BLOKADA: wszystkie .arb mają hasło → najpierw usunąć hasło poprawnie (test #13 niedokończony) albo napisać nowy .arb.
+2. **Nowy .arb od zera** (bez hasła) z makrem in-proc — struktura OLE + VBA/Events (format skompresowany — olevba tylko czyta, kompresji brak; pcodedmp ściągnięty do /tmp/opencode/pcodedmp — nie testowany do zapisu).
+3. **Wyłączenie ApplyMachiningAfterNesting z listy rozszerzeń przy zachowaniu funkcji CDM** — np. sprawdzić, czy CDM wymaga tego rozszerzenia BEZWZGLĘDNIE, czy da się podmienić na inny mechanizm (Setup.DoFeatureExtract/ApplyLayerMappingMachining wywoływane z CDM.arb?).
+4. Wersja ApplyMachiningAfterNesting.arb z INNEJ instalacji AlphaCAM (bez hasła / inny build) — folder SysMacro w innej maszynie.
+5. Sprawdzenie, czy `AutomationManagerExtensionSetProcessingData` można ominąć przez edycję **jednej linii w .arb** (Dim As Object = late binding) — wymaga zdjęcia hasła (test #13).
+6. **Zapytanie Hexagon** — to bug AcamAddIns.dll przy cross-process COM (GUI działa, headless nie). Może istnieje oficjalny hotfix/SP.
+
+## NARZĘDZIA NA MASZYNIE (C:\temp\)
+
+- probe: `probe_cdm_process.py`, `run_probe.cmd` (timeout 120s), `run_probe_long.cmd` (600s), `run_capture_probe.cmd` (kliker+probe)
+- kliker: `clicker_capture.py` (zapis dialogu do `dialog_capture.txt`), `auto_clicker.py` (End), `click_debug.py` (Debug), `close_dlg*.py`
+- diagnostyka: `dump_windows_pid.py`, `dump_dlgs.py`, `dump_vba_deep.py`, `vba_*.py` (edycja VBE — NIE DZIAŁA), `scan_*.py`, `db_*.ps1` (VistaDB), `reg_*.cmd`
+- `PsExec64.exe -accepteula -i 0 -s <cmd>` — interaktywna stacja sesji 0 (WYMAGANE do pokazania dialogów)
+- probe otwarcia VBA: `probe_openvba.py` (OpenVBAPost read-only), `probe_getactive.py` (GetActiveObject FAIL)
+- backup rozszerzeń: `C:\temp\backup_amext\` (7 folderów); backup DB: `C:\temp\AutomationManager_backup_before_ext_cleanup.vdb5`; backup .arb z hasłem: `C:\temp\AMA_haslo_backup.arb`
+
+## LOKALNE ARTEFAKTY ANALIZY (/tmp/opencode)
+
+- `AcamAddIns.dll` (pobrana), `acamaddins2.il` (częściowy monodis), `methods.txt` (15k linii sygnatur), `typedefs.txt`
+- `AMA_orig.arb` (z hasłem), `AMA_nopass.arb` (zepsuty — usunięte linie), `AMA_nopass2.arb` (DPB="" + padding — NIEPOTWIERDZONY)
+- dekompilacja CDM.arb: `cdm_olevba.txt` (145k linii); rozszerzenia: `scan_*.arb`; narzędzia: `vba2hash/` (DPB→hash), `pcodedmp/` (nie testowany do zapisu)
+- DPB hash: `0604AA33AE352C522C52D3AE2D5240C3AEA24406316B863B438F4B6C4DF9A1A351018909FBCE24` → SHA1(salt 6c7d1374+pw) = `660e6302b51be2929e41c1d480da2acc949cde29` (hashcat -m 110 --hex-salt; john $dynamic_24$)
+
+---
+
+# SESSION 2026-08-11 — (KONTYNUACJA) FOLDER WATCHER + NAPRAWA MAKRA LATE BINDING
+
+## Cel sesji
+
+Dokończyć problem headless procesowania CDM (job.Process() przez COM → dialog VBA 80004002 w ApplyMachiningAfterNesting). Nowe środowisko: VM 125 Win10-alphacam (192.168.100.60) zamiast laptopa Moniki.
+
+## Ustalenia
+
+1. Dokumentacja (CHM/ACAM4/przykłady): brak oficjalnej metody headless — jedyna droga GUI "Process Job".
+2. Test usera (skasowanie folderu wyjściowego + oryginalne makro): nie pomogło — 80004002 niezależny od folderu i wersji makra.
+3. VM 125: SSH AlphaCam/123456, zapisane w _infra/dostepy-serwer.md sekcja 2.7. Brakowało vcruntime140_1.dll → po instalacji VC++ 2015-2022 Redist Acam.exe przestał crashować (0xc0000409). C:\ALPHACAM skopiowane z laptopa — bez wpływu (DLL hashe identyczne z laptopem).
+4. Dysk sieciowy TrueNAS 192.168.100.52 (user corel/corel): folder AС-25.2\ALPHACAM\ExampleFiles\AutomationManager (UWAGA: cyrylicka С w nazwie!) — Folder Watcher API (GetFolderWatcherAddIn, StartWatching/StopWatching, WatchedFileFolder/ProcessedFileFolder/ErrorFileFolder, ImportSetting/ConfigurationSetting/Setup, FileType, ProcessingDelay, UseSequentialJobName) + ExtensionExample/ExtensionDataExample/Custom Macro Example.
+
+## Folder Watcher przez GUI — DZIAŁA (Sukces!)
+
+- Watcher z GUI przetworzył: FWTest_004 (job 211), fw_P003_6col (job 213) — pełne pliki .ard/.anl/.nc, log "Sukces".
+- CSV produkcyjny 6 kolumn (Import Setting "Ustawienia Importu CSV 2"): `P003,1,500,500,1;18;0;0;30;45;40;90;50;3;0,MDF_18`
+- Config "Fronty" (41), Setup "Nowe Ustawienia 1". Foldery testowe: C:\temp\fw_watched / fw_done / fw_errors.
+
+## Folder Watcher przez COM — NIE DZIAŁA
+
+- StartWatching przez COM (Session 0 i 1): dialog 80004002 + "not a valid extension" — rozszerzenie cross-process. Wniosek: każde wywołanie przez COM failuje; tylko in-proc (GUI/VBA) działa.
+
+## Naprawa makra ApplyMachiningAfterNesting.arb — late binding DZIAŁA w GUI!
+
+- Przepisane z P-code (pcodedmp) na źródło z late binding: `Dim Setup As Object`, `Dim ExtensionRow As Object`; `Private Const LanguageFile As String = "ApplyMachiningAfterNesting.po"`.
+- Błędy kompilacji naprawione: (1) brak referencji AcamAddIns.tlb + AcamAddInsInterface.tlb w projekcie; (2) uszkodzona struktura modułu (duplikat ReadLanguageFile); (3) LanguageFile = "..." poza procedurą → Const.
+- Wynik: makro kompiluje się, GUI przetwarza "Zamowienie Test 01" SUKCESEM (pełne pliki + NC T08/S18000). Hash finalnego makra na VM: 9d68a3cb (w SysMacro). Backup oryginału: C:\temp\AMA_orig_backup_vm.arb (VM), AMA_haslo_backup.arb (laptop).
+
+## OTWARTE PROBLEMY (na kolejną sesję)
+
+1. job.Process() przez COM wisi (CPU 0, brak dialogu) nawet po naprawie makra — ostatni test GetActiveObject na rozgrzanym procesie nie ruszył (log skryptu pusty — podejrzenie kodowanie UTF-8 + PsExec). Do zbadania: czemu Process() przez COM w ogóle nie startuje (wymaga otwartego okna AM? innego wywołania?).
+2. Folder Watcher przez COM — ewentualna automatyzacja przez makro VBA in-proc (App.Run w procesie Acam = in-proc = może działać jak GUI).
+3. cdm watch w CLI — user: to byłby "przepływ" nie blok CLI; rozważyć: CLI dostarcza CSV do folderu + monitoring wyników, watcher uruchamiany raz w GUI.
+4. Baza AM_Extensions na VM: cfg 41 ma ID 21-28 (vs 11-20 na laptopie), 33 DataRow (vs 66) — podejrzenie niespójności po kopiowaniu C:\ALPHACAM.
+
+## Recepty E2E
+
+- Dostęp: `sshpass -p "123456" ssh AlphaCam@192.168.100.60 "..."`
+- Start Acam z oknem Session 1 (ROT!): `C:\temp\pstools\PsExec64.exe -accepteula -i 1 -u AlphaCam -p 123456 -d cmd /c start "" "C:\Program Files\Hexagon\ALPHACAM 2025\Acam.exe" /R`
+- Test Process() przez COM (Session 1): `C:\temp\pstools\PsExec64.exe -accepteula -i 1 -u AlphaCam -p 123456 C:\Python311\python.exe C:\temp\proc_headless.py`
+- Narzędzia na VM w C:\temp: proc_headless.py, fw_test*.py, clicker_end*.py, dlg_dump.py, win_dump.py, PsExec64.exe (pstools), AMA_final3.arb (makro)
+
+## Artefakty lokalne (Linux /tmp/opencode)
+
+- AMA_final3.arb (finalne makro), ama_pcode_full.txt (dekompilacja), ac252/ (przykłady AC-25.2: FolderWatcherAPITest.arb + PDF), nowemacro_v*.arb (iteracje)
+
+## 2026-08-12 SESSION — ROOT CAUSE ZNALEZIONY: uszkodzony job, nie headless COM
+
+### Przełomowe odkrycie
+
+- User przetestował GUI na jobie 207 "Zamowienie Test 01" — dostał "Zadne pliki" (ten sam błąd co headless). Następnie USUNĄŁ P003 z zadania i DODAŁ PONOWNIE z biblioteki → GUI przetworzył SUKCESEM.
+- Wniosek: job 207 miał uszkodzone powiązanie wzoru P003 (zniknęły obróbki dla wzorów w bibliotece) → "Zadne pliki" NIE było winą COM/headless!
+- User: "biblioteka się uszkodziła bo zniknęły obróbki dla wzorów" — uszkodzona biblioteka wzorów (pattern library) na VM.
+- WSZYSTKIE wcześniejsze testy headless ("Zadne pliki", JobFiles.Count=0) padały na USZKODZONYM jobie — nie na mechanizmie COM.
+
+### Headless Process DZIAŁA (po naprawie joba)
+
+- Makro: `AMA_byname.arb` (HeadlessProcess: Populate+GetByName+Process, wgrany do SysMacro).
+- Wywołanie: VBScript przez PsExec Session 1: `C:\temp\pstools\PsExec64.exe -accepteula -i 1 -u AlphaCam -p 123456 cscript //nologo C:\temp\vbs_hp_now.vbs`
+- ProgID: `Ar5axaps.Application` (NIE AlphaCAM.Application! — 429 przy złym ProgID).
+- Ważne: cscript MUSI działać w Session 1 (GetObject wymaga tej samej stacji co Acam).
+- Wynik: 102.6s → Rysunki Czesci\Zamowienie Test 01_P003_1.ard (36KB) + Wiele materialow.anl + log "Status przetwarzania zadania: Sukces" — IDENTYCZNIE jak GUI.
+- Logi makra: `C:\temp\ama_macro_log.txt` (got, PS, r) — pełny cykl.
+- CDM.arb: 12 referencji; jedyna nierozwiązywalna to SSTree.ocx (Infragistics ActiveTreeView, {1C203F10-95AD-11D0-A84B-00A0247B735B}) — brak pliku+CLSID+TypeLib na VM → CDM.arb nie kompiluje się ("VBA encountered an error while compiling"). Nie blokowało procesowania (job CDM był już zaimportowany), ale może blokować IMPORT CDM.
+
+### Stan końcowy VM
+
+- Baza: ORYGINALNA VM przywrócona z `C:\temp\AutomationManager_vm_before_laptop.vdb5` (MD5 6a2f5a91).
+- SysMacro AMA: `AMA_byname.arb` (bfd59cbb) — z HeadlessProcess (do ponownego uruchomienia headless).
+- Acam.exe działa (Session 1).
+
+### Następne kroki
+
+1. Wyjaśnić uszkodzenie biblioteki wzorów (obróbki zniknęły) — czy to baza AM czy pliki .arb wzorów (PS_03.arb?).
+2. Ewentualnie naprawić CDM.arb (SSTree.ocx z laptopa? rejestracja) dla pełnego importu CDM.
+3. Przywrócić oryginalne makro AMA_final3/AMA_orig do SysMacro po zakończeniu testów headless.
+
+## 2026-08-12 SESSION cd. — POTWIERDZENIE HEADLESS NA LAPTOPIE MONIKA
+
+- Makro AMA_byname2.arb (GetByName "Zamowienie Test 02", textoffset 4750, build przez vba_build.py na template AMA_final3 — AMA_byname jako template failuje "incorrect last sector index" bo slot 6613 vs nowy stream 6580; template AMA_final3 ma slot 6580 == nowy stream OK).
+- Wgranie do SysMacro laptopa: taskkill Acam Session 1 (PID 10116) — UWAGA: nie zabić Session 0 (gateway!).
+- Start Acam: PsExec64 -i 1 -s -d (jako SYSTEM — jako user 48797 crash 0xC0000409 bez pełnego kontekstu interaktywnego).
+- Test: PsExec64 -i 1 -s cscript vbs_hp_laptop.vbs (GetObject "Ar5axaps.Application" — jako SYSTEM bo Acam jako SYSTEM) → HeadlessProcess err=0 w 36.9s.
+- WYNIK: Rysunki Czesci\Zamowienie Test 02_P003_1.ard (31KB) + MDF_18 MDF_18.anl (2812B) + Pliki Kodu NC\MDF_18_MDF_18.nc (389B) + log "Sukces" — IDENTYCZNIE jak GUI.
+- Na laptopie jest też .nc (kod NC) — na VM nie było; to różnica konfiguracji bazy (laptop ma pełne ustawienia), nie mechanizmu.
+- Backup oryginału laptopa: C:\temp\AMA_orig_laptop.arb (984e4f98 — identyczny z VM).
+- Job na laptopie: user zmienił nazwę z "Zamowienie Test 01" na "Zamowienie Test 02" (żeby nie mylić z VM).
+- NASTĘPNY KROK: naprawa biblioteki wzorów na VM (zniknęły obróbki dla wzorów — PS_03.arb? baza AM?), porównać z laptopem.
+
+## 2026-08-12 SESSION cd. — USER POTWIERDZIŁ: cały proces headless przeszedł bez błędów (laptop Monika)
+
+- Headless Process (App.Run przez VBScript + PsExec -i 1 -s) = 100% potwierdzony na laptopie.
+- Mechanizm gotowy. Następny cel: naprawa biblioteki wzorów na VM 125 (zniknęły obróbki dla wzorów).
+
+## 2026-08-12 SESSION cd. — E2E SUKCES: import CLI + headless process (laptop)
+
+- PEŁNY SUKCES: `alphacam cdm import` (CLI, import-setting "sklep CSV" ID=3) → job "Zamowienie Test CLI 03" (208) → headless Process → "Status: Sukces" w 13.4s, pliki .ard(63KB)+.anl+.nc.
+- Recepta na job z importu CLI (4 poprawki w bazie VistaDB — INNE niż na VM!):
+  1. **ActiveInProcess=True** w CDM_OrderDetails (na VM wyczyszczenie pomagało, tu WYMAGANE True — job 207 działa miał True, 208 import CLI miał False → "Zadne pliki")
+  2. **UserVariableString** — import "sklep CSV" nie mapuje parametrów wzoru (brak "1;" na starcie); wzorzec referencyjny: CDM_DoorTypes ID=68 (P003) ma `0;18;0;0;40;45;90;130;50;3;1;...`, job Test 02 ma `1;18;0;0;30;45;40;90;50;3;0;...`
+  3. **AM_SelectedSheets** — job wymaga wybranych arkuszy (skopiowane z joba 207: sheets 2,3,4 qty 100/10/100)
+  4. **JobType=1** w AM_JobDetails (import ustawia 0)
+- Makro AMA_byname_cli03.arb (5014d8eb): GetByName "Zamowienie Test CLI 03", build vba_build.py na template AMA_final3 (textoffset 4750, slot 6580; nazwa dłuższa → usunięto 2 linie Call L("1"/"2") z loggera żeby kompresja < slot).
+- Laptop: Acam Session 1 jako SYSTEM (PsExec -i 1 -s), cscript -i 1 -s; GetObject działa po ~60-80s od startu Acam (pełna inicjalizacja COM/ROT); za wcześnie = 429.
+- Gateway: AlphaCAMGateway (Session 0, NT\SYSTEM) — restartował się po podmianie makra (trzymał uchwyt pliku SysMacro); należy go zatrzymać (net stop) przed podmianą makra, NIE zabijać Acam 1572 osobno (to proces gateway).
+- Wyniki: "Przetworzone Pliki Menadzera Automatyzacji" czyści się (ClearOutputFolders=True cfg 41) przy procesowaniu.
+- NASTĘPNY KROK (raport): rozbudowa CLI o blok przygotowania joba (naprawa ActiveInProcess/UserVariableString/SelectedSheets/JobType po imporcie) — wg docs/plans/2026-08-12-headless-process-cli.md T3/T4.
+
+## 2026-08-12 SESSION cd. — E2E 3 SZTUKI P003: SUKCES (laptop)
+
+- Job "Zamowienie Test CLI 04" (209): 3x P003 (500x500, 600x800, 400x1000), MDF_18.
+- Import CLI ("sklep CSV") → naprawa 4 pol (ActiveInProcess=True x3, UVS "1;18;0;0;30;45;40;90;50;3;0;...", SelectedSheets 2,3,4, JobType=1) → makro AMA_byname_cli04.arb (fcfb4c56, GetByName CLI 04) → headless 44.2s → **Sukces**.
+- Wyniki: 3x .ard (63.6/71/68.7 KB), .anl (4.3 KB — 3 czesci na arkuszu), .nc (706 B).
+- Recepta potwierdzona na 2 jobach (CLI 03, CLI 04). Baza do wdrozenia auto-naprawy w bloku CLI cdm import (T3/T4 raportu).
+- UWAGA: VBScript generyczny (vbs_hp_cli03.vbs) — odpala procedure HeadlessProcess z SysMacro; nazwa joba jest w makrze. Makro podmieniane per job.
+
+## 2026-08-12 SESSION cd. — WDROŻENIE 3 BLOKÓW CLI: create→import→process (E2E SUKCES)
+
+### Przepływ docelowy (potwierdzony E2E na laptopie Monika)
+```
+alphacam cdm create "Zamowienie Test CLI 06"          # materiał domyślny z bazy (MDF18), finalize
+alphacam cdm import C:/temp/test5_6col.csv --job ...  # CSV 2 (Selected), ActiveInProcess=True, materiał CSV→order detail
+alphacam cdm process "..." --timeout 280              # headless: VBScript+PsExec Session 1+makro z parametrem
+```
+Wynik: log "Sukces" + 2× .ard + .anl + .nc — PEŁNE pliki.
+
+### Kluczowe ustalenia wdrożeniowe
+1. **Makro produkcyjne AMA_prod.arb (e5dc7c1a)**: `Public Sub HeadlessProcess(JobName As String)` — App.Run PRZEKAZUJE parametry (probe zaliczony: log "PN=Zamowienie Test CLI 04"). Jedno makro na stałe w SysMacro — CLI NIE podmienia makra per job.
+2. **finalize_cdm_job** (create): JobType=1 + SelectedSheets z AM_SelectedSheetDefaults (1 arkusz: sheet 2 qty 100).
+3. **Import**: ActiveInProcess=True przez COM setter (fallback skrypt vdb5_set_order_details_active.ps1); materiał z CSV → TYLKO CDM_OrderDetails.fkMaterialID (vdb5_set_order_detail_material.ps1), job zostaje; brak materiału w CSV = OK (bez błędu).
+4. **BŁĄD KRYTYCZNY znaleziony w E2E**: VBScript zapisywany z `utf-8-sig` (BOM) → cscript RC=1, brak logu! Poprawka: `encoding="utf-8"` (bez BOM). Test BOM: NOBOM RC=0, BOM RC=1 (sprawdzone na maszynie).
+5. **RPC**: remote.py/client.py/server.py process_cdm_job z nowymi parametrami (machine/timeout_seconds/output_root).
+6. **Skrypt vdb5_job_output_root.ps1**: poprawna kolumna to `fkConfigurationSetID` (NIE fkConfigurationSettingID) w AM_JobDetails.
+7. **Gateway na laptopie** działa z kodu `C:\Users\48797\Documents\PROJEKTY\alphacam_cli\alphacam_cli\src\alphacam_cli\` (NIE z repo opencode!) — synchronizacja ręczna tar+scp; restart usługi po zmianach (net stop/start AlphaCAMGateway).
+8. Testy: 840 passed, ruff/mypy czyste.
+
+### Otwarte (kaizen/osobne)
+- Gateway server.py: duplikat logiki importu (_import_cdm_csv_mapped ~linia 959) nadal ze starą regułą materiału (defaults→set_job_material) — deduplikacja z core/application.py + ta sama zmiana reguły.
+- Dodanie testu jednostkowego: VBS zapisywany BEZ BOM (regresja utf-8-sig).
+- VM 125: po reinstalacji AlphaCAM wgrać makro AMA_prod.arb + zsynchronizować repo + recepty (dostepy-serwer.md).
+
+## 2026-08-13 SESSION — ROOT CAUSE 80004002 + PROCESS W SESSION 0 (SUKCES przez makro HeadlessProcess)
+
+### Cel
+Uruchomić przetwarzanie zadania CDM w Session 0 (przez gateway/job.Process()). Wcześniejsze próby padały na 80004002.
+
+### Przebieg testów (laptop Monika, job "S0 Test 02" = P003,1,500,500,UVS,MDF_18 przez CLI create+import)
+1. **job.Process() przez COM z Session 0 (schtasks /ru SYSTEM)** → dialog VBA 80004002, procesowanie rusza po zamknięciu dialogu, ALE bez obróbek (brak NC, .ard części tylko 22 KB). To samo w Session 1 (PsExec -i 1 -s) i z GetObject do GUI usera (schtasks /it).
+2. **Oba makra (oryginał 20e6ff8c i pulpit 9a8e4597) zachowują się identycznie** — makro NIE jest przyczyną (potwierdzenie użytkownika).
+3. **ROOT CAUSE (znaleziony przez olevba — dekompresja VBA)**: makro produkcyjne w SysMacro (hash 20e6ff8c = AMA_probe_param.arb) MA `HeadlessProcess(JobName)` z LATE bindingiem (`Dim A As Object`, `New AcamAddInsInterface.AddInsInterface`) — CLI odpala je przez `App.Run`, więc `A.Process` wykonuje się **IN-PROC w procesie Acam** (eventy AM dostają obiekty natywne).
+   - Bezpośredni `job.Process()` z pythona = **cross-process przez COM marshal** → eventy AutomationManagerExtensionSetProcessingData/AfterNestingMaterial dostają obiekty przez marshal → 80004002 + `Setup` nie ustawione → brak obróbek (DoFeatureExtract/ApplyLayerMappingMachining nie wykonane) → brak NC.
+   - Uwaga: wcześniejsze sprawdzenie `HeadlessProcess in sysmacro: False` (ASCII search) było MYLĄCE — VBA w .arb jest skompresowany; trzeba olevba!
+
+### RECEPTA: Process w SESSION 0 (potwierdzona, 38.1s, Sukces)
+```
+# 1. Acam w Session 0 jako SYSTEM (interaktywna stacja sesji 0):
+PsExec64 -accepteula -i 0 -s -d "C:\Program Files\Hexagon\ALPHACAM 2025\Acam.exe" /R
+# 2. czekać ~70-80s (pełna inicjalizacja COM/ROT)
+# 3. VBScript (BEZ BOM! PS5.1 Out-File utf8 dodaje BOM → cscript RC=1; użyj [IO.File]::WriteAllText z UTF8Encoding($false)):
+#    GetObject(, "Ar5axaps.Application") → app.Run "ApplyMachiningAfterNesting.Events.HeadlessProcess", "S0 Test 02"
+# 4. wykonanie:
+PsExec64 -accepteula -i 0 -s cscript //nologo C:\temp\vbs_hp_s0.vbs
+```
+Wynik: log "Sukces", **NC 1744 B** (T08 D08 S18000 ryflowanie V-Bit 45), **.ard części 84291 B** (obróbki!), .anl 2796 B. Makro loguje do C:\temp\ama_macro_log.txt (PN=…, got, r).
+
+### Kluczowe wnioski
+- **NIE używać `job.Process()` przez COM** (cross-process) — zawsze będzie 80004002 + brak obróbek. Jedyny poprawny sposób: **makro HeadlessProcess in-proc przez App.Run** (jak CLI).
+- Session 0 działa TAK SAMO jak Session 1 (CLI) — wystarczy PsExec `-i 0 -s` zamiast `-i 1 -s`.
+- Makra: SysMacro=20e6ff8c (late binding + HeadlessProcess(JobName), produkcyjne); desktop=9a8e4597 (early binding `Extension As AutomationManagerExtension` + `Dim ExtensionDataRow As New` — to ono rzucało 80004002 przy cross-process). Backup oryginału: C:\temp\AMA_sysmacro_orig_20260812.arb.
+- Jak sprawdzić makro: `olevba --reveal plik.arb` (Linux, pip oletools) — ASCII grep na .arb NIE działa (kompresja VBA).
+- Stan na koniec: makro w SysMacro = 20e6ff8c (produkcyjne), Acam Session 0 PID 556, usługa RUNNING, job "S0 Test 02" przetworzony z pełnym NC.
+
+## 2026-08-13 SESSION cd. — OPCJA A POTWIERDZONA: Process w Session 0 przez gateway (App.Run makra in-proc)
+
+Raport: `docs/raporty/2026-08-13-session0-opcjaA.md`
+
+### Co zrobiono
+- Dodano tymczasowy handler `_handler_probe_run_macro` do server.py (maszyna + repo lokalne): `com_app._raw_app.Run("ApplyMachiningAfterNesting.Events.HeadlessProcess", job_name)` na referencji COM gateway.
+- Test 1 ("S0 Timing 01"): **36.3s, Sukces, NC 1744 B, .ard 84345 B** — bez 80004002, bez UserInteractive w Service-0x0-3e7$.
+- Test 2 ("S0 OptA Test 02"): **33.3s, Sukces, NC 1744 B, .ard 84417 B**.
+- **JEDEN proces Acam** (PID 3752, Session 0, proces usługi) dla create/import/process — bez VBScript/PsExec/drugiego Acam.
+
+### Wniosek
+Opcja A (gateway wywołuje makro in-proc przez App.Run) jest produkcyjna i szybsza w utrzymaniu niż VBScript/PsExec. Czas ~33-36s identyczny z VBScript.
+
+### Następne kroki (wdrożenie — osobne zadania)
+1. Przenieść logikę probe do core/application.py (`process_cdm_job_inproc`) + fallback VBScript.
+2. Parametr RPC `method: inproc|vbs` (domyślne inproc), testy jednostkowe + E2E.
+3. Usunąć handler probe po wdrożeniu.
+
+## 2026-08-13 SESSION cd. — WDROŻENIE: process_cdm_job method=inproc (produkcyjne)
+
+Raport: `docs/raporty/2026-08-13-session0-opcjaA.md` (sekcja WDROŻENIE).
+
+### Zmiany
+- core/application.py: `process_cdm_job_inproc` (App.Run makra na referencji COM gateway, in-proc) + `process_cdm_job(method="inproc"|"vbs")`.
+- BUG znaleziony w trakcie E2E: Run w osobnym wątku → RPC_E_WRONG_THREAD; naprawa: bezpośrednio na wątku STA.
+- server.py: handler `method` + usunięty handler probe.
+- client.py/remote.py: parametr method (naprawione pre-existing LSP "No parameter named machine...").
+- cli/cdm.py: `--method inproc|vbs`.
+- Testy: 848 passed, ruff/mypy czyste.
+
+### E2E na laptopie (CLI --remote)
+- Prod E2E 01 (2 części): 40.7s Sukces, NC 3690 B, 2× .ard, .anl — pełne obróbki.
+- Prod E2E 02 (1 część): 36.1s Sukces, NC 1744 B, .ard 84319 B.
+- JEDEN proces Acam (Session 0, usługa) dla create+import+process.
+
+### Uwagi produkcyjne
+- Default method=inproc — nie wymaga Session 1 ani PsExec.
+- Fallback vbs działa TYLKO gdy Acam działa w Session 1 (GetObject 429 przy Session 0-only) — do odnotowania w docs/gateway.md.
+- `timeout_seconds` w inproc: API compatibility (makro synchroniczne ~36s; klient RPC ma socket timeout).

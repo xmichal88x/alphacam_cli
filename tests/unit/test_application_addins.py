@@ -3,7 +3,6 @@ from __future__ import annotations
 import sys
 import types
 from typing import Any
-from unittest import mock
 from unittest.mock import MagicMock
 
 import pytest
@@ -222,108 +221,17 @@ def test_auto_style_apply_other_error(monkeypatch: pytest.MonkeyPatch) -> None:
         ac.auto_style_apply("x")
 
 
-@pytest.mark.parametrize(
-    ("layer_map", "expected"),
-    [
-        ("KONTUR:1,2;EDGE_F45:3", {"KONTUR": [1, 2], "EDGE_F45": [3]}),
-        ("KONTUR:1", {"KONTUR": [1]}),
-        ("KONTUR:", {"KONTUR": []}),
-        (" A : 1, 2 ; B:3 ", {"A": [1, 2], "B": [3]}),
-    ],
-)
-def test_parse_layer_map(layer_map: str, expected: dict[str, list[int]]) -> None:
-    from alphacam_cli.core.application import _parse_layer_map
-
-    assert _parse_layer_map(layer_map) == expected
-
-
-@pytest.mark.parametrize("bad", ["KONTUR1,2", ":3", "KONTUR:x"])
-def test_parse_layer_map_invalid(bad: str) -> None:
-    from alphacam_cli.core.application import _parse_layer_map
-
-    with pytest.raises(ValueError):
-        _parse_layer_map(bad)
-
-
-def test_machining_pipeline_full(monkeypatch: pytest.MonkeyPatch) -> None:
-    addins = MagicMock(name="IAddIns")
-    _make_addins_mock(monkeypatch, addins)
+def test_run_query_active_drawing(monkeypatch: pytest.MonkeyPatch) -> None:
     drw = MagicMock(name="Drawing")
-    geo1 = MagicMock(name="geo1")
-    geo2 = MagicMock(name="geo2")
-    drw.geometries.return_value = [geo1, geo2]
-    drw.geometries_count = 2
-    drw.tool_paths_count = 4
-    layer_contour = MagicMock(name="layer-KONTUR")
-    layer_edge = MagicMock(name="layer-EDGE_F45")
-    drw.create_layer.side_effect = [layer_contour, layer_edge]
+    drw.run_query.return_value = 7
     monkeypatch.setattr(Application, "get_active_drawing", lambda self: drw)
 
     ac = Application(MagicMock())
-    result = ac.machining_pipeline(
-        agq=r"C:\ALPHACAM\LICOMDIR\Queries\Menadżer_Warstw_Fronty.agq",
-        ara=r"C:\ALPHACAM\LICOMDIR\Styles\Fronty_AutoStyl.ara",
-        layer_map="KONTUR:1,2;EDGE_F45:1",
-    )
+    active = ac.get_active_drawing()
+    assert active is not None
+    result = active.run_query(r"C:\ALPHACAM\LICOMDIR\Queries\Menadżer_Warstw_Fronty.agq")
 
-    assert result == {"success": True, "geometries_count": 2, "tool_paths_count": 4}
-    assert drw.create_layer.call_args_list == [mock.call("KONTUR"), mock.call("EDGE_F45")]
-    assert geo1.set_layer.call_args_list == [mock.call(layer_contour), mock.call(layer_edge)]
-    geo2.set_layer.assert_called_once_with(layer_contour)
+    assert result == 7
     drw.run_query.assert_called_once_with(
         r"C:\ALPHACAM\LICOMDIR\Queries\Menadżer_Warstw_Fronty.agq"
     )
-    addins.GetAutoStylesAddIn.return_value.Apply.assert_called_once_with(
-        r"C:\ALPHACAM\LICOMDIR\Styles\Fronty_AutoStyl.ara"
-    )
-
-
-def test_machining_pipeline_apply_only(monkeypatch: pytest.MonkeyPatch) -> None:
-    addins = MagicMock(name="IAddIns")
-    _make_addins_mock(monkeypatch, addins)
-    drw = MagicMock(name="Drawing")
-    drw.geometries_count = 1
-    drw.tool_paths_count = 2
-    monkeypatch.setattr(Application, "get_active_drawing", lambda self: drw)
-
-    ac = Application(MagicMock())
-    result = ac.machining_pipeline(ara=r"C:\styles\auto.ara")
-
-    assert result == {"success": True, "geometries_count": 1, "tool_paths_count": 2}
-    drw.create_layer.assert_not_called()
-    drw.run_query.assert_not_called()
-    addins.GetAutoStylesAddIn.return_value.Apply.assert_called_once_with(r"C:\styles\auto.ara")
-
-
-def test_machining_pipeline_no_drawing(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(Application, "get_active_drawing", lambda self: None)
-
-    ac = Application(MagicMock())
-    with pytest.raises(RuntimeError, match="No active drawing"):
-        ac.machining_pipeline(ara="x")
-
-
-def test_machining_pipeline_ara_required(monkeypatch: pytest.MonkeyPatch) -> None:
-    drw = MagicMock(name="Drawing")
-    app_mock = MagicMock()
-    app_mock.ActiveDrawing = drw
-
-    ac = Application(app_mock)
-    with pytest.raises(RuntimeError, match="ara is required"):
-        ac.machining_pipeline()
-
-
-def test_machining_pipeline_index_out_of_range(monkeypatch: pytest.MonkeyPatch) -> None:
-    addins = MagicMock(name="IAddIns")
-    _make_addins_mock(monkeypatch, addins)
-    drw = MagicMock(name="Drawing")
-    geo = MagicMock(name="geo")
-    drw.geometries.return_value = [geo]
-    drw.geometries_count = 1
-    layer_contour = MagicMock(name="layer-KONTUR")
-    drw.create_layer.return_value = layer_contour
-    monkeypatch.setattr(Application, "get_active_drawing", lambda self: drw)
-
-    ac = Application(MagicMock())
-    with pytest.raises(RuntimeError, match="geometry index 5 out of range"):
-        ac.machining_pipeline(ara="x", layer_map="KONTUR:5")

@@ -1,11 +1,14 @@
 from __future__ import annotations
 
+import logging
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     import win32com.client as win32  # type: ignore[import-untyped]
 
 from alphacam_cli.core.drawing import CamPath
+
+logger = logging.getLogger(__name__)
 
 
 class Nesting:
@@ -156,3 +159,204 @@ class NestSheet:
     @thickness.setter
     def thickness(self, value: float) -> None:
         self._ns.Thickness = value  # type: ignore[attr-defined]
+
+    @property
+    def name(self) -> str:
+        return str(self._ns.Name)  # type: ignore[attr-defined]
+
+    @property
+    def material_name(self) -> str:
+        return str(self._ns.MaterialName)  # type: ignore[attr-defined]
+
+    @property
+    def multiplicity(self) -> int:
+        return int(self._ns.Multiplicity)  # type: ignore[attr-defined]
+
+    def part_instances(self) -> list[NestPartInstance]:
+        """Return the part instances placed on this sheet (1-based Item)."""
+        try:
+            coll = self._ns.Parts  # type: ignore[attr-defined]
+            count = int(coll.Count)  # type: ignore[attr-defined]
+        except Exception as e:
+            logger.warning("nest sheet parts: accessing collection failed: %r", e)
+            return []
+        out: list[NestPartInstance] = []
+        for i in range(1, count + 1):
+            try:
+                out.append(NestPartInstance(coll.Item(i)))
+            except Exception as e:
+                logger.warning("nest sheet parts: skipping item %s: %r", i, e)
+        return out
+
+    def to_dict(self) -> dict[str, Any]:
+        name: str | None = None
+        try:
+            name = self.name
+        except Exception as e:
+            logger.warning("nest sheet to_dict: reading name failed: %r", e)
+        material_name: str | None = None
+        try:
+            material_name = self.material_name
+        except Exception as e:
+            logger.warning("nest sheet to_dict: reading material_name failed: %r", e)
+        thickness: float | None = None
+        try:
+            thickness = self.thickness
+        except Exception as e:
+            logger.warning("nest sheet to_dict: reading thickness failed: %r", e)
+        required: int | None = None
+        try:
+            required = self.required
+        except Exception as e:
+            logger.warning("nest sheet to_dict: reading required failed: %r", e)
+        multiplicity: int | None = None
+        try:
+            multiplicity = self.multiplicity
+        except Exception as e:
+            logger.warning("nest sheet to_dict: reading multiplicity failed: %r", e)
+        return {
+            "name": name,
+            "material_name": material_name,
+            "thickness": thickness,
+            "required": required,
+            "multiplicity": multiplicity,
+            "parts": [p.to_dict() for p in self.part_instances()],
+        }
+
+
+class NestPartInstance:
+    """Wrapper around INestPartInstance COM interface (a placed part on a sheet)."""
+
+    def __init__(self, dispatch: win32.CDispatch) -> None:
+        self._npi = dispatch
+
+    @property
+    def name(self) -> str:
+        return str(self._npi.Name)  # type: ignore[attr-defined]
+
+    @property
+    def file_name(self) -> str:
+        return str(self._npi.FileName)  # type: ignore[attr-defined]
+
+    @property
+    def rotation_angle(self) -> float:
+        return float(self._npi.RotationAngle)  # type: ignore[attr-defined]
+
+    @property
+    def mirrored(self) -> bool:
+        return bool(self._npi.Mirrored)  # type: ignore[attr-defined]
+
+    @property
+    def sheet(self) -> NestSheet:
+        return NestSheet(self._npi.Sheet)  # type: ignore[attr-defined]
+
+    def position(self) -> tuple[float | None, float | None]:
+        """Global X/Y of the part's bounding box centre (resilient to COM byref quirks)."""
+        try:
+            paths = self._npi.Paths  # type: ignore[attr-defined]
+        except Exception:
+            return None, None
+        calls: list[Any] = []
+        if paths is not None:
+            calls.append(lambda: paths.GetExtentXYG(0.0, 0.0, 0.0, 0.0))  # type: ignore[attr-defined]
+            calls.append(lambda: paths.GetExtentXYG())  # type: ignore[attr-defined]
+            try:
+                path = paths.Item(1)
+                calls.append(lambda: path.GetFeedExtentXYG(0.0, 0.0, 0.0, 0.0))  # type: ignore[attr-defined]
+                calls.append(lambda: path.GetFeedExtentXYG())  # type: ignore[attr-defined]
+            except Exception:
+                pass
+        for call in calls:
+            try:
+                result = call()
+            except Exception:
+                continue
+            if not isinstance(result, (tuple, list)) or len(result) < 4:
+                continue
+            try:
+                values = [float(v) for v in result[:4]]
+            except (TypeError, ValueError):
+                continue
+            return (values[0] + values[2]) / 2.0, (values[1] + values[3]) / 2.0
+        return None, None
+
+    def to_dict(self) -> dict[str, Any]:
+        px, py = self.position()
+        name: str | None = None
+        try:
+            name = self.name
+        except Exception as e:
+            logger.warning("nest part to_dict: reading name failed: %r", e)
+        file_name: str | None = None
+        try:
+            file_name = self.file_name
+        except Exception as e:
+            logger.warning("nest part to_dict: reading file_name failed: %r", e)
+        rotation_angle: float | None = None
+        try:
+            rotation_angle = self.rotation_angle
+        except Exception as e:
+            logger.warning("nest part to_dict: reading rotation_angle failed: %r", e)
+        mirrored: bool | None = None
+        try:
+            mirrored = self.mirrored
+        except Exception as e:
+            logger.warning("nest part to_dict: reading mirrored failed: %r", e)
+        return {
+            "name": name,
+            "file_name": file_name,
+            "rotation_angle": rotation_angle,
+            "mirrored": mirrored,
+            "position_x": px,
+            "position_y": py,
+        }
+
+
+class NestInformation:
+    """Wrapper around INestInformation COM interface (results of the current nest)."""
+
+    def __init__(self, dispatch: win32.CDispatch) -> None:
+        self._ni = dispatch
+
+    def sheets(self) -> list[NestSheet]:
+        """Return the nested sheets (1-based Item, individual failures skipped)."""
+        try:
+            coll = self._ni.Sheets  # type: ignore[attr-defined]
+            count = int(coll.Count)  # type: ignore[attr-defined]
+        except Exception as e:
+            logger.warning("nest information: accessing sheets collection failed: %r", e)
+            return []
+        out: list[NestSheet] = []
+        for i in range(1, count + 1):
+            try:
+                out.append(NestSheet(coll.Item(i)))
+            except Exception as e:
+                logger.warning("nest information: skipping sheet item %s: %r", i, e)
+        return out
+
+    def parts(self) -> list[dict[str, Any]]:
+        """Return the nest parts from INestParts (Item → INestPart, only names exposed)."""
+        try:
+            coll = self._ni.Parts  # type: ignore[attr-defined]
+            count = int(coll.Count)  # type: ignore[attr-defined]
+        except Exception as e:
+            logger.warning("nest information: accessing parts collection failed: %r", e)
+            return []
+        out: list[dict[str, Any]] = []
+        for i in range(1, count + 1):
+            try:
+                raw = coll.Item(i)
+                out.append({"name": str(raw.Name)})  # type: ignore[attr-defined]
+            except Exception:
+                continue
+        return out
+
+    def refresh(self) -> None:
+        """Re-scan the drawing and update the nesting information."""
+        self._ni.Refresh()  # type: ignore[attr-defined]
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "sheets": [s.to_dict() for s in self.sheets()],
+            "parts": self.parts(),
+        }

@@ -129,3 +129,17 @@ Uwaga: już rozpakowane w `standalone/help-unpacked/` (nie trzeba ponownie rozpa
 - Opisów GUI (opcje, okna dialogowe) szukaj w `help-unpacked/ACAM4/menus/...`.
 - Recepty E2E są w `tasks.md` — **czytaj `tasks.md` na początku sesji**.
 - Wzorce oficjalnego użycia API: `alphacam-provided-examples/API/`.
+
+## 9. Architektura: Bloki, nie przepływy
+
+CLI to **narzędzie (tool)** złożone z niezależnych bloków (komend). Każdy blok wykonuje **JEDNĄ** konkretną funkcję (np. utworzenie zadania CDM, import CSV do zadania, przetworzenie zadania, wygenerowanie listy części, uruchomienie nestingu, odczyt wyników).
+
+1. **ZAKAZ** — nie tworzyć wbudowanych przepływów pracy, kompozytorów ani komend "end-to-end" wykonujących cały pipeline. Sekwencję, kolejność i parametry składa **aplikacja zewnętrzna** (skrypt/konsument), wywołując poszczególne bloki.
+2. **Nowa funkcjonalność = nowy, samodzielny blok** — nigdy rozbudowa istniejącej komendy o kontekst całego przepływu.
+3. **Wymagania dla bloku:**
+   - samodzielny (działa w izolacji)
+   - jednoznaczne wejście/wyjście (tekst/JSON)
+   - świeża sesja COM na każde wywołanie (izolacja awarii — znany bug: drugi OutputNC w jednej sesji COM wisi)
+   - własny test jednostkowy
+   - czytelny komunikat błędu
+4. **Każdy blok = jeden punkt awarii** — łatwa diagnoza i ponowne wywołanie tylko danego bloku.

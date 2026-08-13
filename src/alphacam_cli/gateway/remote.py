@@ -80,6 +80,10 @@ class _DrawingProxy:
     def create_layer(self, name: str) -> dict[str, Any]:
         return self._session.create_layer(name)  # type: ignore[no-any-return]
 
+    def run_query(self, file_path: str) -> int:
+        result = self._session.drawing_query(file_path)
+        return int(result.get("count", 0)) if isinstance(result, dict) else 0
+
 
 class RemoteApplication:
     def __init__(self, session: RemoteSession) -> None:
@@ -215,15 +219,8 @@ class RemoteApplication:
     def create_layer(self, name: str) -> dict[str, Any]:
         return self._session.create_layer(name)  # type: ignore[no-any-return]
 
-    def machining_pipeline(
-        self,
-        agq: str | None = None,
-        ara: str | None = None,
-        layer_map: str | None = None,
-    ) -> dict[str, Any]:
-        return self._session.machining_pipeline(  # type: ignore[no-any-return]
-            agq=agq, ara=ara, layer_map=layer_map
-        )
+    def run_query(self, file_path: str) -> dict[str, Any]:
+        return self._session.drawing_query(file_path)  # type: ignore[no-any-return]
 
     def get_nesting(self) -> Any:
         return _RemoteNesting(self._session)
@@ -246,42 +243,48 @@ class RemoteApplication:
         height: float,
         offset: float = 50,
         fillet: float = 5,
-        depth: float | None = None,
-        tool: str | None = None,
-        spindle: int | None = None,
-        feed: float | None = None,
-        down_feed: float | None = None,
     ) -> dict[str, Any]:
         return self._session.drawing_parametric(
             width,
             height,
             offset=offset,
             fillet=fillet,
-            depth=depth,
-            tool=tool,
-            spindle=spindle,
-            feed=feed,
-            down_feed=down_feed,
         )
 
-    def run_cdm(
+    def create_cdm_job(
         self,
         job_name: str,
-        type_name: str,
-        width: float = 400,
-        length: float = 300,
-        quantity: int = 1,
-        bypass_nest: bool = False,
+        config: str | None = None,
         material: str | None = None,
+        customer: str | None = None,
+        po: str | None = None,
+        due_date: str | None = None,
+        description: str | None = None,
     ) -> dict[str, Any]:
-        return self._session.run_cdm(  # type: ignore[no-any-return]
+        return self._session.create_cdm_job(  # type: ignore[no-any-return]
             job_name=job_name,
-            type_name=type_name,
-            width=width,
-            length=length,
-            quantity=quantity,
-            bypass_nest=bypass_nest,
+            config=config,
             material=material,
+            customer=customer,
+            po=po,
+            due_date=due_date,
+            description=description,
+        )
+
+    def process_cdm_job(
+        self,
+        job_name: str,
+        machine: dict[str, Any] | None = None,
+        timeout_seconds: int = 300,
+        output_root: str | None = None,
+        method: str | None = None,
+    ) -> dict[str, Any]:
+        return self._session.process_cdm_job(  # type: ignore[no-any-return]
+            job_name=job_name,
+            machine=machine,
+            timeout_seconds=timeout_seconds,
+            output_root=output_root,
+            method=method,
         )
 
     def cdm_types(self) -> dict[str, Any]:
@@ -289,6 +292,9 @@ class RemoteApplication:
 
     def cdm_jobs(self) -> dict[str, Any]:
         return self._session.cdm_jobs()  # type: ignore[no-any-return]
+
+    def nest_inspect(self) -> dict[str, Any]:
+        return self._session.nest_inspect()  # type: ignore[no-any-return]
 
     def import_cdm_csv(
         self,
@@ -356,6 +362,19 @@ class RemoteApplication:
 
     def delete_cdm_job(self, job_name: str) -> dict[str, Any]:
         return self._session.delete_cdm_job(job_name=job_name)  # type: ignore[no-any-return]
+
+    def manifest_list(self, data_dir: str | None = None) -> dict[str, Any]:
+        return self._session.manifest_list(data_dir)  # type: ignore[no-any-return]
+
+    def manifest_read(
+        self,
+        job_name: str | None = None,
+        material: str | None = None,
+        data_dir: str | None = None,
+    ) -> dict[str, Any]:
+        return self._session.manifest_read(  # type: ignore[no-any-return]
+            job_name=job_name, material=material, data_dir=data_dir
+        )
 
 
 class _RemoteMillData:
@@ -642,6 +661,7 @@ class _RemoteNesting:
         sheet_order: int | None = None,
         time_per_sheet: float | None = None,
         resolution: float | None = None,
+        save_ard: str = "",
     ) -> Any:
         parts = nl.get_parts() if hasattr(nl, "get_parts") else []
         result = self._session.run_nest(
@@ -674,6 +694,7 @@ class _RemoteNesting:
             sheet_order=sheet_order,
             time_per_sheet=time_per_sheet,
             resolution=resolution,
+            save_ard=save_ard,
         )
         return _RemoteNestResult(result)
 
@@ -750,3 +771,22 @@ class _RemoteNestResult:
     @property
     def count(self) -> int:
         return int(self._data.get("count", 0))
+
+    @property
+    def sheets(self) -> list[Any]:
+        nest = self._data.get("nest")
+        if isinstance(nest, dict):
+            return list(nest.get("sheets", []))
+        return []
+
+    @property
+    def total_parts(self) -> int:
+        nest = self._data.get("nest")
+        if isinstance(nest, dict):
+            return int(nest.get("total_parts", 0))
+        return 0
+
+    @property
+    def save_ard(self) -> str | None:
+        save = self._data.get("save_ard")
+        return str(save) if save else None

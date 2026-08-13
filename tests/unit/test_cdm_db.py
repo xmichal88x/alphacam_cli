@@ -151,6 +151,62 @@ def test_set_job_material_subprocess_failure(monkeypatch: pytest.MonkeyPatch) ->
     assert cdm_db.set_job_material("order", 4) is False
 
 
+def test_set_order_detail_material_rows_updated(monkeypatch: pytest.MonkeyPatch) -> None:
+    run = _mock_run(monkeypatch, stdout="detail_rows: 2")
+    assert cdm_db.set_order_detail_material("order", 4) is True
+    args, _ = run.call_args
+    assert "-JobName:order" in args[0]
+    assert "-MaterialID:4" in args[0]
+
+
+def test_set_order_detail_material_no_rows(monkeypatch: pytest.MonkeyPatch) -> None:
+    _mock_run(monkeypatch, stdout="detail_rows: 0")
+    assert cdm_db.set_order_detail_material("order", 4) is False
+
+
+def test_set_order_detail_material_subprocess_failure(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _mock_run(monkeypatch).side_effect = FileNotFoundError("powershell")
+    assert cdm_db.set_order_detail_material("order", 4) is False
+
+
+def test_set_order_details_active_rows_updated(monkeypatch: pytest.MonkeyPatch) -> None:
+    run = _mock_run(monkeypatch, stdout="rows: 2")
+    assert cdm_db.set_order_details_active("order") is True
+    args, _ = run.call_args
+    assert "-JobName:order" in args[0]
+
+
+def test_set_order_details_active_no_rows(monkeypatch: pytest.MonkeyPatch) -> None:
+    _mock_run(monkeypatch, stdout="rows: 0")
+    assert cdm_db.set_order_details_active("order") is False
+
+
+def test_set_order_details_active_subprocess_failure(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _mock_run(monkeypatch).side_effect = FileNotFoundError("powershell")
+    assert cdm_db.set_order_details_active("order") is False
+
+
+def test_finalize_cdm_job_rows_updated(monkeypatch: pytest.MonkeyPatch) -> None:
+    run = _mock_run(monkeypatch, stdout="job_rows: 1\nsheet_rows: 3")
+    assert cdm_db.finalize_cdm_job("order") is True
+    args, _ = run.call_args
+    assert "-JobName:order" in args[0]
+
+
+def test_finalize_cdm_job_no_rows(monkeypatch: pytest.MonkeyPatch) -> None:
+    _mock_run(monkeypatch, stdout="job_rows: 0")
+    assert cdm_db.finalize_cdm_job("order") is False
+
+
+def test_finalize_cdm_job_subprocess_failure(monkeypatch: pytest.MonkeyPatch) -> None:
+    _mock_run(monkeypatch).side_effect = FileNotFoundError("powershell")
+    assert cdm_db.finalize_cdm_job("order") is False
+
+
 def test_set_has_drilling_rows_updated(monkeypatch: pytest.MonkeyPatch) -> None:
     run = _mock_run(monkeypatch, stdout="rows: 2")
     assert cdm_db.set_has_drilling("order", [True, False]) is True
@@ -176,6 +232,36 @@ def test_set_has_drilling_nonzero_returncode(monkeypatch: pytest.MonkeyPatch) ->
 def test_set_has_drilling_subprocess_failure(monkeypatch: pytest.MonkeyPatch) -> None:
     _mock_run(monkeypatch).side_effect = FileNotFoundError("powershell")
     assert cdm_db.set_has_drilling("order", [True]) is False
+
+
+def test_set_job_field_rows_updated(monkeypatch: pytest.MonkeyPatch) -> None:
+    run = _mock_run(monkeypatch, stdout="rows: 1")
+    assert cdm_db.set_job_field("order", "DueDate", "2026-08-10") is True
+    args, _ = run.call_args
+    assert "-JobName:order" in args[0]
+    assert "-Column:DueDate" in args[0]
+    assert "-Value:2026-08-10" in args[0]
+
+
+def test_set_job_field_unknown_column_refused(monkeypatch: pytest.MonkeyPatch) -> None:
+    run = _mock_run(monkeypatch, stdout="rows: 1")
+    assert cdm_db.set_job_field("order", "Password; DROP TABLE AM_JobDetails", "x") is False
+    run.assert_not_called()
+
+
+def test_set_job_field_wrappers_use_whitelisted_columns(monkeypatch: pytest.MonkeyPatch) -> None:
+    cases: list[tuple[Any, str, Any]] = [
+        (cdm_db.set_job_customer, "fkCustomerID", 7),
+        (cdm_db.set_job_po, "PurchaseOrderNumber", "PO-1"),
+        (cdm_db.set_job_due_date, "DueDate", "2026-08-10"),
+        (cdm_db.set_job_description, "JobDescription", "opis"),
+    ]
+    for wrapper, column, value in cases:
+        assert column in cdm_db.JOB_FIELD_COLUMNS
+        run = _mock_run(monkeypatch, stdout="rows: 1")
+        assert wrapper("order", value) is True
+        args, _ = run.call_args
+        assert f"-Column:{column}" in args[0]
 
 
 def test_job_count_parses(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -205,6 +291,47 @@ def test_job_count_subprocess_failure(monkeypatch: pytest.MonkeyPatch) -> None:
     assert cdm_db.job_count("order") is None
 
 
+def test_job_output_root_parses(monkeypatch: pytest.MonkeyPatch) -> None:
+    run = _mock_run(monkeypatch, stdout=r"output: C:\out" + "\n")
+    assert cdm_db.job_output_root("order") == r"C:\out"
+    args, _ = run.call_args
+    assert "-JobName:order" in args[0]
+
+
+def test_job_output_root_polish_chars(monkeypatch: pytest.MonkeyPatch) -> None:
+    stdout = "output: C:\\ALPHACAM\\Automatyzacja\\Przetworzone Pliki Menadżera Automatyzacji\n"
+    _mock_run(monkeypatch, stdout=stdout)
+    assert (
+        cdm_db.job_output_root("Zamowienie X")
+        == r"C:\ALPHACAM\Automatyzacja\Przetworzone Pliki Menadżera Automatyzacji"
+    )
+
+
+def test_job_output_root_relative_prefixed(monkeypatch: pytest.MonkeyPatch) -> None:
+    _mock_run(monkeypatch, stdout=r"output: LICOMDIR\Styles\Fronty" + "\n")
+    assert cdm_db.job_output_root("order") == r"C:\ALPHACAM\LICOMDIR\Styles\Fronty"
+
+
+def test_job_output_root_empty(monkeypatch: pytest.MonkeyPatch) -> None:
+    _mock_run(monkeypatch, stdout="output: \n")
+    assert cdm_db.job_output_root("order") is None
+
+
+def test_job_output_root_bad_stdout(monkeypatch: pytest.MonkeyPatch) -> None:
+    _mock_run(monkeypatch, stdout="not an output line")
+    assert cdm_db.job_output_root("order") is None
+
+
+def test_job_output_root_nonzero_returncode(monkeypatch: pytest.MonkeyPatch) -> None:
+    _mock_run(monkeypatch, stdout="", returncode=1)
+    assert cdm_db.job_output_root("order") is None
+
+
+def test_job_output_root_subprocess_failure(monkeypatch: pytest.MonkeyPatch) -> None:
+    _mock_run(monkeypatch).side_effect = FileNotFoundError("powershell")
+    assert cdm_db.job_output_root("order") is None
+
+
 def test_read_cdm_csv_utf8_bom_stripped(tmp_path: pathlib.Path) -> None:
     f = tmp_path / "bom.csv"
     f.write_bytes(b"\xef\xbb\xbfStyle,Quantity,Width,Length,DesignDimensions\nP003,1,400,300,0\n")
@@ -232,83 +359,6 @@ def test_read_cdm_csv_multi_char_separator(tmp_path: pathlib.Path) -> None:
     f.write_bytes(b"P003,1,400,300,0\n")
     with pytest.raises(RuntimeError, match="cdm: separator must be a single character"):
         cdm_db.read_cdm_csv(str(f), ";;")
-
-
-def test_parse_cdm_rows_valid_row() -> None:
-    rows = [["P003", "1", "400", "300", "1;18", "MDF"]]
-    details, errors = cdm_db.parse_cdm_rows(rows, False)
-    assert errors == []
-    assert details == [
-        {
-            "row": 1,
-            "style": "P003",
-            "quantity": 1,
-            "width": 400.0,
-            "length": 300.0,
-            "design_dims": "1;18",
-        }
-    ]
-
-
-def test_parse_cdm_rows_header_skipped() -> None:
-    rows = [
-        ["Style", "Quantity", "Width", "Length", "DesignDimensions"],
-        ["P003", "1", "400", "300", "0"],
-    ]
-    details, errors = cdm_db.parse_cdm_rows(rows, True)
-    assert errors == []
-    assert [d["style"] for d in details] == ["P003"]
-    assert details[0]["row"] == 2
-
-
-def test_parse_cdm_rows_quantity_must_be_positive() -> None:
-    rows = [["P003", "0", "400", "300", "0"], ["P004", "-2", "400", "300", "0"]]
-    details, errors = cdm_db.parse_cdm_rows(rows, False)
-    assert details == []
-    assert errors == ["row 1: quantity must be positive", "row 2: quantity must be positive"]
-
-
-def test_parse_cdm_rows_width_length_must_be_positive() -> None:
-    rows = [["P003", "1", "0", "300", "0"], ["P004", "1", "400", "-5", "0"]]
-    details, errors = cdm_db.parse_cdm_rows(rows, False)
-    assert details == []
-    assert errors == ["row 1: width must be positive", "row 2: length must be positive"]
-
-
-def test_parse_cdm_rows_short_row() -> None:
-    rows = [["P003", "1"]]
-    details, errors = cdm_db.parse_cdm_rows(rows, False)
-    assert details == []
-    assert errors == ["row 1: expected at least 5 columns, got 2"]
-
-
-def test_parse_cdm_rows_empty_style() -> None:
-    rows = [["", "1", "400", "300", "0"]]
-    details, errors = cdm_db.parse_cdm_rows(rows, False)
-    assert details == []
-    assert errors == ["row 1: style is required"]
-
-
-def test_parse_cdm_rows_invalid_values() -> None:
-    rows = [
-        ["P003", "abc", "400", "300", "0"],
-        ["P004", "1", "x", "300", "0"],
-        ["P005", "1", "400", "y", "0"],
-    ]
-    details, errors = cdm_db.parse_cdm_rows(rows, False)
-    assert details == []
-    assert errors == [
-        "row 1: invalid quantity: 'abc'",
-        "row 2: invalid width: 'x'",
-        "row 3: invalid length: 'y'",
-    ]
-
-
-def test_parse_cdm_rows_empty_rows_skipped() -> None:
-    rows = [[""], ["P003", "1", "400", "300", "0"], []]
-    details, errors = cdm_db.parse_cdm_rows(rows, False)
-    assert errors == []
-    assert [d["row"] for d in details] == [2]
 
 
 # --- cleanup_created_job ---

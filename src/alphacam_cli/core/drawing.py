@@ -6,6 +6,8 @@ from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     import win32com.client as win32  # type: ignore[import-untyped]
 
+    from alphacam_cli.core.nesting import NestInformation
+
 from alphacam_cli.com.constants import ACAM_OUT_NC_FILE
 
 
@@ -112,6 +114,15 @@ class Drawing:
     def run_query(self, file_path: str) -> int:
         """Run a geometry query (.agq) on the drawing; returns applied rule count."""
         return int(self._drw.RunQuery(file_path))  # type: ignore[attr-defined]
+
+    def get_nest_information(self) -> NestInformation:
+        """Return the nesting results (sheets with part placements) for this drawing."""
+        from alphacam_cli.core.nesting import NestInformation
+
+        raw = self._drw.GetNestInformation()  # type: ignore[attr-defined]
+        if raw is None:
+            raise RuntimeError("Failed to get nest information")  # noqa: TRY003
+        return NestInformation(raw)
 
     def zoom_all(self) -> None:
         self._drw.ZoomAll()  # type: ignore[attr-defined]

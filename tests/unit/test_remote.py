@@ -48,11 +48,9 @@ def test_remote_drawing_parametric() -> None:
         "tool_paths_count": 2,
     }
     app = RemoteApplication(session)
-    result = app.drawing_parametric(800, 400, offset=60, fillet=3, depth=-19)
+    result = app.drawing_parametric(800, 400, offset=60, fillet=3)
     assert result["success"] is True
-    session.drawing_parametric.assert_called_once_with(
-        800, 400, offset=60, fillet=3, depth=-19, tool=None, spindle=None, feed=None, down_feed=None
-    )
+    session.drawing_parametric.assert_called_once_with(800, 400, offset=60, fillet=3)
 
 
 @pytest.mark.parametrize(
@@ -241,100 +239,100 @@ def test_remote_drawing_proxy_create_layer() -> None:
     session.create_layer.assert_called_once_with("KONTUR")
 
 
-def test_remote_machining_pipeline() -> None:
+def test_remote_run_query() -> None:
     session = MagicMock()
-    session.machining_pipeline.return_value = {
-        "success": True,
-        "geometries_count": 2,
-        "tool_paths_count": 4,
-    }
+    session.drawing_query.return_value = {"success": True, "count": 7}
     app = RemoteApplication(session)
-    result = app.machining_pipeline(agq=r"C:\q.agq", ara=r"C:\a.ara", layer_map="KONTUR:1")
-    assert result["tool_paths_count"] == 4
-    session.machining_pipeline.assert_called_once_with(
-        agq=r"C:\q.agq", ara=r"C:\a.ara", layer_map="KONTUR:1"
-    )
+    result = app.run_query(r"C:\ALPHACAM\LICOMDIR\Queries\test.agq")
+    assert result == {"success": True, "count": 7}
+    session.drawing_query.assert_called_once_with(r"C:\ALPHACAM\LICOMDIR\Queries\test.agq")
 
 
-def test_remote_machining_pipeline_defaults() -> None:
+def test_remote_drawing_proxy_run_query() -> None:
     session = MagicMock()
-    session.machining_pipeline.return_value = {"success": True}
-    app = RemoteApplication(session)
-    result = app.machining_pipeline()
-    assert result == {"success": True}
-    session.machining_pipeline.assert_called_once_with(agq=None, ara=None, layer_map=None)
+    session.drawing_query.return_value = {"success": True, "count": 7}
+    drw = _DrawingProxy(session, {"geometries_count": 2})
+    result = drw.run_query(r"C:\ALPHACAM\LICOMDIR\Queries\test.agq")
+    assert result == 7
+    session.drawing_query.assert_called_once_with(r"C:\ALPHACAM\LICOMDIR\Queries\test.agq")
 
 
-def test_remote_run_cdm() -> None:
+def test_remote_drawing_proxy_run_query_missing_count() -> None:
     session = MagicMock()
-    session.run_cdm.return_value = {
+    session.drawing_query.return_value = {"success": True}
+    drw = _DrawingProxy(session, {"geometries_count": 2})
+    result = drw.run_query(r"C:\ALPHACAM\LICOMDIR\Queries\test.agq")
+    assert result == 0
+
+
+def test_remote_create_cdm_job() -> None:
+    session = MagicMock()
+    session.create_cdm_job.return_value = {
         "success": True,
         "job_name": "JOB-001",
-        "type_name": "Typ Frontu 1",
-        "width": 500.0,
-        "length": 300.0,
-        "quantity": 2,
+        "config": "Fronty",
+        "material": "MDF_18",
+        "warnings": [],
     }
     app = RemoteApplication(session)
-    result = app.run_cdm(
+    result = app.create_cdm_job(
         job_name="JOB-001",
-        type_name="Typ Frontu 1",
-        width=500,
-        length=300,
-        quantity=2,
-        bypass_nest=True,
+        config="Fronty",
+        material="MDF_18",
+        customer="Klient A",
+        po="PO-1",
+        due_date="2026-08-10",
+        description="opis",
     )
     assert result["success"] is True
     assert result["job_name"] == "JOB-001"
-    session.run_cdm.assert_called_once_with(
+    session.create_cdm_job.assert_called_once_with(
         job_name="JOB-001",
-        type_name="Typ Frontu 1",
-        width=500,
-        length=300,
-        quantity=2,
-        bypass_nest=True,
-        material=None,
+        config="Fronty",
+        material="MDF_18",
+        customer="Klient A",
+        po="PO-1",
+        due_date="2026-08-10",
+        description="opis",
     )
 
 
-def test_remote_run_cdm_defaults() -> None:
+def test_remote_create_cdm_job_defaults() -> None:
     session = MagicMock()
-    session.run_cdm.return_value = {"success": True}
+    session.create_cdm_job.return_value = {"success": True}
     app = RemoteApplication(session)
-    app.run_cdm(job_name="JOB-001", type_name="Typ Frontu 1")
-    session.run_cdm.assert_called_once_with(
+    app.create_cdm_job(job_name="JOB-001")
+    session.create_cdm_job.assert_called_once_with(
         job_name="JOB-001",
-        type_name="Typ Frontu 1",
-        width=400,
-        length=300,
-        quantity=1,
-        bypass_nest=False,
+        config=None,
         material=None,
+        customer=None,
+        po=None,
+        due_date=None,
+        description=None,
     )
 
 
-def test_remote_run_cdm_material() -> None:
+def test_remote_create_cdm_job_material() -> None:
     session = MagicMock()
-    session.run_cdm.return_value = {
+    session.create_cdm_job.return_value = {
         "success": True,
         "job_name": "JOB-001",
-        "type_name": "Typ Frontu 1",
-        "width": 400.0,
-        "length": 300.0,
-        "quantity": 1,
+        "config": "Fronty",
         "material": "MDF_18",
+        "warnings": [],
     }
     app = RemoteApplication(session)
-    result = app.run_cdm(job_name="JOB-001", type_name="Typ Frontu 1", material="MDF_18")
+    result = app.create_cdm_job(job_name="JOB-001", material="MDF_18")
     assert result["material"] == "MDF_18"
-    session.run_cdm.assert_called_once_with(
+    session.create_cdm_job.assert_called_once_with(
         job_name="JOB-001",
-        type_name="Typ Frontu 1",
-        width=400,
-        length=300,
-        quantity=1,
-        bypass_nest=False,
+        config=None,
         material="MDF_18",
+        customer=None,
+        po=None,
+        due_date=None,
+        description=None,
     )
 
 
@@ -619,3 +617,136 @@ def test_remote_session_cdm_materials_lookups_no_params() -> None:
     client._call.reset_mock()
     client.cdm_lookups()
     client._call.assert_called_once_with("cdm_lookups")
+
+
+def test_remote_session_create_cdm_job_skips_none_params() -> None:
+    client = RemoteSession()
+    client._call = MagicMock(return_value={"success": True})  # type: ignore[method-assign]
+    client.create_cdm_job(job_name="J", material="M", due_date="2026-08-20")
+    client._call.assert_called_once_with(
+        "create_cdm_job",
+        {"job_name": "J", "material": "M", "due_date": "2026-08-20"},
+    )
+
+
+def test_remote_session_create_cdm_job_all_params() -> None:
+    client = RemoteSession()
+    client._call = MagicMock(return_value={"success": True})  # type: ignore[method-assign]
+    client.create_cdm_job(
+        job_name="J",
+        config="Fronty",
+        material="M",
+        customer="Klient A",
+        po="PO-1",
+        due_date="2026-08-20",
+        description="opis",
+    )
+    client._call.assert_called_once_with(
+        "create_cdm_job",
+        {
+            "job_name": "J",
+            "config": "Fronty",
+            "material": "M",
+            "customer": "Klient A",
+            "po": "PO-1",
+            "due_date": "2026-08-20",
+            "description": "opis",
+        },
+    )
+
+
+def test_remote_process_cdm_job() -> None:
+    session = MagicMock()
+    session.process_cdm_job.return_value = {
+        "success": True,
+        "job_name": "JOB-001",
+        "processed": True,
+    }
+    app = RemoteApplication(session)
+    result = app.process_cdm_job(job_name="JOB-001")
+    assert result == {"success": True, "job_name": "JOB-001", "processed": True}
+    session.process_cdm_job.assert_called_once_with(
+        job_name="JOB-001",
+        machine=None,
+        timeout_seconds=300,
+        output_root=None,
+        method=None,
+    )
+
+
+def test_remote_process_cdm_job_full_params() -> None:
+    session = MagicMock()
+    session.process_cdm_job.return_value = {
+        "success": True,
+        "job_name": "JOB-001",
+        "processed": True,
+    }
+    app = RemoteApplication(session)
+    machine = {
+        "psexec": "C:/temp/PsExec64.exe",
+        "psexec_args": ["-accepteula", "-i", "1", "-s"],
+        "cscript": "cscript",
+        "use_shell": False,
+    }
+    result = app.process_cdm_job(
+        job_name="JOB-001",
+        machine=machine,
+        timeout_seconds=600,
+        output_root="C:/out",
+        method="vbs",
+    )
+    assert result == {"success": True, "job_name": "JOB-001", "processed": True}
+    session.process_cdm_job.assert_called_once_with(
+        job_name="JOB-001",
+        machine=machine,
+        timeout_seconds=600,
+        output_root="C:/out",
+        method="vbs",
+    )
+
+
+def test_remote_session_process_cdm_job() -> None:
+    client = RemoteSession()
+    client._call = MagicMock(return_value={"success": True, "processed": True})  # type: ignore[method-assign]
+    client.process_cdm_job(job_name="JOB-001")
+    client._call.assert_called_once_with(
+        "process_cdm_job",
+        {"job_name": "JOB-001", "timeout_seconds": 300},
+    )
+
+
+def test_remote_session_process_cdm_job_full_params() -> None:
+    client = RemoteSession()
+    client._call = MagicMock(return_value={"success": True, "processed": True})  # type: ignore[method-assign]
+    machine = {
+        "psexec": "C:/temp/PsExec64.exe",
+        "psexec_args": ["-accepteula", "-i", "1", "-s"],
+        "cscript": "cscript",
+        "use_shell": False,
+    }
+    client.process_cdm_job(
+        job_name="JOB-001",
+        machine=machine,
+        timeout_seconds=600,
+        output_root="C:/out",
+    )
+    client._call.assert_called_once_with(
+        "process_cdm_job",
+        {
+            "job_name": "JOB-001",
+            "timeout_seconds": 600,
+            "machine": machine,
+            "output_root": "C:/out",
+        },
+    )
+
+
+def test_remote_session_call_socket_timeout_wrapped() -> None:
+    from alphacam_cli.gateway.client import RemoteConnectionError
+
+    client = RemoteSession(timeout=30.0)
+    sock = MagicMock()
+    sock.recv_into.side_effect = TimeoutError("timed out")
+    client._sock = sock
+    with pytest.raises(RemoteConnectionError, match=r"request timed out after 30\.0s"):
+        client._call("ping")

@@ -46,7 +46,10 @@ class RemoteSession:
         if self._sock is None:
             raise RemoteConnectionError("Not connected")
         self._sock.sendall(packed)
-        raw = read_frame(self._sock)
+        try:
+            raw = read_frame(self._sock)
+        except TimeoutError as e:
+            raise RemoteConnectionError(f"request timed out after {self.timeout}s") from e
         if raw is None:
             raise RemoteConnectionError("Connection closed by server")
         response = cast(dict[str, Any], raw)
@@ -95,11 +98,6 @@ class RemoteSession:
         height: float,
         offset: float = 50,
         fillet: float = 5,
-        depth: float | None = None,
-        tool: str | None = None,
-        spindle: int | None = None,
-        feed: float | None = None,
-        down_feed: float | None = None,
     ) -> dict[str, Any]:
         params: dict[str, Any] = {
             "width": width,
@@ -107,16 +105,6 @@ class RemoteSession:
             "offset": offset,
             "fillet": fillet,
         }
-        if depth is not None:
-            params["depth"] = depth
-        if tool is not None:
-            params["tool"] = tool
-        if spindle is not None:
-            params["spindle"] = spindle
-        if feed is not None:
-            params["feed"] = feed
-        if down_feed is not None:
-            params["down_feed"] = down_feed
         return self._call("drawing_parametric", params)  # type: ignore[no-any-return]
 
     def zoom_all(self) -> dict[str, Any]:
@@ -147,6 +135,9 @@ class RemoteSession:
 
     def get_active_drawing(self) -> dict[str, Any] | None:
         return self._call("get_active_drawing")  # type: ignore[no-any-return]
+
+    def nest_inspect(self) -> dict[str, Any]:
+        return self._call("nest_inspect")  # type: ignore[no-any-return]
 
     def list_tools(self, pattern: str = "*.art") -> list[str]:
         return self._call("list_tools", {"pattern": pattern})  # type: ignore[no-any-return]
@@ -195,20 +186,8 @@ class RemoteSession:
     def create_layer(self, name: str) -> dict[str, Any]:
         return self._call("create_layer", {"name": name})  # type: ignore[no-any-return]
 
-    def machining_pipeline(
-        self,
-        agq: str | None = None,
-        ara: str | None = None,
-        layer_map: str | None = None,
-    ) -> dict[str, Any]:
-        params: dict[str, Any] = {}
-        if agq is not None:
-            params["agq"] = agq
-        if ara is not None:
-            params["ara"] = ara
-        if layer_map is not None:
-            params["layer_map"] = layer_map
-        return self._call("machining_pipeline", params)  # type: ignore[no-any-return]
+    def drawing_query(self, file: str) -> dict[str, Any]:
+        return self._call("drawing_query", {"file": file})  # type: ignore[no-any-return]
 
     def batch_process(
         self,
@@ -264,6 +243,7 @@ class RemoteSession:
         sheet_order: int | None = None,
         time_per_sheet: float | None = None,
         resolution: float | None = None,
+        save_ard: str = "",
     ) -> dict[str, Any]:
         params: dict[str, Any] = {
             "parts": parts,
@@ -304,29 +284,51 @@ class RemoteSession:
         for key, value in nest_opts.items():
             if value is not None:
                 params[key] = value
+        if save_ard:
+            params["save_ard"] = save_ard
         return self._call("run_nest", params)  # type: ignore[no-any-return]
 
-    def run_cdm(
+    def create_cdm_job(
         self,
         job_name: str,
-        type_name: str,
-        width: float = 400,
-        length: float = 300,
-        quantity: int = 1,
-        bypass_nest: bool = False,
+        config: str | None = None,
         material: str | None = None,
+        customer: str | None = None,
+        po: str | None = None,
+        due_date: str | None = None,
+        description: str | None = None,
     ) -> dict[str, Any]:
-        params: dict[str, Any] = {
-            "job_name": job_name,
-            "type_name": type_name,
-            "width": width,
-            "length": length,
-            "quantity": quantity,
-            "bypass_nest": bypass_nest,
-        }
+        params: dict[str, Any] = {"job_name": job_name}
+        if config is not None:
+            params["config"] = config
         if material is not None:
             params["material"] = material
-        return self._call("run_cdm", params)  # type: ignore[no-any-return]
+        if customer is not None:
+            params["customer"] = customer
+        if po is not None:
+            params["po"] = po
+        if due_date is not None:
+            params["due_date"] = due_date
+        if description is not None:
+            params["description"] = description
+        return self._call("create_cdm_job", params)  # type: ignore[no-any-return]
+
+    def process_cdm_job(
+        self,
+        job_name: str,
+        machine: dict[str, Any] | None = None,
+        timeout_seconds: int = 300,
+        output_root: str | None = None,
+        method: str | None = None,
+    ) -> dict[str, Any]:
+        params: dict[str, Any] = {"job_name": job_name, "timeout_seconds": timeout_seconds}
+        if machine is not None:
+            params["machine"] = machine
+        if output_root is not None:
+            params["output_root"] = output_root
+        if method is not None:
+            params["method"] = method
+        return self._call("process_cdm_job", params)  # type: ignore[no-any-return]
 
     def cdm_types(self) -> dict[str, Any]:
         return self._call("cdm_types")  # type: ignore[no-any-return]
@@ -422,6 +424,27 @@ class RemoteSession:
 
     def delete_cdm_job(self, job_name: str) -> dict[str, Any]:
         return self._call("cdm_delete_job", {"job_name": job_name})  # type: ignore[no-any-return]
+
+    def manifest_list(self, data_dir: str | None = None) -> dict[str, Any]:
+        params: dict[str, Any] = {}
+        if data_dir is not None:
+            params["data_dir"] = data_dir
+        return self._call("manifest_list", params)  # type: ignore[no-any-return]
+
+    def manifest_read(
+        self,
+        job_name: str | None = None,
+        material: str | None = None,
+        data_dir: str | None = None,
+    ) -> dict[str, Any]:
+        params: dict[str, Any] = {}
+        if job_name is not None:
+            params["job_name"] = job_name
+        if material is not None:
+            params["material"] = material
+        if data_dir is not None:
+            params["data_dir"] = data_dir
+        return self._call("manifest_read", params)  # type: ignore[no-any-return]
 
     def find_drawing_files(self, pattern: str = "*.amd") -> list[str]:
         return self._call("find_drawing_files", {"pattern": pattern})  # type: ignore[no-any-return]

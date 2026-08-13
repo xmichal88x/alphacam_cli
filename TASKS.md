@@ -10,6 +10,16 @@
 
 ## Zrealizowane w bieżącej sesji (Sprint v1.0.0)
 
+### P0 — Procesowanie CDM w Session 0 (2026-08-13, E2E potwierdzone)
+- [x] **ROOT CAUSE 80004002**: `job.Process()` cross-process przez COM marshal → makro eventów AM dostaje obiekty przez marshal → 80004002 + brak obróbek. Makro `HeadlessProcess(JobName)` uruchamiane IN-PROC (`App.Run` na referencji COM) → pełne obróbki + NC. (raport: docs/raporty/2026-08-13-session0-opcjaA.md)
+- [x] **core/application.py**: `process_cdm_job_inproc` (App.Run makra na referencji COM gateway, ~33-41s) + `process_cdm_job(method="inproc"|"vbs")` — default inproc
+- [x] **BUG naprawiony**: Run w osobnym wątku → RPC_E_WRONG_THREAD; naprawa: bezpośrednio na wątku STA
+- [x] **gateway/server.py**: handler `method` (walidacja inproc|vbs), usunięty tymczasowy handler probe_run_macro
+- [x] **client.py/remote.py**: parametr method — naprawione pre-existing LSP "No parameter named machine/timeout_seconds/output_root"
+- [x] **cli/cdm.py**: opcja `--method inproc|vbs`
+- [x] **E2E laptop Monika**: Prod E2E 01 (2 części) 40.7s Sukces NC 3690 B; Prod E2E 02 (1 część) 36.1s Sukces NC 1744 B; JEDEN proces Acam (Session 0) dla create+import+process; pytest 848 passed
+- [ ] **Fallback vbs wymaga Acam w Session 1** (GetObject 429 przy Session 0-only) — odnotowane, nie jest defaultem
+
 ### P0 — Cross-thread COM (Fix krytyczny)
 - [x] `com/manager.py` — dedykowany STA thread z message pumpą (zamiast ThreadPoolExecutor)
 - [x] Marshal dispatch przez CoMarshalInterThreadInterfaceInStream (Windows) / direct (Linux)
@@ -190,6 +200,9 @@
 2. **manager.py:58** — `result_sent` flaga: teoretyczna luka przy rzadkim wyjątku spoza TypeError|com_error (low)
 3. **tests/conftest.py:11-27** — ComError mock wpływa na wszystkie testy, nie tylko potrzebujące (medium)
 4. **batch.py:45-46** — save_as fail z `status="OK"`: NC wygenerowany, drawing nie zapisany. Intencjonalny design. (info)
+5. **Duplikacja flow importu CSV między gateway a core** — pełna duplikacja logiki importu CSV: `gateway/server.py` (handlery `import_cdm_csv`/`import_cdm_preview` + lokalne helpery `_resolve_cdm_import_setting`/`_cdm_material_name`/`_cdm_job_name`/`_cdm_config_name`/`_FIELD_SETTERS`; legacy + mapped import, 894-1204) vs `core/application.py` (`import_cdm_csv`/`_import_cdm_csv_mapped`/`import_cdm_preview`/`_resolve_import_setting`; 668-986). Obie kopie obecnie zsynchronizowane (linia w linię), ale każda zmiana kontraktu jest wprowadzana 2× → fabryka dryfu (widoczne drobne dryfity, np. `preview` flag w params). Fix docelowy: server deleguje do metod core (wzorzec `create_cdm_job` — walidacja params + COMError w handlerze) lub wspólny moduł (wzorzec dedupu `cdm_db` z tasks.md:605). (MAJOR — code review 2026-08-10, iteracja 1)
+6. **`_handler_probe_nest` (server.py:448-802)** — ~350 linii debugowego kodu z hardcoded ścieżkami (C:\Program Files\Hexagon..., C:\Users\48797...) w produkcji. Do przeniesienia do narzędzia debug lub usunięcia. (MINOR)
+7. **`_cdm_automation_manager` (server.py:804-817)** — duplikuje logikę addins interface z `core/application.py:410-495` (ten sam CLSID 39BFE38A-...) zamiast delegować przez `get_automation_manager_addin()`. (NIT)
 
 ## Znane ograniczenia (świadomy design)
 
@@ -197,8 +210,15 @@
 2. **Brak wsparcia dla Nesting z geometrią** — CSV tylko wymiary, nie tworzy geometrii
 3. **OutputNC wymaga event sink** — zaimplementowane w tej sesji (`output_nc_with_events`)
 4. **COM safety** — STA thread + result_sent guard + keep_alive ✅
+5. **Batch processing trzyma jedną sesję COM na cały katalog** (świadomy design — blok iteracyjny, izolacja per wywołanie CLI; znany bug drugiego OutputNC w jednej sesji wymaga świeżej sesji na wywołanie)
 
 ### Nowe P1 (znalezione w tej sesji 2026-08-09)
 
 - [ ] **Batch hang: drugi OutputNC w tej samej sesji COM wisi w Session 0** (12/12 przebiegów: part_0.nc=177B OK, part_1.nc=0B wisi). Diagnoza: core/drawing.py output_nc (linia ~153) — COM call OutputNC nie wraca przy drugim wywołaniu w jednej sesji. Do zbadania: output_nc_with_events/NcEventHandler, świeży context per plik w batch, lub retry. Blokuje test_batch_processing.
 - [ ] **Acam.exe trzyma handle pliku NC po OutputNC w Session 0** (>60s) — test mill_nc obejście: cleanup best-effort (teardown_class); do zbadania czy OutputNC zamyka plik po zamknięciu sesji COM.
+
+---
+
+## Kierunki na przyszłość
+
+- [ ] **Custom import (wizja, decyzja użytkownika 2026-08-10)** — import można rozbudować w przyszłości jako CUSTOM IMPORT: logika tworzenia typu importu w bibliotece (`AM_ImportSettings`) z własnymi kolumnami → dopasowanie do dowolnych plików CSV, których dane nie są poukładane. Tylko jako wizja na przyszłość — bez wpływu na obecny kontrakt (csv2 = CreateJob=No, import do istniejącego zadania; sklep CSV = CreateJob=Yes).

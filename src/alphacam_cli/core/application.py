@@ -2,6 +2,9 @@ from __future__ import annotations
 
 import glob
 import os
+import subprocess
+import time
+from datetime import datetime
 from typing import TYPE_CHECKING, Any, ClassVar
 
 if TYPE_CHECKING:
@@ -13,8 +16,9 @@ if TYPE_CHECKING:
     from alphacam_cli.core.tool import Tool
 
 from alphacam_cli.com.constants import MODULE_MILL, MODULE_ROUTER
-from alphacam_cli.core import cdm_db
+from alphacam_cli.core import acrepd, cdm_db, headless
 from alphacam_cli.core.drawing import Drawing
+from alphacam_cli.core.logger import logger
 from alphacam_cli.core.machining import MillData
 from alphacam_cli.core.nesting import Nesting
 from alphacam_cli.core.tool import Tool
@@ -22,6 +26,32 @@ from alphacam_cli.core.tool import Tool
 _ADDINS_INTERFACE_TYPELIB = "{D216BAAC-A717-4793-92D3-1AE37AE3AC2E}"
 _ADDINS_TYPELIB = "{A87DD4DB-67C9-4F1B-BC79-A71EE8C7D1E5}"
 _ADDINS_INTERFACE_CLSID = "{39BFE38A-D3E4-43EA-89D0-584C776B97A9}"
+
+
+def _try_com_job_setter(job: Any, candidates: tuple[str, ...], value: Any) -> bool:
+    """Try a guessed COM property setter on the job object; True when it worked."""
+    for name in candidates:
+        try:
+            if not hasattr(job, name):
+                continue
+        except Exception:
+            continue
+        try:
+            setattr(job, name, value)
+        except Exception:
+            return False
+        return True
+    return False
+
+
+def _validate_due_date(date_str: str) -> None:
+    """Raise RuntimeError unless ``date_str`` is a valid YYYY-MM-DD date."""
+    try:
+        datetime.strptime(date_str, "%Y-%m-%d")
+    except ValueError:
+        raise RuntimeError(  # noqa: TRY003
+            f"cdm: invalid due date: {date_str!r} (expected YYYY-MM-DD)"
+        ) from None
 
 
 class Application:
@@ -211,35 +241,15 @@ class Application:
         height: float,
         offset: float = 50,
         fillet: float = 5,
-        depth: float | None = None,
-        tool: str | None = None,
-        spindle: int | None = None,
-        feed: float | None = None,
-        down_feed: float | None = None,
     ) -> dict[str, Any]:
-        """Create a parametric door/frame panel and optionally machine it."""
+        """Create a parametric door/frame panel geometry.
+
+        Outer filleted rectangle + inner arched contour.
+        """
         drw = self.create_temp_drawing()
         if drw is None:
             raise RuntimeError("Failed to create drawing")  # noqa: TRY003
         outer, inner = drw.create_panel(width, height, offset, fillet)
-        if depth is not None:
-            if tool:
-                self.select_tool(tool)
-            md = self.create_mill_data()
-            md.safe_rapid_level = 10.0
-            md.rapid_down_to = 2.0
-            md.material_top = 0.0
-            md.final_depth = depth
-            if spindle is not None:
-                md.spindle_speed = spindle
-            if feed is not None:
-                md.cut_feed = feed
-            if down_feed is not None:
-                md.down_feed = down_feed
-            for path in (outer, inner):
-                path.selected = True
-                md.rough_finish()
-                path.selected = False
         drw.zoom_all()
         return {
             "success": True,
@@ -320,6 +330,22 @@ class Application:
             except Exception as e2:
                 msg = f"Failed to get nesting (App.Nesting and AcamNest.Nesting failed): {e2}"
                 raise RuntimeError(msg) from e2
+
+    def nest_inspect(self) -> dict[str, Any]:
+        """Inspect the nesting results of the active drawing (sheets + part placements)."""
+        drw = self.get_active_drawing()
+        if drw is None:
+            raise RuntimeError("No active drawing")  # noqa: TRY003
+        try:
+            result = drw.get_nest_information().to_dict()
+            total_parts = sum(len(sheet["parts"]) for sheet in result["sheets"])
+            return {
+                "success": True,
+                "sheets": result["sheets"],
+                "total_parts": total_parts,
+            }
+        except Exception as e:
+            raise RuntimeError(f"nest: inspect failed: {e}") from e  # noqa: TRY003
 
     def select_post(self, name: str) -> None:
         if "/" not in name and "\\" not in name and not os.path.exists(name):
@@ -471,82 +497,287 @@ class Application:
             raise RuntimeError("Add-ins interface unavailable")  # noqa: TRY003
         return addins.GetAutomationManagerAddInGUI()
 
-    def run_cdm(
+    def create_cdm_job(
         self,
         job_name: str,
-        type_name: str,
-        width: float = 400,
-        length: float = 300,
-        quantity: int = 1,
-        bypass_nest: bool = False,
+        config: str | None = None,
         material: str | None = None,
+        customer: str | None = None,
+        po: str | None = None,
+        due_date: str | None = None,
+        description: str | None = None,
     ) -> dict[str, Any]:
-        """Create a CDM job with a single order detail (headless, no dialogs)."""
+        """Create an empty CDM job (headless, no dialogs; no order details).
+
+        Config and material are required at creation: explicit arguments win,
+        otherwise the database defaults (AM_Settings); when neither exists the
+        job is not created (fail-fast). Metadata (customer/po/due date/
+        description) is best-effort: a COM setter on the job object is tried
+        first (before the single DB save), then a VistaDB UPDATE; failures
+        become warnings, never abort the creation.         Material is stored via a
+        VistaDB UPDATE after the save; when it fails the job is removed and
+        the creation aborts. The job is finalized (JobType + default sheets)
+        via a VistaDB UPDATE afterwards; when it fails the job is removed and
+        the creation aborts.
+        """
         job_name = job_name.strip()
         if not job_name:
             raise RuntimeError("cdm: job_name is required")  # noqa: TRY003
-        type_name = type_name.strip()
-        if not type_name:
-            raise RuntimeError("cdm: type_name is required")  # noqa: TRY003
-        if width <= 0:
-            raise RuntimeError("cdm: width must be positive")  # noqa: TRY003
-        if length <= 0:
-            raise RuntimeError("cdm: length must be positive")  # noqa: TRY003
-        if quantity <= 0:
-            raise RuntimeError("cdm: quantity must be positive")  # noqa: TRY003
+        if due_date is not None:
+            _validate_due_date(due_date)
         am = self.get_automation_manager_addin()
         if cdm_db.find_cdm_job(am, job_name) is not None:
             raise RuntimeError(f"cdm: job already exists: {job_name}")  # noqa: TRY003
+        defaults: dict[str, Any] | None = None
+        config_name = (config or "").strip()
+        if not config_name:
+            if defaults is None:
+                defaults = cdm_db.vdb5_job_defaults()
+            config_name = str(defaults.get("config_name") or "").strip()
+            if not config_name:
+                raise RuntimeError("cdm: no default configuration found")  # noqa: TRY003
         materials = cdm_db.sheet_materials()
-        material_name = (material or "").strip() or None
+        material_name = (material or "").strip()
         material_id: int | None = None
-        if material_name is not None:
+        if material_name:
             material_id = materials.get(material_name)
             if material_id is None:
                 raise RuntimeError(f"cdm: material not found: {material_name}")  # noqa: TRY003
         else:
-            material_id = cdm_db.vdb5_job_defaults().get("material_id")
-        material_label: str | None = material_name
+            if defaults is None:
+                defaults = cdm_db.vdb5_job_defaults()
+            material_id = defaults.get("material_id")
+            if material_id is None:
+                raise RuntimeError("cdm: no default material found")  # noqa: TRY003
+        material_label: str | None = material_name or None
         if material_label is None and material_id is not None:
             material_label = next(
                 (n for n, mid in materials.items() if mid == material_id),
-                None,
+                f"id:{material_id}",
             )
         try:
             job = am.NewCDMJob()
             job.JobName = job_name
+        except Exception as e:
+            raise RuntimeError(f"cdm: create job failed: {e}") from e  # noqa: TRY003
+        try:
+            job.ConfigurationSetting = am.ConfigurationSettings.GetByName(config_name)
+        except Exception as e:
+            raise RuntimeError(f"cdm: config not found: {config_name}") from e  # noqa: TRY003
+        warnings: list[str] = []
+        customer_name: str | None = None
+        customer_id: int | None = None
+        if customer is not None:
+            customer_name = customer.strip()
+            if not customer_name:
+                warnings.append("cdm: customer name is empty; ignored")
+            else:
+                customers_map = cdm_db.customers()
+                if not customers_map:
+                    warnings.append("cdm: customer database unavailable; customer not set")
+                else:
+                    customer_id = customers_map.get(customer_name)
+                    if customer_id is None:
+                        warnings.append(f"cdm: customer not found: {customer_name}")
+        com_set: set[str] = set()
+        if customer_id is not None and _try_com_job_setter(
+            job, ("Customer", "CustomerName"), customer_name
+        ):
+            com_set.add("customer")
+        if po is not None and _try_com_job_setter(job, ("PurchaseOrderNumber", "PO"), po):
+            com_set.add("po")
+        if due_date is not None and _try_com_job_setter(job, ("DueDate",), due_date):
+            com_set.add("due_date")
+        if description is not None and _try_com_job_setter(
+            job, ("JobDescription", "Description"), description
+        ):
+            com_set.add("description")
+        try:
             job.SaveToDatabase()
         except Exception as e:
             raise RuntimeError(f"cdm: create job failed: {e}") from e  # noqa: TRY003
-        material_error: str | None = None
-        if material_id is not None and not cdm_db.set_job_material(job_name, material_id):
-            material_error = "failed to set material"
-        try:
-            detail = job.AddCDMOrderDetail(type_name)
-        except Exception as e:
-            cdm_db.cleanup_created_job(am, job, job_name)
-            raise RuntimeError(f"cdm: door type not found: {type_name}") from e  # noqa: TRY003
-        try:
-            detail.Width = width
-            detail.Length = length
-            detail.Quantity = quantity
-            detail.ByPassNest = bypass_nest
-            detail.SaveToDatabase()
-        except Exception as e:
-            cdm_db.cleanup_created_job(am, job, job_name)
-            raise RuntimeError(f"cdm: save order detail failed: {e}") from e  # noqa: TRY003
-        result: dict[str, Any] = {
+        if not cdm_db.set_job_material(job_name, material_id):
+            deleted, reason = cdm_db.cleanup_created_job(
+                am,
+                job,
+                job_name,
+                log=lambda msg: logger.warning("cdm: cleanup failed: %s", msg),
+            )
+            note = "job removed" if deleted else f"cleanup failed: {reason}"
+            raise RuntimeError(  # noqa: TRY003
+                f"cdm: failed to set material for job {job_name} ({note})"
+            )
+        if not cdm_db.finalize_cdm_job(job_name):
+            deleted, reason = cdm_db.cleanup_created_job(
+                am,
+                job,
+                job_name,
+                log=lambda msg: logger.warning("cdm: cleanup failed: %s", msg),
+            )
+            note = "job removed" if deleted else f"cleanup failed: {reason}"
+            raise RuntimeError(  # noqa: TRY003
+                f"cdm: failed to finalize job {job_name} ({note})"
+            )
+        if (
+            customer_id is not None
+            and "customer" not in com_set
+            and not _try_com_job_setter(job, ("Customer", "CustomerName"), customer_name)
+            and not cdm_db.set_job_customer(job_name, customer_id)
+        ):
+            warnings.append("failed to set customer")
+        if (
+            po is not None
+            and "po" not in com_set
+            and not _try_com_job_setter(job, ("PurchaseOrderNumber", "PO"), po)
+            and not cdm_db.set_job_po(job_name, po)
+        ):
+            warnings.append("failed to set purchase order number")
+        if (
+            due_date is not None
+            and "due_date" not in com_set
+            and not _try_com_job_setter(job, ("DueDate",), due_date)
+            and not cdm_db.set_job_due_date(job_name, due_date)
+        ):
+            warnings.append("failed to set due date")
+        if (
+            description is not None
+            and "description" not in com_set
+            and not _try_com_job_setter(job, ("JobDescription", "Description"), description)
+            and not cdm_db.set_job_description(job_name, description)
+        ):
+            warnings.append("failed to set job description")
+        return {
             "success": True,
             "job_name": job_name,
-            "type_name": type_name,
-            "width": width,
-            "length": length,
-            "quantity": quantity,
+            "config": config_name,
             "material": material_label,
+            "warnings": warnings,
         }
-        if material_error is not None:
-            result["material_error"] = material_error
-        return result
+
+    def process_cdm_job(
+        self,
+        job_name: str,
+        machine: dict[str, Any] | None = None,
+        timeout_seconds: int = 300,
+        output_root: str | None = None,
+        method: str = "inproc",
+    ) -> dict[str, Any]:
+        """Process a CDM job via the ``ApplyMachiningAfterNesting`` macro.
+
+        ``method="inproc"`` (default) runs the macro in-process on the COM
+        reference held by this wrapper (``self._raw_app``) — no PsExec
+        required. ``method="vbs"`` falls back to the out-of-process path: a
+        VBScript is written to ``headless.DEFAULT_VBS_DIR`` and executed on
+        ``machine`` via PsExec; it attaches to the running AlphaCAM instance
+        and runs the macro. No COM calls are made from this process in the
+        vbs path (``Job.Process`` across processes hangs the machine).
+        Processing settings come from the job's configuration; the output
+        root comes from the database (``DrawingFileOutputLocation``) unless
+        ``output_root`` is given.
+        """
+        if method == "vbs":
+            job_name = job_name.strip()
+            if not job_name:
+                raise RuntimeError("cdm: job_name is required")  # noqa: TRY003
+            count = cdm_db.job_count(job_name)
+            if count is None:
+                raise RuntimeError(  # noqa: TRY003
+                    f"cdm: job existence check failed: {job_name}"
+                )
+            if count < 1:
+                raise RuntimeError(f"cdm: job not found: {job_name}")  # noqa: TRY003
+            if output_root is None:
+                output_root = cdm_db.job_output_root(job_name)
+            if not output_root:
+                raise RuntimeError(f"cdm: output root not found: {job_name}")  # noqa: TRY003
+            machine = machine or headless.DEFAULT_MACHINE
+            vbs_dir = headless.DEFAULT_VBS_DIR
+            vbs_path = os.path.join(vbs_dir, "vbs_hp_cli.vbs")
+            log_path = os.path.join(vbs_dir, "vbs_hp_cli_out.txt")
+            try:
+                os.makedirs(vbs_dir, exist_ok=True)
+                with open(vbs_path, "w", encoding="utf-8") as fh:
+                    fh.write(headless.build_vbs(job_name, vbs_path, log_path))
+                proc = headless.run_headless(machine, vbs_path, timeout_seconds=timeout_seconds)
+            except subprocess.TimeoutExpired as e:
+                raise RuntimeError(  # noqa: TRY003
+                    f"cdm: process job timed out after {timeout_seconds}s: {job_name}"
+                ) from e
+            except Exception as e:
+                raise RuntimeError(f"cdm: process job failed: {e}") from e  # noqa: TRY003
+            vbs_log: str | None = None
+            try:
+                with open(log_path, encoding="utf-8", errors="replace") as fh:
+                    vbs_log = fh.read()
+            except OSError:
+                vbs_log = None
+            result = headless.read_job_result(job_name, output_root)
+            success = bool(result.get("success"))
+            return {
+                "success": success,
+                "job_name": job_name,
+                "status": result.get("status"),
+                "processed": success,
+                "method": "vbs",
+                "psexec_rc": proc.returncode,
+                "vbs_log": vbs_log,
+                "log": result.get("log"),
+            }
+        if method == "inproc":
+            return self.process_cdm_job_inproc(job_name, timeout_seconds, output_root)
+        raise RuntimeError(  # noqa: TRY003
+            f"cdm: unknown method: {method} (expected inproc|vbs)"
+        )
+
+    def process_cdm_job_inproc(
+        self,
+        job_name: str,
+        timeout_seconds: int = 300,
+        output_root: str | None = None,
+    ) -> dict[str, Any]:
+        """Process a CDM job in-process via the held COM reference.
+
+        The ``ApplyMachiningAfterNesting.Events.HeadlessProcess`` macro runs
+        synchronously on ``self._raw_app`` inside the AlphaCAM process
+        (~33-36s), so no VBScript/PsExec is needed. ``timeout_seconds`` is
+        accepted for API compatibility; the macro is synchronous and
+        terminates on its own, and the client-side RPC timeout protects the
+        caller. Results come from the Automation Manager job log via
+        ``headless.read_job_result``.
+        """
+        job_name = job_name.strip()
+        if not job_name:
+            raise RuntimeError("cdm: job_name is required")  # noqa: TRY003
+        count = cdm_db.job_count(job_name)
+        if count is None:
+            raise RuntimeError(  # noqa: TRY003
+                f"cdm: job existence check failed: {job_name}"
+            )
+        if count < 1:
+            raise RuntimeError(f"cdm: job not found: {job_name}")  # noqa: TRY003
+        if output_root is None:
+            output_root = cdm_db.job_output_root(job_name)
+        if not output_root:
+            raise RuntimeError(f"cdm: output root not found: {job_name}")  # noqa: TRY003
+        t0 = time.monotonic()
+        try:
+            self._raw_app.Run("ApplyMachiningAfterNesting.Events.HeadlessProcess", job_name)
+        except Exception as e:
+            raise RuntimeError(  # noqa: TRY003
+                f"cdm: process job failed: {e}"
+            ) from e
+        elapsed_s = round(time.monotonic() - t0, 1)
+        result = headless.read_job_result(job_name, output_root)
+        success = bool(result.get("success"))
+        return {
+            "success": success,
+            "job_name": job_name,
+            "status": result.get("status"),
+            "processed": success,
+            "method": "inproc",
+            "elapsed_s": elapsed_s,
+            "log": result.get("log"),
+        }
 
     def cdm_types(self) -> dict[str, Any]:
         """List CDM door types from the vdb5 database + existing jobs (headless-safe)."""
@@ -603,19 +834,19 @@ class Application:
     ) -> dict[str, Any]:
         """Import a CSV door order into a single CDM job (headless, no dialogs).
 
-        Without ``import_setting`` the CSV columns are
-        Style,Quantity,Width,Height,DesignDimensions,Material. The Material column
-        (6th) or the ``material`` argument sets the job's material via
-        AM_JobDetails.fkMaterialID; columns beyond 6 are ignored silently. With
-        ``import_setting`` the column map comes from AM_ImportSettings (separator
-        and header flag from the setting unless given explicitly), extra detail
-        fields (customer/order/item/comment/rotation/custom fields) are set on
-        each order detail, and the job name/config/material may come from mapped
+        The column map (and separator/header flag) always come from
+        AM_ImportSettings: ``import_setting`` selects one by id or name, and
+        without it the setting marked ``Selected`` in the database is used
+        (error when none is selected). Extra detail fields
+        (customer/order/item/comment/rotation/custom fields) are set on each
+        order detail, and the job name/config/material may come from mapped
         job columns. With ``preview`` nothing touches COM: the result is the
         import preview. With --job the rows are added to an existing job;
-        otherwise a new job is created (name from --name, the mapped job name or
-        the CSV basename, max 60 chars).
+        otherwise a new job is created only when the setting has
+        CreateJob=Yes (name from --name, the mapped job name or the CSV
+        basename, max 60 chars) — when CreateJob=No ``job`` is required.
         """
+        job = (job or "").strip() or None
         if job and name:
             raise RuntimeError("cdm: --name and --job are mutually exclusive")  # noqa: TRY003
         if not csv.strip():
@@ -633,138 +864,16 @@ class Application:
                 config=config,
                 material=material,
             )
-        if import_setting is not None:
-            return self._import_cdm_csv_mapped(
-                csv=csv,
-                job=job,
-                name=name,
-                config=config,
-                separator=separator,
-                has_header=has_header,
-                material=material,
-                import_setting=import_setting,
-            )
-        try:
-            rows = cdm_db.read_cdm_csv(csv, separator or ",")
-        except Exception as e:
-            raise RuntimeError(f"cdm: import csv failed: {e}") from e  # noqa: TRY003
-        details, errors = cdm_db.parse_cdm_rows(rows, has_header)
-        material_name = (material or "").strip() or None
-        if material_name is None:
-            for n, row in enumerate(rows, start=1):
-                if has_header and n == 1:
-                    continue
-                if not any(str(cell).strip() for cell in row):
-                    continue
-                if len(row) > 5 and str(row[5]).strip():
-                    material_name = str(row[5]).strip()
-                    break
-        defaults: dict[str, Any] | None = None
-        materials = cdm_db.sheet_materials()
-        material_id: int | None = None
-        if material_name:
-            material_id = materials.get(material_name)
-            if material_id is None:
-                raise RuntimeError(  # noqa: TRY003
-                    f"cdm: material not found: {material_name}"
-                )
-        else:
-            defaults = cdm_db.vdb5_job_defaults()
-            material_id = defaults.get("material_id")
-        material_label: str | None = material_name
-        if material_label is None and material_id is not None:
-            material_label = next(
-                (n for n, mid in materials.items() if mid == material_id),
-                None,
-            )
-        if not details:
-            return {
-                "success": False,
-                "job_name": job or "",
-                "items": 0,
-                "material": material_label,
-                "errors": errors,
-            }
-        am = self.get_automation_manager_addin()
-        cdm_job: Any = None
-        if job:
-            try:
-                cdm_job = cdm_db.find_cdm_job(am, job)
-            except Exception as e:
-                raise RuntimeError(f"cdm: job lookup failed: {e}") from e  # noqa: TRY003
-            if cdm_job is None:
-                raise RuntimeError(f"cdm: job not found: {job}")  # noqa: TRY003
-            job_name = job
-        else:
-            config_name = (config or "").strip()
-            if not config_name:
-                if defaults is None:
-                    defaults = cdm_db.vdb5_job_defaults()
-                config_name = str(defaults.get("config_name") or "").strip()
-                if not config_name:
-                    raise RuntimeError(  # noqa: TRY003
-                        "cdm: no default configuration found"
-                    )
-            default_job_name = os.path.splitext(os.path.basename(csv))[0]
-            job_name = (name or default_job_name)[:60]
-            try:
-                cdm_job = am.NewCDMJob()
-            except Exception as e:
-                raise RuntimeError(f"cdm: create job failed: {e}") from e  # noqa: TRY003
-            cdm_job.JobName = job_name
-            if config_name:
-                try:
-                    cdm_job.ConfigurationSetting = am.ConfigurationSettings.GetByName(config_name)
-                except Exception as e:
-                    raise RuntimeError(  # noqa: TRY003
-                        f"cdm: config not found: {config_name}"
-                    ) from e
-            try:
-                cdm_job.SaveToDatabase()
-            except Exception as e:
-                raise RuntimeError(f"cdm: create job failed: {e}") from e  # noqa: TRY003
-        items = 0
-        for d in details:
-            try:
-                detail = cdm_job.AddCDMOrderDetail(d["style"])
-            except Exception:
-                errors.append(f"row {d['row']}: door type not found: {d['style']}")
-                continue
-            detail.Width = d["width"]
-            detail.Length = d["length"]
-            detail.Quantity = d["quantity"]
-            design_dims = d["design_dims"]
-            if design_dims:
-                parts = [p for p in design_dims.split(";") if p != ""]
-                if len(parts) < cdm_db.DESIGN_DIMS_FIELDS:
-                    parts += ["0"] * (cdm_db.DESIGN_DIMS_FIELDS - len(parts))
-                detail.UserVariableString = ";".join(parts)
-            try:
-                detail.SaveToDatabase()
-            except Exception as e:
-                errors.append(f"row {d['row']}: save order detail failed: {e}")
-                continue
-            items += 1
-        if material_id is not None:
-            if not cdm_db.set_job_material(job_name, material_id):
-                errors.append(f"job {job_name}: failed to set material")
-        elif material_name is None:
-            errors.append(f"job {job_name}: no material set (required for processing)")
-        if items == 0 and not job:
-            deleted, reason = cdm_db.cleanup_created_job(am, cdm_job, job_name)
-            if deleted:
-                errors.append(f"job {job_name}: no valid order details, deleted")
-            elif reason == "failed":
-                errors.append(f"job {job_name}: no valid order details, cleanup failed")
-            else:
-                errors.append(f"job {job_name}: no valid order details, cleanup unverified")
-        return {
-            "success": items > 0,
-            "job_name": job_name,
-            "items": items,
-            "material": material_label,
-            "errors": errors,
-        }
+        return self._import_cdm_csv_mapped(
+            csv=csv,
+            job=job,
+            name=name,
+            config=config,
+            separator=separator,
+            has_header=has_header,
+            material=material,
+            import_setting=import_setting,
+        )
 
     def _import_cdm_csv_mapped(
         self,
@@ -775,9 +884,14 @@ class Application:
         separator: str | None,
         has_header: bool,
         material: str | None,
-        import_setting: str | int,
+        import_setting: str | int | None,
     ) -> dict[str, Any]:
         setting = _resolve_import_setting(import_setting)
+        setting_name = str(setting.get("name") or "")
+        if job is None and not bool(setting.get("create_job")):
+            raise RuntimeError(  # noqa: TRY003
+                f"cdm: job is required (import setting '{setting_name}' does not create jobs)"
+            )
         eff_separator = separator or str(setting.get("delimiter_char") or ",")
         try:
             rows = cdm_db.read_cdm_csv(csv, eff_separator)
@@ -795,16 +909,12 @@ class Application:
             material_id = materials.get(material_name)
             if material_id is None:
                 raise RuntimeError(f"cdm: material not found: {material_name}")  # noqa: TRY003
-        else:
-            defaults = cdm_db.vdb5_job_defaults()
-            material_id = defaults.get("material_id")
         material_label: str | None = material_name
         if material_label is None and material_id is not None:
             material_label = next(
                 (n for n, mid in materials.items() if mid == material_id),
                 None,
             )
-        setting_name = str(setting.get("name") or "")
         if not details:
             return {
                 "success": False,
@@ -849,12 +959,17 @@ class Application:
                 raise RuntimeError(f"cdm: create job failed: {e}") from e  # noqa: TRY003
         items = 0
         ok_details: list[dict[str, Any]] = []
+        com_active_failed = False
         for d in details:
             try:
                 detail = cdm_job.AddCDMOrderDetail(d["style"])
             except Exception:
                 errors.append(f"row {d['row']}: door type not found: {d['style']}")
                 continue
+            try:
+                detail.ActiveInProcess = True
+            except Exception:
+                com_active_failed = True
             try:
                 detail.Width = d["width"]
                 detail.Length = d["length"]
@@ -883,11 +998,10 @@ class Application:
                 continue
             items += 1
             ok_details.append(d)
-        if material_id is not None:
-            if not cdm_db.set_job_material(job_name, material_id):
-                errors.append(f"job {job_name}: failed to set material")
-        elif material_name is None:
-            errors.append(f"job {job_name}: no material set (required for processing)")
+        if com_active_failed and not cdm_db.set_order_details_active(job_name):
+            errors.append(f"job {job_name}: failed to set order details active")
+        if material_id is not None and not cdm_db.set_order_detail_material(job_name, material_id):
+            errors.append(f"job {job_name}: failed to set order detail material")
         if "door_drilling" in field_map.values() and ok_details:
             values = [bool(d.get("has_drilling") or False) for d in ok_details]
             if not cdm_db.set_has_drilling(job_name, values):
@@ -920,73 +1034,74 @@ class Application:
         config: str | None = None,
         material: str | None = None,
     ) -> dict[str, Any]:
-        """Dry-run import preview without touching COM (read, parse, map only)."""
+        """Dry-run import preview without touching COM (read, parse, map only).
+
+        Mirrors the real import: the setting is resolved the same way
+        (``--import-setting`` or the Selected one) and CreateJob=No requires
+        ``job``.
+        """
+        job = (job or "").strip() or None
         if job and name:
             raise RuntimeError("cdm: --name and --job are mutually exclusive")  # noqa: TRY003
         if not csv.strip():
             raise RuntimeError("cdm: csv path is required")  # noqa: TRY003
         if not os.path.exists(csv):
             raise RuntimeError(f"cdm: csv file not found: {csv}")  # noqa: TRY003
-        if import_setting is not None:
-            setting = _resolve_import_setting(import_setting)
-            eff_separator = separator or str(setting.get("delimiter_char") or ",")
-            try:
-                rows = cdm_db.read_cdm_csv(csv, eff_separator)
-            except Exception as e:
-                raise RuntimeError(f"cdm: import csv failed: {e}") from e  # noqa: TRY003
-            field_map = cdm_db.field_map_from_setting(setting)
-            details, errors = cdm_db.parse_cdm_rows_mapped(
-                rows, field_map, has_header or bool(setting.get("ignore_header", False))
+        setting = _resolve_import_setting(import_setting)
+        setting_name = str(setting.get("name") or "")
+        if job is None and not bool(setting.get("create_job")):
+            raise RuntimeError(  # noqa: TRY003
+                f"cdm: job is required (import setting '{setting_name}' does not create jobs)"
             )
-        else:
-            setting = None
-            field_map = {}
-            try:
-                rows = cdm_db.read_cdm_csv(csv, separator or ",")
-            except Exception as e:
-                raise RuntimeError(f"cdm: import csv failed: {e}") from e  # noqa: TRY003
-            details, errors = cdm_db.parse_cdm_rows(rows, has_header)
+        eff_separator = separator or str(setting.get("delimiter_char") or ",")
+        try:
+            rows = cdm_db.read_cdm_csv(csv, eff_separator)
+        except Exception as e:
+            raise RuntimeError(f"cdm: import csv failed: {e}") from e  # noqa: TRY003
+        field_map = cdm_db.field_map_from_setting(setting)
+        details, errors = cdm_db.parse_cdm_rows_mapped(
+            rows, field_map, has_header or bool(setting.get("ignore_header", False))
+        )
         defaults = cdm_db.vdb5_job_defaults()
+        materials = cdm_db.sheet_materials()
         material_name = _cdm_material_name(details, material)
-        if (
-            material_name is None and import_setting is None
-        ):  # legacy: scan column 6 like the import path
-            for n, row in enumerate(rows, start=1):
-                if has_header and n == 1:
-                    continue
-                if not any(str(cell).strip() for cell in row):
-                    continue
-                if len(row) > 5 and str(row[5]).strip():
-                    material_name = str(row[5]).strip()
-                    break
-        if material_name is None and defaults.get("material_id") is not None:
+        material_id: int | None = None
+        fatal_error = False
+        if material_name:
+            material_id = materials.get(material_name)
+            if material_id is None:
+                errors.append(f"cdm: material not found: {material_name}")
+                fatal_error = True
+        else:
+            material_id = defaults.get("material_id")
+        job_name = job if job is not None else _cdm_job_name(details, name, csv)
+        if material_name is None and material_id is None:
+            errors.append(f"job {job_name}: no material set (required for processing)")
+        elif material_name is None and material_id is not None:
             material_name = next(
-                (
-                    n
-                    for n, mid in cdm_db.sheet_materials().items()
-                    if mid == defaults.get("material_id")
-                ),
+                (n for n, mid in materials.items() if mid == material_id),
                 None,
             )
-        config_name = _cdm_config_name(details, config)
-        if not config_name:
-            config_name = str(defaults.get("config_name") or "").strip() or None
+        config_name = None
+        if not job:
+            config_name = _cdm_config_name(details, config)
+            if not config_name:
+                config_name = str(defaults.get("config_name") or "").strip() or None
+            if not config_name:
+                errors.append("cdm: no default configuration found")
+                fatal_error = True
         return {
-            "success": bool(details),
-            "setting": (
-                {
-                    "id": setting.get("id"),
-                    "name": setting.get("name"),
-                    "delimiter_char": setting.get("delimiter_char"),
-                    "sub_delimiter_char": setting.get("sub_delimiter_char"),
-                    "create_job": setting.get("create_job"),
-                    "selected": setting.get("selected"),
-                }
-                if setting is not None
-                else None
-            ),
+            "success": bool(details) and not fatal_error,
+            "setting": {
+                "id": setting.get("id"),
+                "name": setting.get("name"),
+                "delimiter_char": setting.get("delimiter_char"),
+                "sub_delimiter_char": setting.get("sub_delimiter_char"),
+                "create_job": setting.get("create_job"),
+                "selected": setting.get("selected"),
+            },
             "field_map": cdm_db.field_map_descriptions(field_map),
-            "job_name": job if job is not None else _cdm_job_name(details, name, csv),
+            "job_name": job_name,
             "config": config_name,
             "material": material_name,
             "items": len(details),
@@ -1036,6 +1151,38 @@ class Application:
         """Read CDM lookup tables from the vdb5 database (headless-safe)."""
         return {"lookups": cdm_db.lookups()}
 
+    def manifest_list(self, data_dir: str | None = None) -> dict[str, Any]:
+        """List nesting results manifests (.acrepd) from the reports data directory."""
+        data_dir = acrepd._reports_data_dir(self.licomdir_path, data_dir)
+        if not os.path.isdir(data_dir):
+            raise RuntimeError(  # noqa: TRY003
+                f"manifest: reports data directory not found: {data_dir}"
+            )
+        return {
+            "success": True,
+            "directory": data_dir,
+            "manifests": acrepd.manifest_files(data_dir),
+        }
+
+    def manifest_read(
+        self,
+        job_name: str | None = None,
+        material: str | None = None,
+        data_dir: str | None = None,
+    ) -> dict[str, Any]:
+        """Read a nesting results manifest (.acrepd) for a job and optional material."""
+        if job_name is None:
+            return self.manifest_list(data_dir)
+        data_dir = acrepd._reports_data_dir(self.licomdir_path, data_dir)
+        if not os.path.isdir(data_dir):
+            raise RuntimeError(  # noqa: TRY003
+                f"manifest: reports data directory not found: {data_dir}"
+            )
+        path = acrepd.find_manifest(data_dir, job_name, material)
+        if path is None:
+            raise RuntimeError(f"manifest: not found: {job_name}")  # noqa: TRY003
+        return {"success": True, "manifest": acrepd.parse_manifest(path)}
+
     def delete_cdm_job(self, job_name: str) -> dict[str, Any]:
         """Delete a CDM job from the database (headless, no dialogs)."""
         am = self.get_automation_manager_addin()
@@ -1053,50 +1200,6 @@ class Application:
         except Exception as e:
             raise RuntimeError(f"cdm: delete job failed: {e}") from e  # noqa: TRY003
         return {"success": True, "job_name": job_name}
-
-    def machining_pipeline(
-        self,
-        agq: str | None = None,
-        ara: str | None = None,
-        layer_map: str | None = None,
-    ) -> dict[str, Any]:
-        """Run the full machining pipeline on the active drawing.
-
-        1. Create/assign layers ("NAME:1,2;NAME2:3", 1-based geometry indices),
-        2. optionally run a geometry query (.agq),
-        3. apply an auto-style file (.ara) via the AutoStyles add-in.
-        """
-        drw = self.get_active_drawing()
-        if drw is None:
-            raise RuntimeError("No active drawing")  # noqa: TRY003
-        if ara is None:
-            raise RuntimeError("ara is required")  # noqa: TRY003
-        if layer_map:
-            geometries = drw.geometries()
-            for layer_name, indices in _parse_layer_map(layer_map).items():
-                layer = drw.create_layer(layer_name)
-                for idx in indices:
-                    if idx < 1 or idx > len(geometries):
-                        raise RuntimeError(  # noqa: TRY003
-                            f"Layer '{layer_name}': geometry index {idx} "
-                            f"out of range (1-{len(geometries)})"
-                        )
-                    geometries[idx - 1].set_layer(layer)
-        if agq:
-            drw.run_query(agq)
-        astyles = self.get_auto_styles_addin()
-        try:
-            astyles.Apply(ara)
-        except Exception as e:
-            raise RuntimeError(  # noqa: TRY003
-                f"failed to apply auto-style '{ara}': invalid or unrecognized "
-                "AutoStyles file (check format .ara)"
-            ) from e
-        return {
-            "success": True,
-            "geometries_count": drw.geometries_count,
-            "tool_paths_count": drw.tool_paths_count,
-        }
 
 
 _FIELD_SETTERS: dict[str, str] = {
@@ -1121,8 +1224,23 @@ def _resolve_import_setting(import_setting: str | int | None) -> dict[str, Any]:
     setting = (
         cdm_db.find_import_setting(settings, import_setting) if import_setting is not None else None
     )
+    if setting is None and import_setting is None:
+        setting = next(
+            (s for s in settings if bool(s.get("selected")) and bool(s.get("is_cdm_import"))),
+            None,
+        )
     if setting is None:
-        raise RuntimeError(f"cdm: import settings not found: {import_setting}")  # noqa: TRY003
+        if import_setting is not None:
+            raise RuntimeError(  # noqa: TRY003
+                f"cdm: import settings not found: {import_setting}"
+            )
+        available = ", ".join(
+            f"{s.get('id')} '{s.get('name')}'" for s in settings if bool(s.get("is_cdm_import"))
+        )
+        raise RuntimeError(  # noqa: TRY003
+            "cdm: no import setting selected; pass --import-setting or select one in "
+            "Automation Manager" + (f" (available: {available})" if available else "")
+        )
     if not bool(setting.get("is_cdm_import")):
         name = setting.get("name") or import_setting
         raise RuntimeError(  # noqa: TRY003
@@ -1180,34 +1298,3 @@ def _cdm_config_name(details: list[dict[str, Any]], config: str | None) -> str |
         if isinstance(raw, str) and raw.strip():
             return raw.strip()
     return None
-
-
-def _parse_layer_map(layer_map: str) -> dict[str, list[int]]:
-    """Parse "NAME:1,2;NAME2:3" into {layer_name: [1-based indices]}."""
-    parsed: dict[str, list[int]] = {}
-    for entry in layer_map.split(";"):
-        entry = entry.strip()
-        if not entry:
-            continue
-        if ":" not in entry:
-            raise ValueError(  # noqa: TRY003
-                f"Invalid layer map entry: '{entry}' (expected NAME:1,2)"
-            )
-        name, _, indices_part = entry.partition(":")
-        name = name.strip()
-        if not name:
-            raise ValueError(  # noqa: TRY003
-                f"Invalid layer map entry: '{entry}' (empty layer name)"
-            )
-        indices: list[int] = []
-        for part in indices_part.split(","):
-            part = part.strip()
-            if not part:
-                continue
-            if not part.isdigit():
-                raise ValueError(  # noqa: TRY003
-                    f"Invalid layer map index: '{part}' in '{entry}'"
-                )
-            indices.append(int(part))
-        parsed[name] = indices
-    return parsed

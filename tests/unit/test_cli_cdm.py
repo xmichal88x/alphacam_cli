@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from collections.abc import Iterator
 from contextlib import contextmanager
 from unittest.mock import patch
@@ -28,94 +29,165 @@ def test_cdm_create_command() -> None:
     with (
         _mock_com(),
         patch(
-            "alphacam_cli.core.application.Application.run_cdm",
+            "alphacam_cli.core.application.Application.create_cdm_job",
             return_value={
                 "success": True,
                 "job_name": "JOB-001",
-                "type_name": "Typ Frontu 1",
-                "width": 500.0,
-                "length": 300.0,
-                "quantity": 2,
-                "material": None,
+                "config": "Fronty",
+                "material": "MDF_18",
+                "warnings": [],
             },
-        ) as mock_run_cdm,
+        ) as mock_create,
+    ):
+        result = runner.invoke(app, ["cdm", "create", "JOB-001"])
+    assert result.exit_code == 0
+    assert "CDM job created: JOB-001" in result.stderr
+    assert "Config: Fronty" in result.stderr
+    assert "Material: MDF_18" in result.stderr
+    mock_create.assert_called_once_with(
+        job_name="JOB-001",
+        config=None,
+        material=None,
+        customer=None,
+        po=None,
+        due_date=None,
+        description=None,
+    )
+
+
+def test_cdm_create_command_config_material() -> None:
+    from tests.unit.test_cli import _mock_com
+
+    with (
+        _mock_com(),
+        patch(
+            "alphacam_cli.core.application.Application.create_cdm_job",
+            return_value={
+                "success": True,
+                "job_name": "JOB-001",
+                "config": "Fronty",
+                "material": "MDF_18",
+                "warnings": [],
+            },
+        ) as mock_create,
     ):
         result = runner.invoke(
-            app,
-            ["cdm", "create", "JOB-001", "Typ Frontu 1", "--width", "500", "--quantity", "2"],
+            app, ["cdm", "create", "JOB-001", "--config", "Fronty", "--material", "MDF_18"]
         )
     assert result.exit_code == 0
     assert "CDM job created: JOB-001" in result.stderr
-    assert "Typ Frontu 1" in result.stderr
-    assert "500.0x300.0" in result.stderr
-    mock_run_cdm.assert_called_once_with(
+    mock_create.assert_called_once_with(
         job_name="JOB-001",
-        type_name="Typ Frontu 1",
-        width=500.0,
-        length=300.0,
-        quantity=2,
-        bypass_nest=False,
-        material=None,
+        config="Fronty",
+        material="MDF_18",
+        customer=None,
+        po=None,
+        due_date=None,
+        description=None,
     )
 
 
-def test_cdm_create_command_material() -> None:
+def test_cdm_create_command_metadata() -> None:
     from tests.unit.test_cli import _mock_com
 
     with (
         _mock_com(),
         patch(
-            "alphacam_cli.core.application.Application.run_cdm",
+            "alphacam_cli.core.application.Application.create_cdm_job",
             return_value={
                 "success": True,
                 "job_name": "JOB-001",
-                "type_name": "Typ Frontu 1",
-                "width": 400.0,
-                "length": 300.0,
-                "quantity": 1,
+                "config": "Fronty",
                 "material": "MDF_18",
+                "warnings": [],
             },
-        ) as mock_run_cdm,
+        ) as mock_create,
     ):
         result = runner.invoke(
-            app, ["cdm", "create", "JOB-001", "Typ Frontu 1", "--material", "MDF_18"]
+            app,
+            [
+                "cdm",
+                "create",
+                "JOB-001",
+                "--customer",
+                "Klient A",
+                "--po",
+                "PO-1",
+                "--due-date",
+                "2026-08-10",
+                "--description",
+                "opis",
+            ],
         )
     assert result.exit_code == 0
-    assert "Material: MDF_18" in result.stderr
-    mock_run_cdm.assert_called_once_with(
+    mock_create.assert_called_once_with(
         job_name="JOB-001",
-        type_name="Typ Frontu 1",
-        width=400.0,
-        length=300.0,
-        quantity=1,
-        bypass_nest=False,
-        material="MDF_18",
+        config=None,
+        material=None,
+        customer="Klient A",
+        po="PO-1",
+        due_date="2026-08-10",
+        description="opis",
     )
 
 
-def test_cdm_create_command_material_error() -> None:
+def test_cdm_create_command_warnings() -> None:
     from tests.unit.test_cli import _mock_com
 
     with (
         _mock_com(),
         patch(
-            "alphacam_cli.core.application.Application.run_cdm",
+            "alphacam_cli.core.application.Application.create_cdm_job",
             return_value={
                 "success": True,
                 "job_name": "JOB-001",
-                "type_name": "Typ Frontu 1",
-                "width": 400.0,
-                "length": 300.0,
-                "quantity": 1,
+                "config": "Fronty",
                 "material": "MDF_18",
-                "material_error": "failed to set material",
+                "warnings": ["failed to set customer", "cdm: customer not found: X"],
+            },
+        ),
+    ):
+        result = runner.invoke(app, ["cdm", "create", "JOB-001"])
+    assert result.exit_code == 0
+    assert "WARNING" in result.stderr
+    assert "failed to set customer" in result.stderr
+    assert "cdm: customer not found: X" in result.stderr
+
+
+def test_cdm_create_command_invalid_due_date() -> None:
+    from tests.unit.test_cli import _mock_com
+
+    with (
+        _mock_com(),
+        patch(
+            "alphacam_cli.core.application.Application.create_cdm_job",
+        ) as mock_create,
+    ):
+        result = runner.invoke(app, ["cdm", "create", "JOB-001", "--due-date", "2026-13-40"])
+    assert result.exit_code == 2
+    assert "invalid due date" in result.stderr
+    mock_create.assert_not_called()
+
+
+def test_cdm_create_command_old_flags_removed() -> None:
+    from tests.unit.test_cli import _mock_com
+
+    with (
+        _mock_com(),
+        patch(
+            "alphacam_cli.core.application.Application.create_cdm_job",
+            return_value={
+                "success": True,
+                "job_name": "JOB-001",
+                "config": "Fronty",
+                "material": None,
+                "warnings": [],
             },
         ),
     ):
         result = runner.invoke(app, ["cdm", "create", "JOB-001", "Typ Frontu 1"])
-    assert result.exit_code == 0
-    assert "WARNING" in result.stderr
-    assert "failed to set material" in result.stderr
+    assert result.exit_code != 0
+    assert "Got unexpected extra argument" in result.stderr
 
 
 def test_cdm_create_error() -> None:
@@ -124,13 +196,13 @@ def test_cdm_create_error() -> None:
     with (
         _mock_com(),
         patch(
-            "alphacam_cli.core.application.Application.run_cdm",
-            side_effect=RuntimeError("cdm: door type not found: XYZ"),
+            "alphacam_cli.core.application.Application.create_cdm_job",
+            side_effect=RuntimeError("cdm: config not found: Fronty"),
         ),
     ):
-        result = runner.invoke(app, ["cdm", "create", "JOB-001", "XYZ"])
+        result = runner.invoke(app, ["cdm", "create", "JOB-001"])
     assert result.exit_code == 1
-    assert "door type not found" in result.stderr
+    assert "config not found" in result.stderr
 
 
 def test_cdm_types_command() -> None:
@@ -1313,3 +1385,204 @@ def test_cdm_layers_mapping_list_command() -> None:
     assert result.exit_code == 0
     assert "Warstwa 1" in result.stderr
     assert "Yes" in result.stderr
+
+
+_MANIFEST_LIST_DATA = {
+    "success": True,
+    "directory": r"C:\x",
+    "manifests": [
+        {
+            "path": r"C:\x\Fronty - MDF_18.acrepd",
+            "job_name": "Fronty",
+            "material": "MDF_18",
+            "size": 1000,
+            "mtime": 1700000000.0,
+        }
+    ],
+}
+
+_MANIFEST_READ_DATA = {
+    "success": True,
+    "manifest": {
+        "job_name": "Fronty",
+        "material": "MDF_18",
+        "job": {},
+        "drawings": [],
+        "sheets": [
+            {
+                "id": 1,
+                "name": "Arkusz A1",
+                "database_name": "MDF_18",
+                "width": 2800.0,
+                "length": 2070.0,
+                "thickness": 18.0,
+                "part_count": 1,
+                "unique_part_count": 1,
+                "quantity": 1,
+                "nest_nc_filename": "x.nc",
+                "press_name": None,
+                "has_image": False,
+                "parts": [
+                    {
+                        "id": 1,
+                        "sheet_id": 1,
+                        "name": "PF-002Small_4",
+                        "drawing_file_name": "a.amd",
+                        "item_number": "1",
+                        "quantity": 1,
+                        "quantity_on_sheet": 7,
+                        "x": 79.0,
+                        "y": 613.0,
+                        "rotation": 90,
+                        "width": 500.0,
+                        "length": 600.0,
+                        "thickness": 18.0,
+                        "material": "MDF_18",
+                        "nest_kit_number": "3",
+                        "handle_name": None,
+                        "csv_customer_name": None,
+                        "csv_order_number": None,
+                        "csv_item_number": None,
+                        "press_sheet_name": None,
+                        "has_image": False,
+                    }
+                ],
+            }
+        ],
+        "total_parts": 1,
+        "unmatched_parts": [],
+        "path": r"C:\x\Fronty - MDF_18.acrepd",
+    },
+}
+
+
+def test_cdm_manifest_list_command() -> None:
+    from tests.unit.test_cli import _mock_com
+
+    with (
+        _mock_com(),
+        patch(
+            "alphacam_cli.core.application.Application.manifest_list",
+            return_value=_MANIFEST_LIST_DATA,
+        ) as mock_manifest_list,
+    ):
+        result = runner.invoke(app, ["cdm", "manifest"])
+    assert result.exit_code == 0
+    assert "Fronty" in result.stderr
+    assert "MDF_18" in result.stderr
+    mock_manifest_list.assert_called_once_with(None)
+
+
+def test_cdm_manifest_list_empty() -> None:
+    from tests.unit.test_cli import _mock_com
+
+    with (
+        _mock_com(),
+        patch(
+            "alphacam_cli.core.application.Application.manifest_list",
+            return_value={"success": True, "manifests": []},
+        ) as mock_manifest_list,
+    ):
+        result = runner.invoke(app, ["cdm", "manifest"])
+    assert result.exit_code == 0
+    assert "No manifests found" in result.stderr
+    mock_manifest_list.assert_called_once_with(None)
+
+
+def test_cdm_manifest_read_command() -> None:
+    from tests.unit.test_cli import _mock_com
+
+    with (
+        _mock_com(),
+        _wide_console(),
+        patch(
+            "alphacam_cli.core.application.Application.manifest_read",
+            return_value=_MANIFEST_READ_DATA,
+        ) as mock_manifest_read,
+    ):
+        result = runner.invoke(app, ["cdm", "manifest", "JOB"])
+    assert result.exit_code == 0
+    assert "Arkusz A1" in result.stderr
+    assert "PF-002Small_4" in result.stderr
+    assert "Total parts: 1" in result.stderr
+    mock_manifest_read.assert_called_once_with("JOB", None, None)
+
+
+def test_cdm_manifest_read_json() -> None:
+    from tests.unit.test_cli import _mock_com
+
+    with (
+        _mock_com(),
+        patch(
+            "alphacam_cli.core.application.Application.manifest_read",
+            return_value=_MANIFEST_READ_DATA,
+        ) as mock_manifest_read,
+    ):
+        result = runner.invoke(app, ["cdm", "manifest", "JOB", "--json"])
+    assert result.exit_code == 0
+    data = json.loads(result.stderr)
+    assert data["manifest"]["job_name"] == "Fronty"
+    assert data["manifest"]["sheets"][0]["name"] == "Arkusz A1"
+    mock_manifest_read.assert_called_once_with("JOB", None, None)
+
+
+def test_cdm_manifest_not_found() -> None:
+    from tests.unit.test_cli import _mock_com
+
+    with (
+        _mock_com(),
+        patch(
+            "alphacam_cli.core.application.Application.manifest_read",
+            side_effect=RuntimeError("manifest: not found: BRAK"),
+        ) as mock_manifest_read,
+    ):
+        result = runner.invoke(app, ["cdm", "manifest", "BRAK"])
+    assert result.exit_code == 1
+    assert "manifest: not found" in result.stderr
+    mock_manifest_read.assert_called_once_with("BRAK", None, None)
+
+
+def test_cdm_process_command() -> None:
+    from tests.unit.test_cli import _mock_com
+
+    with (
+        _mock_com(),
+        patch(
+            "alphacam_cli.core.application.Application.process_cdm_job",
+            return_value={"success": True, "job_name": "JOB-001", "processed": True},
+        ) as mock_process,
+    ):
+        result = runner.invoke(app, ["cdm", "process", "JOB-001"])
+    assert result.exit_code == 0
+    assert "CDM job processed: JOB-001" in result.stderr
+    mock_process.assert_called_once_with(job_name="JOB-001")
+
+
+def test_cdm_process_command_failure() -> None:
+    from tests.unit.test_cli import _mock_com
+
+    with (
+        _mock_com(),
+        patch(
+            "alphacam_cli.core.application.Application.process_cdm_job",
+            return_value={"success": False, "job_name": "JOB-001", "processed": False},
+        ),
+    ):
+        result = runner.invoke(app, ["cdm", "process", "JOB-001"])
+    assert result.exit_code == 1
+    assert "CDM job processing failed: JOB-001" in result.stderr
+
+
+def test_cdm_process_command_not_found() -> None:
+    from tests.unit.test_cli import _mock_com
+
+    with (
+        _mock_com(),
+        patch(
+            "alphacam_cli.core.application.Application.process_cdm_job",
+            side_effect=RuntimeError("cdm: job not found: NOPE"),
+        ),
+    ):
+        result = runner.invoke(app, ["cdm", "process", "NOPE"])
+    assert result.exit_code == 1
+    assert "job not found" in result.stderr

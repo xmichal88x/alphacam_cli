@@ -280,6 +280,38 @@ def test_drawing_layer_no_drawing() -> None:
     assert "No active drawing" in result.stderr
 
 
+def test_drawing_query(tmp_path: pathlib.Path) -> None:
+    q = tmp_path / "test.agq"
+    q.write_text("$QUERY", encoding="utf-8")
+    with _mock_com() as app_mock:
+        app_mock.ActiveDrawing.RunQuery.return_value = 7
+        result = runner.invoke(app, ["drawing", "query", str(q)])
+    assert result.exit_code == 0
+    assert "Query executed" in result.stderr
+    assert "Matched: 7" in result.stderr
+    app_mock.ActiveDrawing.RunQuery.assert_called_once_with(str(q))
+
+
+def test_drawing_query_missing_file() -> None:
+    with _mock_com() as app_mock:
+        result = runner.invoke(
+            app, ["drawing", "query", r"C:\ALPHACAM\LICOMDIR\Queries\missing.agq"]
+        )
+    assert result.exit_code == 1
+    assert "Query file not found" in result.stderr
+    app_mock.ActiveDrawing.RunQuery.assert_not_called()
+
+
+def test_drawing_query_no_drawing(tmp_path: pathlib.Path) -> None:
+    q = tmp_path / "test.agq"
+    q.write_text("$QUERY", encoding="utf-8")
+    with _mock_com() as app_mock:
+        app_mock.ActiveDrawing = None
+        result = runner.invoke(app, ["drawing", "query", str(q)])
+    assert result.exit_code == 1
+    assert "No active drawing" in result.stderr
+
+
 def test_drawing_parametric() -> None:
     with _mock_com() as app_mock:
         drw = app_mock.ActiveDrawing
@@ -294,11 +326,11 @@ def test_drawing_parametric() -> None:
     assert "machined" not in result.stderr
 
 
-def test_drawing_parametric_machined() -> None:
+def test_drawing_parametric_depth_deprecated() -> None:
     with _mock_com() as app_mock:
         drw = app_mock.ActiveDrawing
         drw.Geometries.Count = 2
-        drw.ToolPaths.Count = 2
+        drw.ToolPaths.Count = 0
         drw.create_panel.return_value = (MagicMock(), MagicMock())
         result = runner.invoke(
             app,
@@ -311,32 +343,22 @@ def test_drawing_parametric_machined() -> None:
                 "60",
                 "--depth",
                 "-19",
-                "--tool",
-                "Flat - 20mm",
-                "--spindle",
-                "18000",
-                "--feed",
-                "4000",
-                "--down-feed",
-                "1500",
             ],
         )
     assert result.exit_code == 0
     assert "Panel 800x400 created (offset=60, fillet=5)" in result.stderr
-    assert "Panel machined at depth=-19" in result.stderr
-    md = app_mock.CreateMillData.return_value
-    assert md.FinalDepth == -19
-    assert md.SpindleSpeed == 18000
-    assert md.CutFeed == 4000
-    assert md.DownFeed == 1500
-    assert md.RoughFinish.call_count == 2
+    assert "--depth is deprecated" in result.stderr
+    assert "machined" not in result.stderr
+    app_mock.SelectTool.assert_not_called()
+    app_mock.CreateMillData.assert_not_called()
 
 
-def test_drawing_parametric_positive_depth_rejected() -> None:
-    with _mock_com():
-        result = runner.invoke(app, ["drawing", "parametric", "800", "400", "--depth", "5"])
-    assert result.exit_code == 2
-    assert "Depth must be negative" in result.stderr
+def test_drawing_parametric_machining_flags_removed() -> None:
+    for flag in ("--tool", "--spindle", "--feed", "--down-feed"):
+        with _mock_com():
+            result = runner.invoke(app, ["drawing", "parametric", "800", "400", flag, "x"])
+        assert result.exit_code == 2, flag
+        assert "No such option" in result.stderr
 
 
 def test_drawing_save() -> None:

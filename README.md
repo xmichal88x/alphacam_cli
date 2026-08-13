@@ -662,6 +662,8 @@ alphacam batch process ./parts/ --post fanuc
 alphacam batch process ./parts/ -o ./nc/ --continue-on-error
 ```
 
+**Design note:** `batch process` to blok **iteracyjny** — jedna funkcja (generowanie NC dla N plików), która wykonuje pętlę `open → output_nc → save_as` per plik (opcjonalnie `select_post`). Świadomie trzyma **jedną sesję COM na całe wywołanie** (katalog), a nie per plik — świeża sesja na każdy plik byłaby kosztowna przy dużych katalogach. To nie jest przepływ pracy: orkiestrację (kolejność, parametry) zawsze składa aplikacja zewnętrzna wywołująca pojedyncze bloki. Izolacja awarii jest na poziomie wywołania CLI (`--continue-on-error` per plik, ale jedna sesja per proces).
+
 ---
 
 ### `alphacam nest`
@@ -718,29 +720,47 @@ Cabinet Door Manufacturing (CDM) operations via the Automation Manager add-in �
 
 #### `create`
 
-Create a CDM job with a single door position (headless, no dialogs).
+Create an empty CDM job via the Automation Manager API (headless, no dialogs, no patterns). Patterns are added later with `cdm import` (for WooCommerce CSV files, e.g. `--import-setting "Ustawienia Importu CSV 2" --job <job name>`).
 
 **Arguments:**
 
 | Argument | Type | Description |
 |----------|------|-------------|
 | `job_name` | `str` | CDM job name (required, must not exist yet) |
-| `type_name` | `str` | Door type name (required, e.g. `Typ Frontu 1`) |
 
 **Options:**
 
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|
-| `--width`, `-w` | `float` | `400` | Door width (mm) |
-| `--length`, `-l` | `float` | `300` | Door length (mm) |
-| `--quantity`, `-q` | `int` | `1` | Door quantity |
-| `--bypass-nest` | `bool` | `False` | Bypass nesting |
-| `--material` | `str` | `None` | Material name (`AM_Materials`); default from database |
+| `--config` | `str` | database default | Configuration name (default from `AM_Settings`; fails fast if none is set) |
+| `--material` | `str` | database default | Material name (`AM_Materials`; default from database; fails fast if none is set) |
+| `--customer` | `str` | `None` | Customer name (`AM_CustomerDetails`) |
+| `--po` | `str` | `None` | Purchase order number |
+| `--due-date` | `str` | `None` | Due date (`YYYY-MM-DD`, validated) |
+| `--description` | `str` | `None` | Job description |
 
 **Example:**
 
 ```bash
-alphacam cdm create "Job 2026-01" "Typ Frontu 1" --width 400 --length 300 --quantity 2
+alphacam cdm create "Zamówienie 2026-08" --config "Fronty" --material MDF_18 --customer "Jan Kowalski" --po "PO-001" --due-date 2026-08-20
+```
+
+#### `process`
+
+Process a CDM job via the Automation Manager (`Job.Process()`, headless). Processing settings (post-processor, NC/report output paths) come from the job's configuration — nothing is passed here. The call is synchronous and may take a long time (geometry + toolpaths + nesting).
+
+**Note:** over the gateway, a remote request has a **180 s timeout** (`RemoteSession.settimeout`); for longer jobs increase the remote request timeout (client). The gateway serves one request at a time — `process` blocks other requests for its whole duration.
+
+**Arguments:**
+
+| Argument | Type | Description |
+|----------|------|-------------|
+| `job_name` | `str` | CDM job name (required, must exist) |
+
+**Example:**
+
+```bash
+alphacam cdm process "Zamowienie Test 01"
 ```
 
 #### `types`
@@ -767,10 +787,12 @@ alphacam cdm jobs
 
 Import a CSV door order into a CDM job (headless, no dialogs) — creates a new job or adds rows to an existing one.
 
-Two modes are supported:
+The column map (and separator/header flag) always come from a database setting (`AM_ImportSettings`); `--import-setting` picks one by id or name, and without it the setting marked `Selected` in the database is used (error with the list of available settings when none is selected). The built-in "sklep CSV" setting defines columns: `Style, Qty, Width, Height, DesignDims, Materiał, JobName, ConfigName`. Mapped columns can also carry CDM order-detail fields: customer (`cdmDoorCustomerName`), order number (`cdmDoorOrderNumber`), item number (`cdmDoorItemNumber`), production comment (`cdmDoorProductionComment`), `CustomField1..25`, rotation method/angle, nest priority, drilling, small nest — plus job fields: job name, configuration, material.
 
-- **Legacy (without `--import-setting`)** — CSV columns: `Style,Quantity,Width,Height,DesignDimensions[,Material]`. The 6th (Material) column is optional and overrides the database default; `--material` overrides everything.
-- **Mapped (with `--import-setting`)** — the column map (and separator/header) come from a database setting (`AM_ImportSettings`). The built-in "sklep CSV" setting defines columns: `Style, Qty, Width, Height, DesignDims, Materiał, JobName, ConfigName`. Mapped columns can also carry CDM order-detail fields: customer (`cdmDoorCustomerName`), order number (`cdmDoorOrderNumber`), item number (`cdmDoorItemNumber`), production comment (`cdmDoorProductionComment`), `CustomField1..25`, rotation method/angle, nest priority, drilling, small nest — plus job fields: job name, configuration, material.
+Job creation depends on the setting's `CreateJob` flag:
+
+- **CreateJob=Yes** (e.g. "sklep CSV") — without `--job` a new job is created (name from `--name`, the mapped `job_name` column or the CSV basename, max 60 chars; config from `--config`, the mapped `job_config_id` column or the database default; material from the mapped material column, `--material` or the database default).
+- **CreateJob=No** (e.g. "Ustawienia Importu CSV 2") — `--job` is **required**; rows are imported only into an existing job (create it first with `cdm create`). Without `--job` the import fails before any job operation.
 
 UTF-8 with BOM (Excel) and CP1250 are detected automatically; the separator is a single character. All rows are validated before the job is created — if every row is invalid, the job is **not** created (exit 1).
 
@@ -786,30 +808,30 @@ New `OrderDetails` fields (customer, order number, item number, production comme
 
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|
-| `--name` | `str` | `None` | Job name for a new job (default: CSV basename, max 60 chars) |
-| `--config` | `str` | `None` | Configuration name for a new job (default: from database) |
-| `--job` | `str` | `None` | Existing CDM job name (mutually exclusive with `--name`) |
-| `--import-setting` | `str` | `None` | Import setting id or name from the database (defines column map and separator) |
+| `--name` | `str` | `None` | Job name for a new job (used only when the setting creates jobs; default: CSV basename, max 60 chars) |
+| `--config` | `str` | `None` | Configuration name for a new job (used only when the setting creates jobs; default: from database) |
+| `--job` | `str` | `None` | Existing CDM job name (mutually exclusive with `--name`; **required** when the setting has CreateJob=No) |
+| `--import-setting` | `str` | `None` | Import setting id or name from the database (default: selected setting, `AM_ImportSettings.Selected`) |
 | `--separator` | `str` | `None` | CSV separator character (default: from import settings or `,`) |
 | `--header` | `bool` | `False` | CSV has a header row |
-| `--material` | `str` | `None` | Material name (`AM_Materials`); overrides CSV column 6 / the mapped material column |
+| `--material` | `str` | `None` | Material name (`AM_Materials`); overrides the mapped material column |
 | `--preview` | `bool` | `False` | Dry run preview without creating a job |
 
 **Examples:**
 
 ```bash
-# legacy import into an existing job
-alphacam cdm import order.csv --job "Job 2026-01" --separator ";"
-# import with mapping from the database (setting "sklep CSV", id 3)
+# import into an existing job (CreateJob=No setting -> --job required)
+alphacam cdm import order.csv --job "Job 2026-01" --import-setting "Ustawienia Importu CSV 2"
+# import with mapping from the database (setting "sklep CSV", id 3; CreateJob=Yes -> job auto-created)
 alphacam cdm import zamowienie.csv --import-setting 3
 alphacam cdm import zamowienie.csv --import-setting "sklep CSV"
 # dry run preview (no job created)
 alphacam cdm import zamowienie.csv --import-setting 3 --preview
-# list import settings
+# list import settings (to find ids and the Selected flag)
 alphacam cdm import-settings list
 ```
 
-**Production example** (remote, via gateway — material from CSV column 6 or the database default):
+**Production example** (remote, via gateway — material from the mapped material column or the database default):
 
 ```bash
 alphacam --remote --host 100.71.109.69 cdm import zamowienie.csv --name "Zamowienie X"

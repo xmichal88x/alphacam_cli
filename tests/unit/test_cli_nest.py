@@ -211,7 +211,7 @@ def test_nest_run_advanced_options() -> None:
                 "--inner-first",
                 "--preserve-sheet-edge",
                 "--gap",
-                "2",
+                "7",
                 "--edge-gap",
                 "3",
                 "--lead-gap",
