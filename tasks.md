@@ -1138,3 +1138,25 @@ Raport: `docs/raporty/2026-08-13-session0-opcjaA.md` (sekcja WDROŻENIE).
   w Session 0 przez SSH).
 - E2E sanity na maszynie (Fixloop Sanity 01): 38.5s, Sukces, NC 1744 B,
   .ard 84466 B — potwierdzone po pełnej synchronizacji.
+
+## 2026-08-13 SESSION cd. — PRODUCTION HARDENING: 3 bloki CDM po restarcie (commit b27ddaa)
+
+### Głęboka analiza — błędy napotkane po drodze i root causes
+1. **Import po restarcie usługi: "cdm: job not found" mimo joba w bazie**:
+   - Root cause 1: DWA procesy Acam — sta_worker tworzył Acam przez `win32.Dispatch` (late-bound), a core `_connect_addins` przez `gencache.EnsureDispatch` → create szło na Acam-A, import na Acam-B (różne cache COM).
+   - Root cause 2: Automation Manager cache jobów jest PER-INSTANCJA AddInsInterface — AM trzymany w `get_addins()` cache nie widzi jobów utworzonych PÓŹNIEJ (NewCDMJob+SaveToDatabase nie odświeża cache).
+   - Root cause 3 (próba fixu): `PopulateCustomersAndJobs` w find_cdm_job MUTUJE cache AM (duplikaty kluczy, "Element o tym samym kluczu został już dodany") — szkodliwe, wycofane.
+   - FIX: `_cdm_automation_manager` tworzy ŚWIEŻY AM per call (gencache.EnsureDispatch — silne typy, +3 retry); sta_worker + `_connect_addins` współdzielą JEDEN silnie typowany dispatch (jeden proces Acam).
+2. **8 faili test_cli_nest na Windows**: cli/nest.py robił DRUGIE połączenie COM (`gencache.EnsureDispatch`) poza `alphacam_context` → conftest mockuje win32com tylko na Linux. FIX: użycie `raw.Nesting` z istniejącej sesji (1 sesja COM na komendę).
+3. **Brak watchdog STA**: zawieszone makro = martwa usługa. FIX: `threading.Timer` → `os._exit(1)` + `scripts/scm_service_recovery.ps1` (SCM restart).
+4. **Zawodny sync**: FIX: `scripts/sync_to_machine.sh` — tar+scp + weryfikacja SHA1 per plik (exit 1 przy DIFF).
+
+### E2E na maszynie (laptop Monika, Session 0) — po sync + restart usługi
+- Cykl 1: create "Prod Final 02" → import OK → process **36.8s Sukces** (NC 1744 B, .ard 84368 B, .anl 2802 B) — 1 proces Acam.
+- Cykl 2: create "Prod Final 03" → import OK → process **35.9s Sukces**.
+- Import na świeżym Acam (bezpośrednio po restarcie, bez create) → OK.
+- Podwójny import do tego samego joba → OK (idempotentny).
+
+### Weryfikacja
+- pytest **871 passed**, ruff/mypy czyste, `python -m build` OK.
+- Commit `b27ddaa` (21 plików).

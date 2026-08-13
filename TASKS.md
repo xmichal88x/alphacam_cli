@@ -234,3 +234,11 @@
 ## Otwarte po fixloop (do osobnych sesji)
 - [ ] **Watchdog dla inproc na wątku STA** (code review #1, high) — `process_cdm_job_inproc` jest synchroniczny na jedynym wątku STA gateway; zawieszenie makra = permanentny deadlock usługi (klient ma socket timeout, serwer nie). Rozważ: watchdog per-call + restart usługi (SCM Recovery) lub drugi wątek STA z marshal referencji (CoMarshalInterThreadInterfaceInStream). Makro jest stabilne (6× E2E 33-41s), ale brak zabezpieczenia.
 - [ ] Usunąć/odciąć pozostałe pre-existing: duplikacja importu CSV (server vs core), `_cdm_automation_manager` duplikat (server.py) — wg TASKS pre-existing #5/#7.
+
+## Production hardening — CDM 3 bloki (commit b27ddaa, 2026-08-13)
+- [x] Import po restarcie: root cause = 2 procesy Acam + cache AM per-instancja → `_cdm_automation_manager` świeży AM per call (gencache + 3 retry), jeden współdzielony dispatch (sta_worker + _connect_addins)
+- [x] `find_cdm_job` bez PopulateCustomersAndJobs (mutacja cache AM, duplikaty)
+- [x] cli/nest.py: `raw.Nesting` z kontekstu (naprawia testy Windows, 1 sesja COM)
+- [x] Watchdog STA (threading.Timer → os._exit) + scripts/scm_service_recovery.ps1
+- [x] scripts/sync_to_machine.sh (SHA1 per plik)
+- [x] E2E na maszynie: 2 pełne cykle create→import→process po restarcie (36.8s/35.9s Sukces) + import na świeżym Acam; pytest 871 passed
