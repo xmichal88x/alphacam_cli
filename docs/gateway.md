@@ -239,10 +239,13 @@ The gateway uses **JSON-RPC 2.0** over TCP with length-prefixed frames.
 | `create_cdm_job` | `job_name, config, material, customer, po, due_date, description` | `{success, job_name, config, material, warnings}` |
 | `import_cdm_csv` | `csv, job, name, config, separator, has_header, material, import_setting, preview` | `{success, items, ...}` |
 | `import_cdm_preview` | `csv, job, name, config, separator, has_header, material, import_setting` | `{success, setting, field_map, job_name, config, material, items, rows, errors, job}` |
-| `process_cdm_job` | `job_name, timeout_seconds, output_root` | `{success, job_name, status, processed, method: "inproc", elapsed_s, log, detail}` |
+| `process_cdm_job` | `job_name, timeout_seconds, output_root` | `{success, job_name, status, processed, method: "inproc", elapsed_s, log, detail, report, warnings?}` |
 
 > `process_cdm_job` is synchronous and may run long (geometry + toolpaths + nesting). The client automatically extends the socket timeout for the duration of the call to `max(self.timeout, timeout_seconds + 30)` and restores it in `finally` — no manual timeout adjustment is needed. The gateway serves one request at a time: `process_cdm_job` blocks the only STA thread for its whole duration, so other requests wait until it finishes. The only execution method is `inproc`: the macro `ApplyMachiningAfterNesting.Events.HeadlessProcess` runs in-proc on the gateway's held COM reference (Session 0) — the legacy VBScript/PsExec path was removed. `process_cdm_job` must be invoked on the gateway's STA thread like all handlers (`_com_call`) — otherwise COM raises `RPC_E_WRONG_THREAD`.
+>
+> `report` = `{success: true, settings_file}` | `{success: false, skipped: true, error: "reports disabled for job configuration (GenerateReports=False)"}` | `{success: false, error}`. The manifest (.acrepd) is generated automatically after processing according to the job's `GenerateReports` setting in the Automation Manager configuration (not a CLI flag); report failures never invalidate a successful process run. `warnings` is present when the report flag could not be read or generation failed. The manifest is read separately with `manifest_read` (never inside `process_cdm_job`).
 | `find_drawing_files` | `pattern` | `[path, ...]` |
+| `reports_create` | `job_name?` | `{success, job, active_drawing, settings_file}` |
 
 ### Error codes
 

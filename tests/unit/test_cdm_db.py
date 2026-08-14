@@ -332,6 +332,95 @@ def test_job_output_root_subprocess_failure(monkeypatch: pytest.MonkeyPatch) -> 
     assert cdm_db.job_output_root("order") is None
 
 
+def test_job_generate_reports_true(monkeypatch: pytest.MonkeyPatch) -> None:
+    run = _mock_run(monkeypatch, stdout="output: C:\\out\ngenerate_reports: True\n")
+    assert cdm_db.job_generate_reports("order") is True
+    args, _ = run.call_args
+    assert "-JobName:order" in args[0]
+
+
+def test_job_generate_reports_false(monkeypatch: pytest.MonkeyPatch) -> None:
+    _mock_run(monkeypatch, stdout="output: C:\\out\ngenerate_reports: False\n")
+    assert cdm_db.job_generate_reports("order") is False
+
+
+def test_job_generate_reports_numeric(monkeypatch: pytest.MonkeyPatch) -> None:
+    _mock_run(monkeypatch, stdout="generate_reports: 1\n")
+    assert cdm_db.job_generate_reports("order") is True
+    _mock_run(monkeypatch, stdout="generate_reports: 0\n")
+    assert cdm_db.job_generate_reports("order") is False
+
+
+def test_job_generate_reports_case_insensitive(monkeypatch: pytest.MonkeyPatch) -> None:
+    _mock_run(monkeypatch, stdout="generate_reports: true\n")
+    assert cdm_db.job_generate_reports("order") is True
+    _mock_run(monkeypatch, stdout="generate_reports: FALSE\n")
+    assert cdm_db.job_generate_reports("order") is False
+
+
+def test_job_generate_reports_missing_line(monkeypatch: pytest.MonkeyPatch) -> None:
+    _mock_run(monkeypatch, stdout="output: C:\\out\n")
+    assert cdm_db.job_generate_reports("order") is None
+
+
+def test_job_generate_reports_empty_value(monkeypatch: pytest.MonkeyPatch) -> None:
+    _mock_run(monkeypatch, stdout="output: C:\\out\ngenerate_reports:\n")
+    assert cdm_db.job_generate_reports("order") is False
+
+
+def test_job_generate_reports_bad_value(monkeypatch: pytest.MonkeyPatch) -> None:
+    _mock_run(monkeypatch, stdout="generate_reports: maybe\n")
+    assert cdm_db.job_generate_reports("order") is None
+
+
+def test_job_generate_reports_nonzero_returncode(monkeypatch: pytest.MonkeyPatch) -> None:
+    _mock_run(monkeypatch, stdout="", returncode=1)
+    assert cdm_db.job_generate_reports("order") is None
+
+
+def test_job_generate_reports_subprocess_failure(monkeypatch: pytest.MonkeyPatch) -> None:
+    _mock_run(monkeypatch).side_effect = FileNotFoundError("powershell")
+    assert cdm_db.job_generate_reports("order") is None
+
+
+def test_job_config_both_fields(monkeypatch: pytest.MonkeyPatch) -> None:
+    run = _mock_run(monkeypatch, stdout="output: C:\\out\ngenerate_reports: True\n")
+    assert cdm_db.job_config("order") == {
+        "output_root": r"C:\out",
+        "generate_reports": True,
+    }
+    args, _ = run.call_args
+    assert "-JobName:order" in args[0]
+
+
+def test_job_config_relative_output_root(monkeypatch: pytest.MonkeyPatch) -> None:
+    _mock_run(monkeypatch, stdout="output: LICOMDIR\\Styles\\Fronty\ngenerate_reports: 0\n")
+    assert cdm_db.job_config("order") == {
+        "output_root": r"C:\ALPHACAM\LICOMDIR\Styles\Fronty",
+        "generate_reports": False,
+    }
+
+
+def test_job_config_missing_lines(monkeypatch: pytest.MonkeyPatch) -> None:
+    _mock_run(monkeypatch, stdout="not a config\n")
+    assert cdm_db.job_config("order") == {"output_root": None, "generate_reports": None}
+
+
+def test_job_config_line_breaks_not_eaten(monkeypatch: pytest.MonkeyPatch) -> None:
+    _mock_run(monkeypatch, stdout="output:\ngenerate_reports:\n")
+    assert cdm_db.job_config("order") == {"output_root": None, "generate_reports": False}
+
+
+def test_job_config_nonzero_returncode(monkeypatch: pytest.MonkeyPatch) -> None:
+    _mock_run(monkeypatch, stdout="", returncode=1)
+    assert cdm_db.job_config("order") is None
+
+
+def test_job_config_subprocess_failure(monkeypatch: pytest.MonkeyPatch) -> None:
+    _mock_run(monkeypatch).side_effect = FileNotFoundError("powershell")
+    assert cdm_db.job_config("order") is None
+
+
 def test_read_cdm_csv_utf8_bom_stripped(tmp_path: pathlib.Path) -> None:
     f = tmp_path / "bom.csv"
     f.write_bytes(b"\xef\xbb\xbfStyle,Quantity,Width,Length,DesignDimensions\nP003,1,400,300,0\n")

@@ -200,7 +200,9 @@ def test_remote_reports_create() -> None:
     app = RemoteApplication(session)
     result = app.reports_create()
     assert result == {"success": True, "job": "ok", "active_drawing": True}
-    session.reports_create.assert_called_once_with()
+    session.reports_create.assert_called_once_with(job_name=None)
+    app.reports_create(job_name="Fronty")
+    session.reports_create.assert_called_with(job_name="Fronty")
 
 
 def test_remote_nc_configs() -> None:

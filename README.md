@@ -626,12 +626,17 @@ alphacam autostyle apply Fronty_AutoStyl.ara --agq front_query.agq --layer-map "
 
 ### `alphacam reports create`
 
-Generate a report from the active drawing (`CreateReportsJob` + `CreateReports`, progress box suppressed).
+Generate a report from the active drawing (data output settings loaded from
+`LICOMDIR\Reports\Settings\*.acreps`, `CreateReportsJob` + `CreateReports`,
+progress box suppressed). `--job` sets the manifest filename prefix
+(e.g. `"Fronty"` → `Fronty.acrepd`; AlphaCAM may append ` - <material>`
+when the report data has one, e.g. `Fronty - Dąb.acrepd`).
 
 **Example:**
 
 ```bash
 alphacam reports create
+alphacam reports create --job Fronty
 ```
 
 ---
@@ -749,6 +754,8 @@ alphacam cdm create "Zamówienie 2026-08" --config "Fronty" --material MDF_18 --
 
 Process a CDM job headlessly via the `ApplyMachiningAfterNesting.Events.HeadlessProcess` macro run in-proc on the gateway COM reference (no PsExec/VBScript). Processing settings (post-processor, NC/report output paths) come from the job's configuration — nothing is passed here. The call is synchronous and may take a long time (geometry + toolpaths + nesting, ~35-40 s).
 
+On success the gateway also generates the nesting results manifest (.acrepd) automatically when the job's CDM configuration has `GenerateReports` enabled (setting in Automation Manager configurations — not a CLI flag). The manifest filename is `<job_name>.acrepd` in `LICOMDIR\Reports\Data`. When reports are disabled or generation fails, processing still succeeds and the result reports it explicitly (`report: {success: false, ...}`); the CLI prints `Report: NOT CREATED — <reason>`. Read the manifest later with `alphacam cdm manifest <job_name>` (separate block).
+
 **Note:** over the gateway, a remote request has a **180 s timeout** (`RemoteSession.settimeout`); for longer jobs increase the remote request timeout (client). The gateway serves one request at a time — `process` blocks other requests for its whole duration.
 
 **Arguments:**
@@ -769,6 +776,33 @@ Process a CDM job headlessly via the `ApplyMachiningAfterNesting.Events.Headless
 ```bash
 alphacam cdm process "Zamowienie Test 01"
 alphacam cdm process "Zamowienie Test 01" --timeout 600 --output-root "C:/out"
+alphacam cdm manifest "Zamowienie Test 01"
+```
+
+#### `manifest`
+
+Show nesting results manifests (.acrepd) for CDM jobs — generated automatically by `cdm process` when the job configuration has `GenerateReports` enabled. With a job name, prints the manifest (sheets, part positions, totals); without one, lists all manifests. Optionally filter by material (`--material`) or override the data directory (`--dir`, default `LICOMDIR\Reports\Data` on the server).
+
+**Arguments:**
+
+| Argument | Type | Description |
+|----------|------|-------------|
+| `job_name` | `str` | CDM job name (optional; manifest list when omitted) |
+
+**Options:**
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `--material`, `-m` | `str` | `None` | Filter by material (sheet database name) |
+| `--dir` | `str` | server default | Override reports data directory |
+| `--json` | `flag` | `False` | Output raw JSON |
+
+**Example:**
+
+```bash
+alphacam cdm manifest "Zamowienie Test 01"
+alphacam cdm manifest                          # list all manifests
+alphacam cdm manifest "Zamowienie Test 01" --json
 ```
 
 #### `types`

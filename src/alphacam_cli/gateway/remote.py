@@ -207,8 +207,8 @@ class RemoteApplication:
     def apply_mill_style(self, style_path: str) -> None:
         self._session.apply_style(style_path)
 
-    def reports_create(self) -> dict[str, Any]:
-        return self._session.reports_create()  # type: ignore[no-any-return]
+    def reports_create(self, job_name: str | None = None) -> dict[str, Any]:
+        return self._session.reports_create(job_name=job_name)  # type: ignore[no-any-return]
 
     def nc_configs(self) -> dict[str, Any]:
         return self._session.nc_configs()  # type: ignore[no-any-return]

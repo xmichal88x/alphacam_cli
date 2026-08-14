@@ -40,6 +40,41 @@
 - [ ] `get_automation_manager_addin` (core) — martwe API (0 użyć) po T2c; usunąć lub oznaczyć deprecated
 - [ ] probe_cdm_import.py/probe_cdm_process.py — nadal pakowane do exe (alphacam.spec:6)
 
+## RAPORT AUTOMATYCZNIE PRZY PROCESS (2026-08-13) — sterowany ustawieniami CDM
+
+**Decyzja użytkownika:** raport .acrepd generuje się AUTOMATYCZNIE przy `cdm process` (po udanej obróbce) — sterowane flagą `GenerateReports` z konfiguracji CDM joba (AM_ConfigurationSettings, NIE parametr CLI). Odczyt = osobny blok `cdm manifest`. Brak raportu (flaga False / awaria / nieodczytana flaga) → wyraźny status `report: {success: False, ...}` + CLI "Report: NOT CREATED — <powód>"; `success` procesu BEZ zmian (obróbka się udała).
+
+**Implementacja (3 zadania + docs, 921 passed):**
+- A: `vdb5_job_output_root.ps1` rozszerzony o `cfg.GenerateReports` (linia `generate_reports: True/False`); `cdm_db._job_config_read` (wspólny helper) + `job_generate_reports(job_name) -> bool | None` (None = odczyt/brak konfiguracji); 8 testów
+- B: `application.py` — helper `_run_reports_data_collection(job_name)` (wydzielony z reports_create — DRY); `process_cdm_job` po read_job_result: generate=True → data collection (plik `<job>.acrepd`), wyjątek → report.success=False + warning; generate=False → skipped; None → "report flag read failed" + warning; `result["report"]` zawsze, `warnings` gdy niepuste; 5 nowych testów (m.in. report_save_false przez prawdziwy mock addina)
+- C: `cli/cdm.py process` — "Report: OK (raport_test.acreps)" green / "Report: NOT CREATED — <powód>" yellow (exit 0); 4 testy
+- D: README (proces + nowa sekcja manifest — wcześniej NIE była udokumentowana!), gateway.md (wynik process + report 3 warianty)
+
+**E2E potwierdzony (wcześniej, dla reports create):** create → import → process → .acrepd "RaportCfg 003.acrepd" 336 KB → cdm manifest: arkusz MDF_18 2440×1220×18, części z pozycjami (x/y/rot/qty).
+
+**Fixloop (2026-08-13, 3 rundy review, 0 blokerów, build OK):**
+- Runda A: 1 medium + 4 low → naprawione: (1) data collection TYLKO przy `success=True` (przy nieudanej obróbce raport = {"success": False, "error": "process failed; report not generated"} — bez błędnych danych ze stanu sprzed obróbki!); (2) martwa linia `result["report"]`; (3) README suffix materiału; (4) puste `generate_reports:` (NULL) → False (nie mylący warning); (5) +testy (skipped_when_process_failed, assert_not_called, job_name do helpera)
+- Runda B: APPROVE + 2 low + 2 nit → naprawione: (1) **`cdm_db.job_config(job_name)`** — JEDEN subprocess powershell zamiast 2 (job_output_root/job_generate_reports = cienkie wrappery; process używa job_config raz); (2) dead code `result["warnings"]`; (3) regex `\s*`→`[ \t]*` (odporność na nowe linie); (4) README doprecyzowane
+- Runda C: APPROVE + 2 minor → fix: rozróżnienie 2 przyczyn `report flag read failed` (cfg nieczytelny vs flaga nieparsowalna — warning "GenerateReports missing or unparseable in job config"); **UNC edge case (cdm_db.py:472-473 — prefiks C:\ALPHACAM\ łapie też ścieżki UNC) → TASKS.md kaizen, nie naprawiany**
+- Finalny sanity E2E (FinalSan 001): process → report OK (raport_test.acreps) + manifest z pozycjami → PASS; cleanup done
+- Stan: **930 passed**, ruff 0, mypy 0, build OK (wheel+tar.gz), kod na maszynie zsynchronizowany (SHA1), usługa Running, 1× Acam
+
+## RAPORTY NAKŁADANIA (.acrepd) — SKONFIGUROWANE I DZIAŁAJĄ (2026-08-13)
+
+**Wniosek z weryfikacji:** `cdm process` (makro HeadlessProcess) NIE generuje .acrepd (makro nie robi data collection — potwierdzone: CaptureNestedPartPositions=True/False — 0 plików). Raporty generuje blok `reports create` (Add-in AcamReports) PO procesowaniu — rysunek nestingu jest wtedy aktywny.
+
+**FIX wdrożony (`reports_create`):** core nie ładował ustawień DataOutputSettings i ignorował wynik `Save()` → generował 0 plików przy success=true. Teraz (wg oficjalnego wzorca VBA Reports.bas):
+1. ładuje `.acreps` z `LICOMDIR\Reports\Settings` (candidates jak acrepd._reports_data_dir — `LicomdirPath` zwraca ROOT `C:\ALPHACAM\` nie LICOMDIR!) — na maszynie: `raport_test.acreps` (CaptureCDMData=true)
+2. `CreateReportsJob(drw)` — 1 parametr (było 3)
+3. `job.Settings.JobName = job_name` (opcjonalne `--job`) → nazwa pliku `"<job> - ..."?` — empirycznie: plik `"RaportCfg 003.acrepd"` (bez materiału w nazwie)
+4. `Save()` → False = RuntimeError "no report data saved"
+5. `CreateReports()`
+Zmiana zachowania: brak aktywnego rysunku/geometrii → RuntimeError (wcześniej success=True z active_drawing=False). CLI: `reports create --job "Nazwa"`. docs/gateway.md + README zaktualizowane.
+
+**E2E potwierdzony (2 cykle):** create → import → process (Sukces 35s) → `reports create --job` → `cdm manifest` → **total_parts: 3, arkusz MDF_18 2440×1220×18, części z pozycjami (x, y, rot, qty)** — np. `Typ Frontu 3_1 x=355 y=951 rot=180 qty=2`.
+
+**Produkcyjny przepływ z raportami:** `cdm create` → `cdm import --job` → `cdm process` → `reports create --job "<nazwa>"` → `cdm manifest "<nazwa>"` (część→arkusz→pozycja).
+
 ## FIXLOOP (2026-08-13) — 3 iteracje, 0 issues, build OK
 
 **Zakres:** 15 zmienionych plików (CDM audit fixes, uncommitted). Reviewer: 2 rundy (src + testy) + weryfikacja zarzutów w kodzie.

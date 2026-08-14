@@ -16,13 +16,34 @@ def test_reports_create_command() -> None:
         _mock_com(),
         patch(
             "alphacam_cli.core.application.Application.reports_create",
-            return_value={"success": True, "job": "ok", "active_drawing": True},
+            return_value={
+                "success": True,
+                "job": "ok",
+                "active_drawing": True,
+                "settings_file": "raport_test.acreps",
+            },
         ),
     ):
-        result = runner.invoke(app, ["reports", "create"])
+        result = runner.invoke(app, ["reports", "create", "--job", "Fronty"])
     assert result.exit_code == 0
     assert "Reports created (job=ok)" in result.stderr
     assert "Active drawing" in result.stderr
+    assert "raport_test.acreps" in result.stderr
+
+
+def test_reports_create_command_job_name_passed() -> None:
+    from tests.unit.test_cli import _mock_com
+
+    with (
+        _mock_com(),
+        patch(
+            "alphacam_cli.core.application.Application.reports_create",
+            return_value={"success": True, "job": "ok", "active_drawing": True},
+        ) as reports_create,
+    ):
+        result = runner.invoke(app, ["reports", "create", "--job", "Fronty"])
+    assert result.exit_code == 0
+    reports_create.assert_called_once_with(job_name="Fronty")
 
 
 def test_ncmanager_config_list_command() -> None:

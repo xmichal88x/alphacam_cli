@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import sys
 import types
 from typing import Any
@@ -139,6 +140,36 @@ def _make_addins_mock(monkeypatch: pytest.MonkeyPatch, addins: MagicMock) -> Non
     addins_interface.GetAddInsInterface.return_value = addins
 
 
+def _mock_reports_settings(
+    monkeypatch: pytest.MonkeyPatch,
+    licomdir: str,
+    *,
+    primary_exists: bool = True,
+) -> str:
+    """Mock the filesystem so reports_create resolves the settings directory.
+
+    ``licomdir`` is the AlphaCAM root (``LicomdirPath``), as on the machine.
+    Returns the resolved settings directory (LICOMDIR\\Reports\\Settings when
+    ``primary_exists``, else the Reports\\Settings fallback).
+    """
+    primary = os.path.join(licomdir, "LICOMDIR", "Reports", "Settings")
+    fallback = os.path.join(licomdir, "Reports", "Settings")
+    settings_dir = primary if primary_exists else fallback
+    monkeypatch.setattr(
+        "alphacam_cli.core.application.os.path.isdir",
+        lambda path: path == settings_dir,
+    )
+    monkeypatch.setattr(
+        "alphacam_cli.core.application.glob.glob",
+        lambda pattern: (
+            [os.path.join(settings_dir, "raport_test.acreps")]
+            if pattern.endswith("*.acreps")
+            else []
+        ),
+    )
+    return settings_dir
+
+
 def test_get_reports_addin(monkeypatch: pytest.MonkeyPatch) -> None:
     addins = MagicMock(name="IAddIns")
     addins.GetNewReportsAddIn.return_value = "reports-addin"
@@ -173,16 +204,30 @@ def test_reports_create(monkeypatch: pytest.MonkeyPatch) -> None:
     addins = MagicMock(name="IAddIns")
     _make_addins_mock(monkeypatch, addins)
     drw = MagicMock(name="Drawing")
+    drw.Geometries.Count = 2
+    drw.ToolPaths.Count = 0
     app_mock = MagicMock()
     app_mock.ActiveDrawing = drw
+    app_mock.LicomdirPath = "C:/ALPHACAM"
+    _mock_reports_settings(monkeypatch, "C:/ALPHACAM")
 
     ac = Application(app_mock)
     result = ac.reports_create()
 
-    assert result == {"success": True, "job": "ok", "active_drawing": True}
+    assert result == {
+        "success": True,
+        "job": "ok",
+        "active_drawing": True,
+        "settings_file": "raport_test.acreps",
+    }
     reports_mock = addins.GetNewReportsAddIn.return_value
-    reports_mock.CreateReportsJob.assert_called_once_with(drw, False, True)
-    reports_mock.CreateReportsJob.return_value.CreateReports.assert_called_once_with()
+    reports_mock.Settings.SetDataOutputSettingsFromFile.assert_called_once_with(
+        r"C:/ALPHACAM/LICOMDIR/Reports/Settings/raport_test.acreps"
+    )
+    reports_mock.CreateReportsJob.assert_called_once_with(drw)
+    job_mock = reports_mock.CreateReportsJob.return_value
+    job_mock.Save.assert_called_once_with()
+    job_mock.CreateReports.assert_called_once_with()
 
 
 def test_reports_create_no_drawing(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -190,14 +235,109 @@ def test_reports_create_no_drawing(monkeypatch: pytest.MonkeyPatch) -> None:
     _make_addins_mock(monkeypatch, addins)
     app_mock = MagicMock()
     app_mock.ActiveDrawing = None
+    app_mock.LicomdirPath = "C:/ALPHACAM"
+    _mock_reports_settings(monkeypatch, "C:/ALPHACAM")
+
+    ac = Application(app_mock)
+    with pytest.raises(RuntimeError, match="active drawing has no geometry or tool paths"):
+        ac.reports_create()
+    reports_mock = addins.GetNewReportsAddIn.return_value
+    reports_mock.CreateReportsJob.assert_not_called()
+
+
+def test_reports_create_no_settings(monkeypatch: pytest.MonkeyPatch) -> None:
+    addins = MagicMock(name="IAddIns")
+    _make_addins_mock(monkeypatch, addins)
+    app_mock = MagicMock()
+    app_mock.LicomdirPath = "C:/ALPHACAM"
+    monkeypatch.setattr("alphacam_cli.core.application.os.path.isdir", lambda path: False)
+    monkeypatch.setattr("alphacam_cli.core.application.glob.glob", lambda pattern: [])
+
+    ac = Application(app_mock)
+    with pytest.raises(RuntimeError, match="no data output settings found"):
+        ac.reports_create()
+    reports_mock = addins.GetNewReportsAddIn.return_value
+    reports_mock.CreateReportsJob.assert_not_called()
+
+
+def test_reports_create_empty_drawing(monkeypatch: pytest.MonkeyPatch) -> None:
+    addins = MagicMock(name="IAddIns")
+    _make_addins_mock(monkeypatch, addins)
+    drw = MagicMock(name="Drawing")
+    drw.Geometries.Count = 0
+    drw.ToolPaths.Count = 0
+    app_mock = MagicMock()
+    app_mock.ActiveDrawing = drw
+    app_mock.LicomdirPath = "C:/ALPHACAM"
+    _mock_reports_settings(monkeypatch, "C:/ALPHACAM")
+
+    ac = Application(app_mock)
+    with pytest.raises(RuntimeError, match="active drawing has no geometry or tool paths"):
+        ac.reports_create()
+    reports_mock = addins.GetNewReportsAddIn.return_value
+    reports_mock.CreateReportsJob.assert_not_called()
+
+
+def test_reports_create_save_false(monkeypatch: pytest.MonkeyPatch) -> None:
+    addins = MagicMock(name="IAddIns")
+    _make_addins_mock(monkeypatch, addins)
+    drw = MagicMock(name="Drawing")
+    drw.Geometries.Count = 2
+    drw.ToolPaths.Count = 0
+    app_mock = MagicMock()
+    app_mock.ActiveDrawing = drw
+    app_mock.LicomdirPath = "C:/ALPHACAM"
+    _mock_reports_settings(monkeypatch, "C:/ALPHACAM")
+    addins.GetNewReportsAddIn.return_value.CreateReportsJob.return_value.Save.return_value = False
+
+    ac = Application(app_mock)
+    with pytest.raises(RuntimeError, match="no report data saved"):
+        ac.reports_create()
+    reports_mock = addins.GetNewReportsAddIn.return_value
+    job_mock = reports_mock.CreateReportsJob.return_value
+    job_mock.CreateReports.assert_not_called()
+
+
+def test_reports_create_job_name(monkeypatch: pytest.MonkeyPatch) -> None:
+    addins = MagicMock(name="IAddIns")
+    _make_addins_mock(monkeypatch, addins)
+    drw = MagicMock(name="Drawing")
+    drw.Geometries.Count = 2
+    drw.ToolPaths.Count = 0
+    app_mock = MagicMock()
+    app_mock.ActiveDrawing = drw
+    app_mock.LicomdirPath = "C:/ALPHACAM"
+    _mock_reports_settings(monkeypatch, "C:/ALPHACAM")
+
+    ac = Application(app_mock)
+    result = ac.reports_create(job_name="  Fronty  ")
+
+    assert result["settings_file"] == "raport_test.acreps"
+    job_mock = addins.GetNewReportsAddIn.return_value.CreateReportsJob.return_value
+    assert job_mock.Settings.JobName == "Fronty"
+    reports_mock = addins.GetNewReportsAddIn.return_value
+    reports_mock.CreateReportsJob.assert_called_once_with(drw)
+
+
+def test_reports_create_settings_fallback(monkeypatch: pytest.MonkeyPatch) -> None:
+    addins = MagicMock(name="IAddIns")
+    _make_addins_mock(monkeypatch, addins)
+    drw = MagicMock(name="Drawing")
+    drw.Geometries.Count = 2
+    drw.ToolPaths.Count = 0
+    app_mock = MagicMock()
+    app_mock.ActiveDrawing = drw
+    app_mock.LicomdirPath = "C:/ALPHACAM"
+    fallback_dir = _mock_reports_settings(monkeypatch, "C:/ALPHACAM", primary_exists=False)
 
     ac = Application(app_mock)
     result = ac.reports_create()
 
-    assert result == {"success": True, "job": "ok", "active_drawing": False}
+    assert result["settings_file"] == "raport_test.acreps"
     reports_mock = addins.GetNewReportsAddIn.return_value
-    reports_mock.CreateReportsJob.assert_called_once_with(None, False, True)
-    reports_mock.CreateReportsJob.return_value.CreateReports.assert_called_once_with()
+    reports_mock.Settings.SetDataOutputSettingsFromFile.assert_called_once_with(
+        os.path.join(fallback_dir, "raport_test.acreps")
+    )
 
 
 def test_nc_configs(monkeypatch: pytest.MonkeyPatch) -> None:

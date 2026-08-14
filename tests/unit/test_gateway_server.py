@@ -962,11 +962,30 @@ def test_reports_create_handler(server_app: MagicMock) -> None:
         "success": True,
         "job": "ok",
         "active_drawing": True,
+        "settings_file": "raport_test.acreps",
     }
     gw = GatewayServer()
     result = gw._handler_reports_create({})
-    assert result == {"success": True, "job": "ok", "active_drawing": True}
-    server_app.reports_create.assert_called_once_with()
+    assert result == {
+        "success": True,
+        "job": "ok",
+        "active_drawing": True,
+        "settings_file": "raport_test.acreps",
+    }
+    server_app.reports_create.assert_called_once_with(job_name=None)
+
+
+def test_reports_create_handler_job_name(server_app: MagicMock) -> None:
+    server_app.reports_create.return_value = {
+        "success": True,
+        "job": "ok",
+        "active_drawing": True,
+        "settings_file": "raport_test.acreps",
+    }
+    gw = GatewayServer()
+    result = gw._handler_reports_create({"job_name": "  Fronty  "})
+    assert result["success"] is True
+    server_app.reports_create.assert_called_once_with(job_name="Fronty")
 
 
 def test_reports_create_handler_failure(server_app: MagicMock) -> None:
@@ -974,7 +993,7 @@ def test_reports_create_handler_failure(server_app: MagicMock) -> None:
     gw = GatewayServer()
     with pytest.raises(COMError, match="reports: create failed: boom"):
         gw._handler_reports_create({})
-    server_app.reports_create.assert_called_once_with()
+    server_app.reports_create.assert_called_once_with(job_name=None)
 
 
 def test_nc_configs_handler(server_app: MagicMock) -> None:

@@ -423,14 +423,8 @@ def job_count(job_name: str) -> int | None:
     return int(match.group(1))
 
 
-def job_output_root(job_name: str) -> str | None:
-    """Read the output root for a job from its configuration; None when missing.
-
-    The value is the job configuration's ``DrawingFileOutputLocation``
-    (AM_ConfigurationSettings). Relative paths (``LICOMDIR\\...``) are
-    prefixed with ``C:\\ALPHACAM\\``; None when the job has no
-    configuration or the read fails.
-    """
+def _job_config_read(job_name: str) -> str | None:
+    """Run the job config reader script; raw stdout or None when it fails."""
     script_path = os.path.join(_scripts_dir(), "vdb5_job_output_root.ps1")
     try:
         proc = subprocess.run(
@@ -451,19 +445,71 @@ def job_output_root(job_name: str) -> str | None:
             check=False,
         )
     except Exception as e:
-        logger.warning("cdm output root: vdb5 read failed: %r", e)
+        logger.warning("cdm job config: vdb5 read failed: %r", e)
         return None
     if proc.returncode != 0 or not proc.stdout.strip():
         return None
-    match = re.search(r"(?m)^output:\s*(.*)$", proc.stdout)
-    if match is None:
+    return proc.stdout
+
+
+def job_config(job_name: str) -> dict[str, object] | None:
+    """Read the full job configuration in one pass; None when the read fails.
+
+    Returns ``{"output_root": str | None, "generate_reports": bool | None}``
+    parsed from the job configuration's ``DrawingFileOutputLocation`` and
+    ``GenerateReports`` (AM_ConfigurationSettings). Relative output paths
+    (``LICOMDIR\\...``) are prefixed with ``C:\\ALPHACAM\\``. None only when
+    the job has no configuration or the read fails.
+    """
+    stdout = _job_config_read(job_name)
+    if stdout is None:
         return None
-    path = match.group(1).strip()
-    if not path:
-        return None
-    if not re.match(r"^[A-Za-z]:", path):
-        path = "C:\\ALPHACAM\\" + path
-    return path
+    output_root: str | None = None
+    match = re.search(r"(?m)^output:[ \t]*(.*)$", stdout)
+    if match is not None:
+        path = match.group(1).strip()
+        if path:
+            if not re.match(r"^[A-Za-z]:", path):
+                path = "C:\\ALPHACAM\\" + path
+            output_root = path
+    generate_reports: bool | None = None
+    match = re.search(r"(?m)^generate_reports:[ \t]*(.*)$", stdout)
+    if match is not None:
+        raw = match.group(1).strip().casefold()
+        if raw == "":
+            generate_reports = False
+        elif raw in ("true", "1"):
+            generate_reports = True
+        elif raw in ("false", "0"):
+            generate_reports = False
+    return {"output_root": output_root, "generate_reports": generate_reports}
+
+
+def job_output_root(job_name: str) -> str | None:
+    """Read the output root for a job from its configuration; None when missing.
+
+    The value is the job configuration's ``DrawingFileOutputLocation``
+    (AM_ConfigurationSettings). Relative paths (``LICOMDIR\\...``) are
+    prefixed with ``C:\\ALPHACAM\\``; None when the job has no
+    configuration or the read fails.
+    """
+    cfg = job_config(job_name)
+    value = cfg.get("output_root") if cfg else None
+    return value if isinstance(value, str) else None
+
+
+def job_generate_reports(job_name: str) -> bool | None:
+    """Read the GenerateReports flag for a job from its configuration.
+
+    The value is the job configuration's ``GenerateReports``
+    (AM_ConfigurationSettings). True/False (case-insensitive) or "1"/"0"
+    become a bool; an empty value means reports are disabled (False);
+    None when the flag is absent, unparseable, or the job has no
+    configuration / the read fails.
+    """
+    cfg = job_config(job_name)
+    value = cfg.get("generate_reports") if cfg else None
+    return value if isinstance(value, bool) else None
 
 
 def _door_type_name(row: dict[str, Any]) -> str:

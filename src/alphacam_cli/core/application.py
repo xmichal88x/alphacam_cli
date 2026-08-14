@@ -498,14 +498,66 @@ class Application:
             raise RuntimeError("Add-ins interface unavailable")  # noqa: TRY003
         return addins.GetAutoStylesAddIn()
 
-    def reports_create(self) -> dict[str, Any]:
-        """Create production reports for the active drawing (headless, no dialogs)."""
+    def _run_reports_data_collection(self, job_name: str | None = None) -> dict[str, Any]:
+        """Run the reports add-in data collection for the active drawing.
+
+        Shared by ``reports_create`` and the cdm process flow: resolves the
+        data output settings (.acreps), checks the active drawing, creates
+        the reports job, saves the manifest and creates the reports. Raises
+        RuntimeError when the settings are missing, the drawing is empty or
+        Save() reports no data.
+        """
         reports = self.get_reports_addin()
+        job_name = (job_name or "").strip() or None
+        settings_candidates = [
+            os.path.join(self.licomdir_path, "LICOMDIR", "Reports", "Settings"),
+            os.path.join(self.licomdir_path, "Reports", "Settings"),
+        ]
+        settings_dir = next(
+            (c for c in settings_candidates if os.path.isdir(c)), settings_candidates[0]
+        )
+        settings_files = sorted(glob.glob(os.path.join(settings_dir, "*.acreps")))
+        if not settings_files:
+            raise RuntimeError(  # noqa: TRY003
+                "reports: no data output settings found "
+                "(install .acreps in LICOMDIR\\Reports\\Settings)"
+            )
+        settings_path = settings_files[0]
+        try:
+            reports.Settings.SetDataOutputSettingsFromFile(settings_path)
+        except Exception as e:
+            raise RuntimeError(  # noqa: TRY003
+                f"reports: failed to load data output settings: {e}"
+            ) from e
         drw = self.get_active_drawing()
-        raw = drw.raw_dispatch if drw is not None else None
-        job = reports.CreateReportsJob(raw, False, True)
+        if drw is None or (drw.geometries_count + drw.tool_paths_count == 0):
+            raise RuntimeError("reports: active drawing has no geometry or tool paths")  # noqa: TRY003
+        job = reports.CreateReportsJob(drw.raw_dispatch)
+        if job_name:
+            try:
+                job.Settings.JobName = job_name
+            except Exception as e:
+                logger.warning("reports: failed to set job name %r: %s", job_name, e)
+        if not job.Save():
+            raise RuntimeError("reports: no report data saved (drawing empty?)")  # noqa: TRY003
         job.CreateReports()
-        return {"success": True, "job": "ok", "active_drawing": drw is not None}
+        return {
+            "success": True,
+            "active_drawing": True,
+            "settings_file": os.path.basename(settings_path),
+        }
+
+    def reports_create(self, job_name: str | None = None) -> dict[str, Any]:
+        """Create production reports for the active drawing (headless, no dialogs).
+
+        Data output settings (.acreps) are loaded from
+        ``LICOMDIR\\Reports\\Settings`` before the job is created; ``job_name``
+        (optional) sets the manifest filename prefix (e.g. for the cdm
+        manifest). Save() is honored: False means no report data was written.
+        """
+        result = self._run_reports_data_collection(job_name)
+        result["job"] = "ok"
+        return result
 
     def nc_configs(self) -> dict[str, Any]:
         """List NC output configurations (read-only, no dialogs)."""
@@ -750,7 +802,12 @@ class Application:
         accepted for API compatibility; the macro is synchronous and
         terminates on its own, and the client-side RPC timeout protects the
         caller. Results come from the Automation Manager job log via
-        ``headless.read_job_result``.
+        ``headless.read_job_result``. When the job configuration enables
+        ``GenerateReports`` and processing succeeded, the report manifest
+        (.acrepd) is created automatically after processing; the outcome
+        lands in the ``returned["report"]`` key. Report failures never
+        invalidate a successful process run, and reports are never
+        generated for a failed process.
         """
         job_name = _validate_job_name(job_name)
         count = cdm_db.job_count(job_name)
@@ -760,8 +817,10 @@ class Application:
             )
         if count < 1:
             raise RuntimeError(f"cdm: job not found: {job_name}")  # noqa: TRY003
+        cfg = cdm_db.job_config(job_name)
         if output_root is None:
-            output_root = cdm_db.job_output_root(job_name)
+            root = cfg.get("output_root") if cfg else None
+            output_root = root if isinstance(root, str) else None
         if not output_root:
             raise RuntimeError(f"cdm: output root not found: {job_name}")  # noqa: TRY003
         t0 = time.monotonic()
@@ -775,7 +834,30 @@ class Application:
         elapsed_s = round(time.monotonic() - t0, 1)
         result = headless.read_job_result(job_name, output_root, min_mtime=t0_wall)
         success = bool(result.get("success"))
-        return {
+        warnings: list[str] = []
+        report: dict[str, Any] = {
+            "success": False,
+            "skipped": True,
+            "error": "reports disabled for job configuration (GenerateReports=False)",
+        }
+        if cfg is None:
+            report = {"success": False, "error": "report flag read failed"}
+            warnings.append("cdm: report flag read failed (job config not readable)")
+        elif cfg.get("generate_reports") is None:
+            report = {"success": False, "error": "report flag read failed"}
+            warnings.append(
+                "cdm: report flag read failed "
+                "(GenerateReports missing or unparseable in job config)"
+            )
+        elif cfg["generate_reports"] and success:
+            try:
+                report = self._run_reports_data_collection(job_name)
+            except Exception as e:
+                report = {"success": False, "error": str(e)}
+                warnings.append(f"cdm: report not created: {e}")
+        elif not success:
+            report = {"success": False, "error": "process failed; report not generated"}
+        returned = {
             "success": success,
             "job_name": job_name,
             "status": result.get("status"),
@@ -784,7 +866,11 @@ class Application:
             "elapsed_s": elapsed_s,
             "log": result.get("log"),
             "detail": result.get("detail"),
+            "report": report,
         }
+        if warnings:
+            returned["warnings"] = warnings
+        return returned
 
     def cdm_types(self) -> dict[str, Any]:
         """List CDM door types from the vdb5 database + existing jobs (headless-safe)."""

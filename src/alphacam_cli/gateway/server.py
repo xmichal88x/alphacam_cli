@@ -336,8 +336,9 @@ class GatewayServer:
     def _handler_reports_create(self, params: dict[str, Any]) -> dict[str, Any]:
         from alphacam_cli.gateway.server import _app as com_app
 
+        job_name = str(params.get("job_name") or "").strip() or None
         try:
-            return com_app.reports_create()  # type: ignore[no-any-return]
+            return com_app.reports_create(job_name=job_name)  # type: ignore[no-any-return]
         except Exception as e:
             raise COMError(f"reports: create failed: {e}") from e
 

@@ -1776,3 +1776,99 @@ def test_cdm_process_command_not_found() -> None:
         result = runner.invoke(app, ["cdm", "process", "NOPE"])
     assert result.exit_code == 1
     assert "job not found" in result.stderr
+
+
+def test_cdm_process_command_report_ok() -> None:
+    from tests.unit.test_cli import _mock_com
+
+    with (
+        _mock_com(),
+        patch(
+            "alphacam_cli.core.application.Application.process_cdm_job",
+            return_value={
+                "success": True,
+                "job_name": "JOB-001",
+                "processed": True,
+                "report": {
+                    "success": True,
+                    "settings_file": r"C:\Reports\JOB-001.acreps",
+                },
+            },
+        ) as mock_process,
+    ):
+        result = runner.invoke(app, ["cdm", "process", "JOB-001"])
+    assert result.exit_code == 0
+    assert "Report: OK" in result.stderr
+    assert "JOB-001.acreps" in result.stderr
+    mock_process.assert_called_once_with(job_name="JOB-001")
+
+
+def test_cdm_process_command_report_skipped() -> None:
+    from tests.unit.test_cli import _mock_com
+
+    with (
+        _mock_com(),
+        patch(
+            "alphacam_cli.core.application.Application.process_cdm_job",
+            return_value={
+                "success": True,
+                "job_name": "JOB-001",
+                "processed": True,
+                "report": {
+                    "success": False,
+                    "skipped": True,
+                    "error": "reports disabled for job configuration (GenerateReports=False)",
+                },
+            },
+        ) as mock_process,
+    ):
+        result = runner.invoke(app, ["cdm", "process", "JOB-001"])
+    assert result.exit_code == 0
+    assert "Report: NOT CREATED" in result.stderr
+    assert "GenerateReports=False" in result.stderr
+    mock_process.assert_called_once_with(job_name="JOB-001")
+
+
+def test_cdm_process_command_report_error() -> None:
+    from tests.unit.test_cli import _mock_com
+
+    with (
+        _mock_com(),
+        patch(
+            "alphacam_cli.core.application.Application.process_cdm_job",
+            return_value={
+                "success": True,
+                "job_name": "JOB-001",
+                "processed": True,
+                "report": {"success": False, "error": "failed to read report flag"},
+            },
+        ) as mock_process,
+    ):
+        result = runner.invoke(app, ["cdm", "process", "JOB-001"])
+    assert result.exit_code == 0
+    assert "Report: NOT CREATED" in result.stderr
+    assert "failed to read report flag" in result.stderr
+    mock_process.assert_called_once_with(job_name="JOB-001")
+
+
+def test_cdm_process_command_warnings() -> None:
+    from tests.unit.test_cli import _mock_com
+
+    with (
+        _mock_com(),
+        patch(
+            "alphacam_cli.core.application.Application.process_cdm_job",
+            return_value={
+                "success": True,
+                "job_name": "JOB-001",
+                "processed": True,
+                "warnings": ["nesting warning: sheet waste high", "press not found: P1"],
+            },
+        ) as mock_process,
+    ):
+        result = runner.invoke(app, ["cdm", "process", "JOB-001"])
+    assert result.exit_code == 0
+    assert "WARNING" in result.stderr
+    assert "nesting warning: sheet waste high" in result.stderr
+    assert "press not found: P1" in result.stderr
+    mock_process.assert_called_once_with(job_name="JOB-001")

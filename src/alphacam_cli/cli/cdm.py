@@ -116,6 +116,21 @@ def process(
         status = result.get("status")
         if status:
             console.print(f"[green]Status: {status}[/green]")
+        report = result.get("report") or {}
+        if report.get("success"):
+            console.print(f"[green]Report: OK ({report.get('settings_file') or '?'})[/green]")
+        elif report.get("skipped"):
+            error = (
+                report.get("error")
+                or "reports disabled for job configuration (GenerateReports=False)"
+            )
+            console.print(f"[yellow]Report: NOT CREATED — {error}[/yellow]")
+        elif report:
+            console.print(
+                f"[yellow]Report: NOT CREATED — {report.get('error') or 'unknown error'}[/yellow]"
+            )
+        for warning in result.get("warnings", []):
+            console.print(f"[yellow]WARNING:[/yellow] {warning}")
 
 
 @app.command("types")

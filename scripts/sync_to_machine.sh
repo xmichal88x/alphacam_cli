@@ -7,8 +7,9 @@
 # Upload (tar+scp):
 #   - src/alphacam_cli/                          -> <repo>\src\alphacam_cli
 #   - tests/unit + tests/conftest.py + tests/__init__.py -> <repo>\tests
+#   - scripts/                                   -> <repo>\scripts
 #   - docs/gateway.md, AGENTS.md, tasks.md        -> <repo>
-# Po uploadzie weryfikuje SHA1 każdego pliku src/alphacam_cli na maszynie
+# Po uploadzie weryfikuje SHA1 każdego pliku src/alphacam_cli i scripts na maszynie
 # (Get-FileHash przez ssh). Exit 0 = SYNC OK, exit 1 = DIFF lub błąd połączenia.
 
 set -euo pipefail
@@ -31,30 +32,39 @@ ssh "${SSH_OPTS[@]}" "$DEST" "echo ok" >/dev/null 2>&1 || {
   exit 1
 }
 
-# --- [1/3] src/alphacam_cli ---
-echo "[1/3] Upload src/alphacam_cli ..."
+# --- [1/4] src/alphacam_cli ---
+echo "[1/4] Upload src/alphacam_cli ..."
 tar --exclude='__pycache__' --exclude='*.pyc' -C src/alphacam_cli -czf "$TMP_DIR/src_sync.tgz" .
 scp "${SSH_OPTS[@]}" "$TMP_DIR/src_sync.tgz" "$DEST:src_sync.tgz"
 ssh "${SSH_OPTS[@]}" "$DEST" "tar -xzf src_sync.tgz -C $MACHINE_REPO\\src\\alphacam_cli"
 
-# --- [2/3] tests ---
-echo "[2/3] Upload tests ..."
+# --- [2/4] tests ---
+echo "[2/4] Upload tests ..."
 tar --exclude='__pycache__' --exclude='*.pyc' -C tests -czf "$TMP_DIR/tests_sync.tgz" unit conftest.py __init__.py
 scp "${SSH_OPTS[@]}" "$TMP_DIR/tests_sync.tgz" "$DEST:tests_sync.tgz"
 ssh "${SSH_OPTS[@]}" "$DEST" "tar -xzf tests_sync.tgz -C $MACHINE_REPO\\tests"
 
-# --- [3/3] pojedyncze pliki (docs + md) ---
-echo "[3/3] Upload docs/gateway.md, AGENTS.md, tasks.md ..."
+# --- [3/4] scripts ---
+echo "[3/4] Upload scripts ..."
+tar --exclude='__pycache__' --exclude='*.pyc' -C scripts -czf "$TMP_DIR/scripts_sync.tgz" .
+scp "${SSH_OPTS[@]}" "$TMP_DIR/scripts_sync.tgz" "$DEST:scripts_sync.tgz"
+ssh "${SSH_OPTS[@]}" "$DEST" "tar -xzf scripts_sync.tgz -C $MACHINE_REPO\\scripts"
+
+# --- [4/4] pojedyncze pliki (docs + md) ---
+echo "[4/4] Upload docs/gateway.md, AGENTS.md, tasks.md ..."
 tar -czf "$TMP_DIR/misc_sync.tgz" docs/gateway.md AGENTS.md tasks.md
 scp "${SSH_OPTS[@]}" "$TMP_DIR/misc_sync.tgz" "$DEST:misc_sync.tgz"
 ssh "${SSH_OPTS[@]}" "$DEST" "tar -xzf misc_sync.tgz -C $MACHINE_REPO"
 
-# --- Weryfikacja: SHA1 per plik (src/alphacam_cli) ---
+# --- Weryfikacja: SHA1 per plik (src/alphacam_cli + scripts) ---
 echo "Weryfikacja hash (SHA1) ..."
 FILES=()
 while IFS= read -r f; do
   FILES+=("$f")
 done < <(find src/alphacam_cli -type f ! -path '*/__pycache__/*')
+while IFS= read -r f; do
+  FILES+=("$f")
+done < <(find scripts -type f ! -path '*/__pycache__/*')
 
 DIFF_COUNT=0
 for f in "${FILES[@]}"; do

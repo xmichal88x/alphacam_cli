@@ -174,8 +174,8 @@ class RemoteSession:
     def list_styles(self) -> dict[str, Any]:
         return self._call("list_styles")  # type: ignore[no-any-return]
 
-    def reports_create(self) -> dict[str, Any]:
-        return self._call("reports_create")  # type: ignore[no-any-return]
+    def reports_create(self, job_name: str | None = None) -> dict[str, Any]:
+        return self._call("reports_create", {"job_name": job_name})  # type: ignore[no-any-return]
 
     def nc_configs(self) -> dict[str, Any]:
         return self._call("nc_configs")  # type: ignore[no-any-return]

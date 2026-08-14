@@ -2086,10 +2086,12 @@ def _mock_process(
     output_root: str | None = "C:/out",
     count: int | None = 1,
     read_result: dict[str, object] | None = None,
+    generate_reports: bool | None = False,
 ) -> tuple[MagicMock, MagicMock]:
     monkeypatch.setattr("alphacam_cli.core.cdm_db.job_count", MagicMock(return_value=count))
     monkeypatch.setattr(
-        "alphacam_cli.core.cdm_db.job_output_root", MagicMock(return_value=output_root)
+        "alphacam_cli.core.cdm_db.job_config",
+        MagicMock(return_value={"output_root": output_root, "generate_reports": generate_reports}),
     )
     run = MagicMock()
     read = MagicMock(return_value=read_result)
@@ -2210,3 +2212,164 @@ def test_process_cdm_job_invalid_name_aborts_before_macro(
         Application(run).process_cdm_job("X/Y")
     job_count.assert_not_called()
     run.Run.assert_not_called()
+
+
+# --- report generation (GenerateReports flag) inside process_cdm_job ---
+
+
+def test_process_cdm_job_report_disabled(monkeypatch: pytest.MonkeyPatch) -> None:
+    run, _ = _mock_process(
+        monkeypatch,
+        generate_reports=False,
+        read_result={"success": True, "status": "Sukces"},
+    )
+    collector = MagicMock(return_value={"success": True, "settings_file": "x.acreps"})
+    monkeypatch.setattr(Application, "_run_reports_data_collection", collector)
+    result = Application(run).process_cdm_job("JOB-001")
+    assert result["success"] is True
+    assert result["report"] == {
+        "success": False,
+        "skipped": True,
+        "error": "reports disabled for job configuration (GenerateReports=False)",
+    }
+    assert "warnings" not in result
+    collector.assert_not_called()
+
+
+def test_process_cdm_job_report_skipped_when_process_failed(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    run, _ = _mock_process(
+        monkeypatch,
+        generate_reports=True,
+        read_result={"success": False, "status": "missing"},
+    )
+    collector = MagicMock(return_value={"success": True, "settings_file": "x.acreps"})
+    monkeypatch.setattr(Application, "_run_reports_data_collection", collector)
+    result = Application(run).process_cdm_job("JOB-001")
+    assert result["success"] is False
+    assert result["report"] == {
+        "success": False,
+        "error": "process failed; report not generated",
+    }
+    collector.assert_not_called()
+
+
+def test_process_cdm_job_report_flag_read_failed(monkeypatch: pytest.MonkeyPatch) -> None:
+    run, _ = _mock_process(
+        monkeypatch,
+        read_result={"success": True, "status": "Sukces"},
+    )
+    monkeypatch.setattr("alphacam_cli.core.cdm_db.job_config", MagicMock(return_value=None))
+    result = Application(run).process_cdm_job("JOB-001", output_root="C:/out")
+    assert result["success"] is True
+    assert result["report"] == {"success": False, "error": "report flag read failed"}
+    assert result["warnings"] == ["cdm: report flag read failed (job config not readable)"]
+
+
+def test_process_cdm_job_report_flag_missing_or_unparseable(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    run, _ = _mock_process(
+        monkeypatch,
+        read_result={"success": True, "status": "Sukces"},
+    )
+    monkeypatch.setattr(
+        "alphacam_cli.core.cdm_db.job_config",
+        MagicMock(return_value={"output_root": "C:/out", "generate_reports": None}),
+    )
+    collector = MagicMock(return_value={"success": True, "settings_file": "x.acreps"})
+    monkeypatch.setattr(Application, "_run_reports_data_collection", collector)
+    result = Application(run).process_cdm_job("JOB-001")
+    assert result["success"] is True
+    assert result["report"] == {"success": False, "error": "report flag read failed"}
+    assert result["warnings"] == [
+        "cdm: report flag read failed (GenerateReports missing or unparseable in job config)"
+    ]
+    collector.assert_not_called()
+
+
+def test_process_cdm_job_report_created(monkeypatch: pytest.MonkeyPatch) -> None:
+    run, _ = _mock_process(
+        monkeypatch,
+        generate_reports=True,
+        read_result={"success": True, "status": "Sukces"},
+    )
+    collector = MagicMock(
+        return_value={
+            "success": True,
+            "active_drawing": True,
+            "settings_file": "JOB-001.acrepd",
+        }
+    )
+    monkeypatch.setattr(Application, "_run_reports_data_collection", collector)
+    result = Application(run).process_cdm_job("JOB-001")
+    assert result["success"] is True
+    assert result["report"] == {
+        "success": True,
+        "active_drawing": True,
+        "settings_file": "JOB-001.acrepd",
+    }
+    assert "warnings" not in result
+    collector.assert_called_once_with("JOB-001")
+
+
+def test_process_cdm_job_report_failure_warns(monkeypatch: pytest.MonkeyPatch) -> None:
+    run, _ = _mock_process(
+        monkeypatch,
+        generate_reports=True,
+        read_result={"success": True, "status": "Sukces"},
+    )
+
+    def _boom(self, job_name=None) -> None:
+        raise RuntimeError(  # noqa: TRY003
+            "reports: no report data saved (drawing empty?)"
+        )
+
+    monkeypatch.setattr(Application, "_run_reports_data_collection", _boom)
+    result = Application(run).process_cdm_job("JOB-001")
+    assert result["success"] is True
+    assert result["report"] == {
+        "success": False,
+        "error": "reports: no report data saved (drawing empty?)",
+    }
+    assert result["warnings"] == [
+        "cdm: report not created: reports: no report data saved (drawing empty?)"
+    ]
+
+
+def test_process_cdm_job_report_save_false(monkeypatch: pytest.MonkeyPatch) -> None:
+    run, _ = _mock_process(
+        monkeypatch,
+        generate_reports=True,
+        read_result={"success": True, "status": "Sukces"},
+    )
+    reports = MagicMock(name="ReportsAddIn")
+    reports.CreateReportsJob.return_value.Save.return_value = False
+    drw = MagicMock(name="Drawing")
+    drw.Geometries.Count = 2
+    drw.ToolPaths.Count = 0
+    app = Application(run)
+    app._app.LicomdirPath = "C:/ALPHACAM"
+    app._app.ActiveDrawing = drw
+    app.get_reports_addin = lambda: reports  # type: ignore[method-assign]
+    monkeypatch.setattr(
+        "alphacam_cli.core.application.os.path.isdir",
+        lambda path: path == "C:/ALPHACAM/LICOMDIR/Reports/Settings",
+    )
+    monkeypatch.setattr(
+        "alphacam_cli.core.application.glob.glob",
+        lambda pattern: (
+            ["C:/ALPHACAM/LICOMDIR/Reports/Settings/JOB-001.acreps"]
+            if pattern.endswith("*.acreps")
+            else []
+        ),
+    )
+    result = app.process_cdm_job("JOB-001")
+    assert result["success"] is True
+    assert result["report"]["success"] is False
+    assert result["report"]["error"] == "reports: no report data saved (drawing empty?)"
+    assert result["warnings"] == [
+        "cdm: report not created: reports: no report data saved (drawing empty?)"
+    ]
+    reports.CreateReports.assert_not_called()
