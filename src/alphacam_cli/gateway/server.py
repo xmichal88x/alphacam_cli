@@ -7,6 +7,7 @@ import glob as glob_module
 import logging
 import os
 import queue
+import re
 import socket
 import threading
 import time
@@ -104,6 +105,19 @@ def _as_bool(value: Any) -> bool:
             "ambiguous boolean value %r treated as False", value
         )
     return False
+
+
+def _require_windows_abs_path(value: Any, name: str, ctx: str = "manifest") -> str | None:
+    if value is None:
+        return None
+    path = str(value).strip()
+    if (
+        not re.match(r"^[A-Za-z]:[\\/]", path)
+        and not re.match(r"^\\\\", path)
+        and not re.match(r"^//", path)
+    ):
+        raise COMError(f"{ctx}: {name} must be an absolute path")
+    return path
 
 
 class COMError(Exception):
@@ -391,11 +405,6 @@ class GatewayServer:
             raise COMError(f"drawing query failed: {e}") from e
         return {"success": True, "count": int(count)}
 
-    def _cdm_automation_manager(self) -> Any:
-        from alphacam_cli.gateway.server import _app as com_app
-
-        return com_app.get_cdm_automation_manager()  # type: ignore[no-any-return]
-
     def _handler_create_cdm_job(self, params: dict[str, Any]) -> dict[str, Any]:
         job_name = str(params.get("job_name") or "").strip()
         if not job_name:
@@ -445,7 +454,7 @@ class GatewayServer:
             or timeout_seconds <= 0
         ):
             raise COMError("cdm: timeout_seconds must be a positive int")
-        output_root = str(params.get("output_root") or "").strip() or None
+        output_root = _require_windows_abs_path(params.get("output_root"), "output_root", ctx="cdm")
         from alphacam_cli.gateway.server import _app as com_app
 
         call_kwargs: dict[str, Any] = {"job_name": job_name}
@@ -454,7 +463,7 @@ class GatewayServer:
         if output_root is not None:
             call_kwargs["output_root"] = output_root
         watchdog = self._watchdog_arm(
-            max(60.0, float(timeout_seconds or 0)) + 30.0, f"process_cdm_job({job_name})"
+            max(60.0, float(timeout_seconds or 300)) + 30.0, f"process_cdm_job({job_name})"
         )
         try:
             return com_app.process_cdm_job(**call_kwargs)  # type: ignore[no-any-return]
@@ -464,49 +473,20 @@ class GatewayServer:
             watchdog.cancel()
 
     def _handler_cdm_types(self, params: dict[str, Any]) -> dict[str, Any]:
+        from alphacam_cli.gateway.server import _app as com_app
+
         try:
-            am = self._cdm_automation_manager()
-        except Exception as e:
-            raise COMError(f"cdm: automation manager unavailable: {e}") from e
-        com_names: list[str] = []
-        seen: set[str] = set()
-        try:
-            jobs = am.Jobs
-            for i in range(1, int(jobs.Count) + 1):
-                try:
-                    details = jobs.Item(i).CDMOrderDetails
-                except Exception:
-                    continue
-                for di in range(1, int(details.Count) + 1):
-                    try:
-                        name = str(details.Item(di).TypeName)
-                    except Exception:
-                        continue
-                    if name and name.casefold() not in seen:
-                        seen.add(name.casefold())
-                        com_names.append(name)
+            return com_app.cdm_types()  # type: ignore[no-any-return]
         except Exception as e:
             raise COMError(f"cdm: read door types failed: {e}") from e
-        vdb5_names, vdb5_ok = cdm_db.vdb5_door_type_names()
-        return cdm_db.merge_door_types(com_names, vdb5_names, vdb5_ok)
 
     def _handler_cdm_jobs(self, params: dict[str, Any]) -> dict[str, Any]:
+        from alphacam_cli.gateway.server import _app as com_app
+
         try:
-            am = self._cdm_automation_manager()
-        except Exception as e:
-            raise COMError(f"cdm: automation manager unavailable: {e}") from e
-        jobs_out: list[dict[str, Any]] = []
-        try:
-            jobs = am.Jobs
-            for i in range(1, int(jobs.Count) + 1):
-                try:
-                    jj = jobs.Item(i)
-                    jobs_out.append({"id": i, "name": str(jj.JobName)})
-                except Exception:
-                    continue
+            return com_app.cdm_jobs()  # type: ignore[no-any-return]
         except Exception as e:
             raise COMError(f"cdm: list jobs failed: {e}") from e
-        return {"jobs": jobs_out}
 
     def _handler_cdm_import_csv(self, params: dict[str, Any]) -> dict[str, Any]:
         from alphacam_cli.gateway.server import _app as com_app
@@ -649,7 +629,7 @@ class GatewayServer:
     def _handler_manifest_list(self, params: dict[str, Any]) -> dict[str, Any]:
         from alphacam_cli.gateway.server import _app as com_app
 
-        data_dir = str(params.get("data_dir")) if params.get("data_dir") else None
+        data_dir = _require_windows_abs_path(params.get("data_dir"), "data_dir")
         try:
             return com_app.manifest_list(data_dir)  # type: ignore[no-any-return]
         except Exception as e:
@@ -661,10 +641,47 @@ class GatewayServer:
         job_name = str(params.get("job_name") or "").strip()
         if not job_name:
             raise COMError("manifest: job_name required")
-        material = str(params.get("material")) if params.get("material") else None
-        data_dir = str(params.get("data_dir")) if params.get("data_dir") else None
         try:
-            return com_app.manifest_read(job_name, material, data_dir)  # type: ignore[no-any-return]
+            job_name = _validate_job_name(job_name)
+        except RuntimeError as exc:
+            raise COMError(str(exc)) from None
+        material = str(params.get("material")) if params.get("material") else None
+        data_dir = _require_windows_abs_path(params.get("data_dir"), "data_dir")
+        nc_root = _require_windows_abs_path(params.get("nc_root"), "nc_root")
+        by_token = _as_bool(params.get("by_token"))
+        fill_threshold = params.get("fill_threshold")
+        if fill_threshold is not None and (
+            not isinstance(fill_threshold, int)
+            or isinstance(fill_threshold, bool)
+            or not 0 <= fill_threshold <= 100
+        ):
+            raise COMError("manifest: fill_threshold must be an integer between 0 and 100")
+        validate = _as_bool(params.get("validate"))
+        token_qty = params.get("token_qty")
+        if token_qty is not None:
+            if not isinstance(token_qty, dict):
+                raise COMError("manifest: token_qty must be a dict")
+            coerced: dict[str, int] = {}
+            for key, value in token_qty.items():
+                try:
+                    coerced_value = int(value)
+                except (TypeError, ValueError):
+                    raise COMError("manifest: token_qty values must be integers") from None
+                if isinstance(value, bool) or coerced_value < 0:
+                    raise COMError("manifest: token_qty values must be non-negative integers")
+                coerced[str(key)] = coerced_value
+            token_qty = coerced
+        try:
+            return com_app.manifest_read(  # type: ignore[no-any-return]
+                job_name=job_name,
+                material=material,
+                data_dir=data_dir,
+                nc_root=nc_root,
+                by_token=by_token,
+                fill_threshold=fill_threshold,
+                validate=validate,
+                token_qty=token_qty,
+            )
         except Exception as e:
             raise COMError(f"manifest: read failed: {e}") from e
 

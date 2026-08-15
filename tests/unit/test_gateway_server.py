@@ -1093,63 +1093,6 @@ def test_drawing_query_handler_failure(server_app: MagicMock) -> None:
         gw._handler_drawing_query({"file": r"C:\ALPHACAM\LICOMDIR\Queries\test.agq"})
 
 
-def _mock_cdm_com(monkeypatch: pytest.MonkeyPatch) -> tuple[MagicMock, MagicMock, MagicMock]:
-    """Install fake pythoncom/win32com.client and return (ai, addins, am)."""
-    pythoncom = MagicMock()
-    pythoncom.MakeIID.return_value = "CDM-CLSID"
-    pythoncom.CoCreateInstance.return_value = object()
-    pythoncom.CLSCTX_ALL = 23
-    pythoncom.IID_IDispatch = "IDispatch"
-
-    w32 = MagicMock()
-    ai = MagicMock()
-    addins = MagicMock()
-    am = MagicMock()
-    w32.Dispatch.return_value = ai
-    ai.GetAddInsInterface.return_value = addins
-    addins.GetAutomationManagerAddInGUI.return_value = am
-
-    client_mod = types.ModuleType("win32com.client")
-    client_mod.Dispatch = w32.Dispatch  # type: ignore[attr-defined]
-    win32com = types.ModuleType("win32com")
-    win32com.client = client_mod  # type: ignore[attr-defined]
-    monkeypatch.setitem(sys.modules, "win32com", win32com)
-    monkeypatch.setitem(sys.modules, "win32com.client", client_mod)
-    monkeypatch.setitem(sys.modules, "pythoncom", pythoncom)
-    import alphacam_cli.gateway.server as server_module
-
-    if server_module._app is None:
-        server_module._app = MagicMock()
-    server_module._app.get_cdm_automation_manager.return_value = am
-    am.Jobs.Count = 0
-    return ai, addins, am
-
-
-def _mock_vdb5_run(
-    monkeypatch: pytest.MonkeyPatch, stdout: str = "[]", returncode: int = 0
-) -> MagicMock:
-    run = MagicMock(return_value=types.SimpleNamespace(stdout=stdout, returncode=returncode))
-    monkeypatch.setattr("subprocess.run", run)
-    return run
-
-
-def test_cdm_automation_manager_delegates_to_core(server_app: MagicMock) -> None:
-    am = MagicMock()
-    server_app.get_cdm_automation_manager.return_value = am
-    gw = GatewayServer()
-    assert gw._cdm_automation_manager() is am
-    server_app.get_cdm_automation_manager.assert_called_once_with()
-
-
-def test_cdm_types_handler_am_unavailable(server_app: MagicMock) -> None:
-    server_app.get_cdm_automation_manager.side_effect = RuntimeError(
-        "cdm: automation manager unavailable: boom"
-    )
-    gw = GatewayServer()
-    with pytest.raises(COMError, match="cdm: automation manager unavailable"):
-        gw._handler_cdm_types({})
-
-
 def test_create_cdm_job_handler(server_app: MagicMock) -> None:
     server_app.create_cdm_job.return_value = {
         "success": True,
@@ -1259,289 +1202,49 @@ def test_create_cdm_job_handler_com_failure(server_app: MagicMock) -> None:
         gw._handler_create_cdm_job({"job_name": "JOB-001", "config": "Fronty"})
 
 
-def test_cdm_types_handler(server_app: MagicMock, monkeypatch: pytest.MonkeyPatch) -> None:
-    _, _, am = _mock_cdm_com(monkeypatch)
-    _mock_vdb5_run(monkeypatch)
-    d1 = MagicMock()
-    d1.TypeName = "Typ Frontu 1"
-    d2 = MagicMock()
-    d2.TypeName = "L_B_10mm"
-    details = MagicMock()
-    details.Count = 2
-    details.Item.side_effect = [d1, d2]
-    job1 = MagicMock()
-    job1.CDMOrderDetails = details
-    jobs = MagicMock()
-    jobs.Count = 1
-    jobs.Item.return_value = job1
-    am.Jobs = jobs
-    gw = GatewayServer()
-    result = gw._handler_cdm_types({})
-    assert result == {
+def test_cdm_types_handler_delegates(server_app: MagicMock) -> None:
+    payload = {
         "types": [{"id": 1, "name": "Typ Frontu 1"}, {"id": 2, "name": "L_B_10mm"}],
         "source": "vdb5+com",
     }
-
-
-def test_cdm_types_handler_dedup(server_app: MagicMock, monkeypatch: pytest.MonkeyPatch) -> None:
-    _, _, am = _mock_cdm_com(monkeypatch)
-    _mock_vdb5_run(monkeypatch)
-    d1 = MagicMock()
-    d1.TypeName = "Typ Frontu 1"
-    d2 = MagicMock()
-    d2.TypeName = "Typ Frontu 1"
-    details = MagicMock()
-    details.Count = 2
-    details.Item.side_effect = [d1, d2]
-    job1 = MagicMock()
-    job1.CDMOrderDetails = details
-    jobs = MagicMock()
-    jobs.Count = 1
-    jobs.Item.return_value = job1
-    am.Jobs = jobs
+    server_app.cdm_types.return_value = payload
     gw = GatewayServer()
-    result = gw._handler_cdm_types({})
-    assert result == {
-        "types": [{"id": 1, "name": "Typ Frontu 1"}],
-        "source": "vdb5+com",
-    }
+    assert gw._handler_cdm_types({}) == payload
+    server_app.cdm_types.assert_called_once_with()
 
 
-def test_cdm_types_handler_empty(server_app: MagicMock, monkeypatch: pytest.MonkeyPatch) -> None:
-    _, _, am = _mock_cdm_com(monkeypatch)
-    _mock_vdb5_run(monkeypatch)
-    am.Jobs.Count = 0
+def test_cdm_types_handler_empty(server_app: MagicMock) -> None:
+    server_app.cdm_types.return_value = {"types": [], "note": "no CDM door types found"}
     gw = GatewayServer()
-    result = gw._handler_cdm_types({})
-    assert result == {"types": [], "note": "no CDM door types found"}
+    assert gw._handler_cdm_types({}) == {"types": [], "note": "no CDM door types found"}
 
 
-def test_cdm_types_handler_vdb5(server_app: MagicMock, monkeypatch: pytest.MonkeyPatch) -> None:
-    _, _, am = _mock_cdm_com(monkeypatch)
-    _mock_vdb5_run(monkeypatch, stdout='[{"TypeName": "Typ Frontu 1"}, {"TypeName": "L_B_10mm"}]')
-    am.Jobs.Count = 0
+def test_cdm_types_handler_failure(server_app: MagicMock) -> None:
+    server_app.cdm_types.side_effect = RuntimeError("cdm: read door types failed: boom")
     gw = GatewayServer()
-    result = gw._handler_cdm_types({})
-    assert result == {
-        "types": [{"id": 1, "name": "Typ Frontu 1"}, {"id": 2, "name": "L_B_10mm"}],
-        "source": "vdb5+com",
-    }
+    with pytest.raises(COMError, match="cdm: read door types failed: boom"):
+        gw._handler_cdm_types({})
 
 
-def test_cdm_types_handler_vdb5_merge(
-    server_app: MagicMock, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    _, _, am = _mock_cdm_com(monkeypatch)
-    _mock_vdb5_run(monkeypatch, stdout='[{"TypeName": "Typ Frontu 1"}, {"TypeName": "M_01"}]')
-    d1 = MagicMock()
-    d1.TypeName = "M_01"
-    d2 = MagicMock()
-    d2.TypeName = "Typ Frontu 47"
-    details = MagicMock()
-    details.Count = 2
-    details.Item.side_effect = [d1, d2]
-    job1 = MagicMock()
-    job1.CDMOrderDetails = details
-    jobs = MagicMock()
-    jobs.Count = 1
-    jobs.Item.return_value = job1
-    am.Jobs = jobs
+def test_cdm_jobs_handler_delegates(server_app: MagicMock) -> None:
+    payload = {"jobs": [{"id": 1, "name": "JOB-001"}, {"id": 2, "name": "JOB-002"}]}
+    server_app.cdm_jobs.return_value = payload
     gw = GatewayServer()
-    result = gw._handler_cdm_types({})
-    assert result == {
-        "types": [
-            {"id": 1, "name": "Typ Frontu 1"},
-            {"id": 2, "name": "M_01"},
-            {"id": 3, "name": "Typ Frontu 47"},
-        ],
-        "source": "vdb5+com",
-    }
+    assert gw._handler_cdm_jobs({}) == payload
+    server_app.cdm_jobs.assert_called_once_with()
 
 
-def test_cdm_types_handler_vdb5_fallback(
-    server_app: MagicMock, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    _, _, am = _mock_cdm_com(monkeypatch)
-    monkeypatch.setattr("subprocess.run", MagicMock(side_effect=FileNotFoundError("powershell")))
-    d1 = MagicMock()
-    d1.TypeName = "Typ Frontu 47"
-    details = MagicMock()
-    details.Count = 1
-    details.Item.return_value = d1
-    job1 = MagicMock()
-    job1.CDMOrderDetails = details
-    jobs = MagicMock()
-    jobs.Count = 1
-    jobs.Item.return_value = job1
-    am.Jobs = jobs
+def test_cdm_jobs_handler_empty(server_app: MagicMock) -> None:
+    server_app.cdm_jobs.return_value = {"jobs": []}
     gw = GatewayServer()
-    result = gw._handler_cdm_types({})
-    assert result == {
-        "types": [{"id": 1, "name": "Typ Frontu 47"}],
-        "note": "vdb5 read failed; types from jobs only",
-        "source": "com",
-    }
+    assert gw._handler_cdm_jobs({}) == {"jobs": []}
 
 
-def test_cdm_types_handler_vdb5_returncode_nonzero(
-    server_app: MagicMock, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    _, _, am = _mock_cdm_com(monkeypatch)
-    _mock_vdb5_run(monkeypatch, stdout="[]", returncode=1)
-    d1 = MagicMock()
-    d1.TypeName = "Typ Frontu 47"
-    details = MagicMock()
-    details.Count = 1
-    details.Item.return_value = d1
-    job1 = MagicMock()
-    job1.CDMOrderDetails = details
-    jobs = MagicMock()
-    jobs.Count = 1
-    jobs.Item.return_value = job1
-    am.Jobs = jobs
+def test_cdm_jobs_handler_failure(server_app: MagicMock) -> None:
+    server_app.cdm_jobs.side_effect = RuntimeError("cdm: list jobs failed: boom")
     gw = GatewayServer()
-    result = gw._handler_cdm_types({})
-    assert result == {
-        "types": [{"id": 1, "name": "Typ Frontu 47"}],
-        "note": "vdb5 read failed; types from jobs only",
-        "source": "com",
-    }
-
-
-def test_cdm_types_handler_vdb5_empty_stdout(
-    server_app: MagicMock, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    _, _, am = _mock_cdm_com(monkeypatch)
-    _mock_vdb5_run(monkeypatch, stdout="")
-    d1 = MagicMock()
-    d1.TypeName = "Typ Frontu 47"
-    details = MagicMock()
-    details.Count = 1
-    details.Item.return_value = d1
-    job1 = MagicMock()
-    job1.CDMOrderDetails = details
-    jobs = MagicMock()
-    jobs.Count = 1
-    jobs.Item.return_value = job1
-    am.Jobs = jobs
-    gw = GatewayServer()
-    result = gw._handler_cdm_types({})
-    assert result == {
-        "types": [{"id": 1, "name": "Typ Frontu 47"}],
-        "note": "vdb5 read failed; types from jobs only",
-        "source": "com",
-    }
-
-
-def test_cdm_types_handler_vdb5_non_list_rows(
-    server_app: MagicMock, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    _, _, am = _mock_cdm_com(monkeypatch)
-    _mock_vdb5_run(monkeypatch, stdout="not json array")
-    d1 = MagicMock()
-    d1.TypeName = "Typ Frontu 47"
-    details = MagicMock()
-    details.Count = 1
-    details.Item.return_value = d1
-    job1 = MagicMock()
-    job1.CDMOrderDetails = details
-    jobs = MagicMock()
-    jobs.Count = 1
-    jobs.Item.return_value = job1
-    am.Jobs = jobs
-    gw = GatewayServer()
-    result = gw._handler_cdm_types({})
-    assert result == {
-        "types": [{"id": 1, "name": "Typ Frontu 47"}],
-        "note": "vdb5 read failed; types from jobs only",
-        "source": "com",
-    }
-
-
-def test_cdm_types_handler_vdb5_row_not_dict(
-    server_app: MagicMock, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    _, _, am = _mock_cdm_com(monkeypatch)
-    _mock_vdb5_run(monkeypatch, stdout="[42]")
-    d1 = MagicMock()
-    d1.TypeName = "Typ Frontu 47"
-    details = MagicMock()
-    details.Count = 1
-    details.Item.return_value = d1
-    job1 = MagicMock()
-    job1.CDMOrderDetails = details
-    jobs = MagicMock()
-    jobs.Count = 1
-    jobs.Item.return_value = job1
-    am.Jobs = jobs
-    gw = GatewayServer()
-    result = gw._handler_cdm_types({})
-    assert result == {
-        "types": [{"id": 1, "name": "Typ Frontu 47"}],
-        "source": "vdb5+com",
-    }
-
-
-def test_cdm_types_handler_vdb5_skips_system_row(
-    server_app: MagicMock, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    _, _, am = _mock_cdm_com(monkeypatch)
-    _mock_vdb5_run(
-        monkeypatch,
-        stdout=(
-            '[{"TypeName": "Typ Frontu 1"},'
-            ' {"TypeName": "Alphacam Created System Database Field - Do not delete"}]'
-        ),
-    )
-    am.Jobs.Count = 0
-    gw = GatewayServer()
-    result = gw._handler_cdm_types({})
-    assert result == {"types": [{"id": 1, "name": "Typ Frontu 1"}], "source": "vdb5+com"}
-
-
-def test_cdm_types_handler_vdb5_value_wrap(
-    server_app: MagicMock, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    _, _, am = _mock_cdm_com(monkeypatch)
-    _mock_vdb5_run(monkeypatch, stdout='{"value": [{"TypeName": "Typ Frontu 1"}]}')
-    am.Jobs.Count = 0
-    gw = GatewayServer()
-    result = gw._handler_cdm_types({})
-    assert result == {"types": [{"id": 1, "name": "Typ Frontu 1"}], "source": "vdb5+com"}
-
-
-def test_cdm_types_handler_vdb5_single_object(
-    server_app: MagicMock, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    _, _, am = _mock_cdm_com(monkeypatch)
-    _mock_vdb5_run(monkeypatch, stdout='{"TypeName": "Typ Frontu 1"}')
-    am.Jobs.Count = 0
-    gw = GatewayServer()
-    result = gw._handler_cdm_types({})
-    assert result == {"types": [{"id": 1, "name": "Typ Frontu 1"}], "source": "vdb5+com"}
-
-
-def test_cdm_jobs_handler(server_app: MagicMock, monkeypatch: pytest.MonkeyPatch) -> None:
-    _, _, am = _mock_cdm_com(monkeypatch)
-    j1 = MagicMock()
-    j1.JobName = "JOB-001"
-    j2 = MagicMock()
-    j2.JobName = "JOB-002"
-    jobs = MagicMock()
-    jobs.Count = 2
-    jobs.Item.side_effect = [j1, j2]
-    am.Jobs = jobs
-    gw = GatewayServer()
-    result = gw._handler_cdm_jobs({})
-    assert result == {"jobs": [{"id": 1, "name": "JOB-001"}, {"id": 2, "name": "JOB-002"}]}
-
-
-def test_cdm_jobs_handler_empty(server_app: MagicMock, monkeypatch: pytest.MonkeyPatch) -> None:
-    _, _, am = _mock_cdm_com(monkeypatch)
-    am.Jobs.Count = 0
-    gw = GatewayServer()
-    result = gw._handler_cdm_jobs({})
-    assert result == {"jobs": []}
+    with pytest.raises(COMError, match="cdm: list jobs failed: boom"):
+        gw._handler_cdm_jobs({})
 
 
 def test_cdm_import_csv_handler_missing_csv(server_app: MagicMock) -> None:
@@ -1989,7 +1692,16 @@ def test_manifest_read_handler(server_app: MagicMock) -> None:
         {"job_name": "Fronty", "material": "MDF_18", "data_dir": r"C:\Reports\Data"}
     )
     assert result == server_app.manifest_read.return_value
-    server_app.manifest_read.assert_called_once_with("Fronty", "MDF_18", r"C:\Reports\Data")
+    server_app.manifest_read.assert_called_once_with(
+        job_name="Fronty",
+        material="MDF_18",
+        data_dir=r"C:\Reports\Data",
+        nc_root=None,
+        by_token=False,
+        fill_threshold=None,
+        validate=False,
+        token_qty=None,
+    )
 
 
 def test_manifest_read_handler_no_params(server_app: MagicMock) -> None:
@@ -2005,7 +1717,225 @@ def test_manifest_read_handler_failure(server_app: MagicMock) -> None:
     gw = GatewayServer()
     with pytest.raises(COMError, match=r"manifest: read failed: boom"):
         gw._handler_manifest_read({"job_name": "Fronty"})
-    server_app.manifest_read.assert_called_once_with("Fronty", None, None)
+    server_app.manifest_read.assert_called_once_with(
+        job_name="Fronty",
+        material=None,
+        data_dir=None,
+        nc_root=None,
+        by_token=False,
+        fill_threshold=None,
+        validate=False,
+        token_qty=None,
+    )
+
+
+def test_manifest_read_handler_nc_root(server_app: MagicMock) -> None:
+    server_app.manifest_read.return_value = {"success": True, "manifest": {}}
+    gw = GatewayServer()
+    result = gw._handler_manifest_read({"job_name": "Fronty", "nc_root": r"C:\NC\Out"})
+    assert result == server_app.manifest_read.return_value
+    server_app.manifest_read.assert_called_once_with(
+        job_name="Fronty",
+        material=None,
+        data_dir=None,
+        nc_root=r"C:\NC\Out",
+        by_token=False,
+        fill_threshold=None,
+        validate=False,
+        token_qty=None,
+    )
+
+
+def test_manifest_read_handler_by_token(server_app: MagicMock) -> None:
+    server_app.manifest_read.return_value = {"success": True, "manifest": {}, "by_token": []}
+    gw = GatewayServer()
+    result = gw._handler_manifest_read({"job_name": "Fronty", "by_token": True})
+    assert result == server_app.manifest_read.return_value
+    server_app.manifest_read.assert_called_once_with(
+        job_name="Fronty",
+        material=None,
+        data_dir=None,
+        nc_root=None,
+        by_token=True,
+        fill_threshold=None,
+        validate=False,
+        token_qty=None,
+    )
+
+
+def test_manifest_read_handler_fill_threshold(server_app: MagicMock) -> None:
+    server_app.manifest_read.return_value = {"success": True, "manifest": {}}
+    gw = GatewayServer()
+    result = gw._handler_manifest_read({"job_name": "Fronty", "fill_threshold": 50})
+    assert result == server_app.manifest_read.return_value
+    server_app.manifest_read.assert_called_once_with(
+        job_name="Fronty",
+        material=None,
+        data_dir=None,
+        nc_root=None,
+        by_token=False,
+        fill_threshold=50,
+        validate=False,
+        token_qty=None,
+    )
+
+
+def test_manifest_read_handler_forbidden_job_name(server_app: MagicMock) -> None:
+    gw = GatewayServer()
+    with pytest.raises(COMError, match=r"invalid job name: 'Fronty/1' \(forbidden characters: /\)"):
+        gw._handler_manifest_read({"job_name": "Fronty/1"})
+    server_app.manifest_read.assert_not_called()
+
+
+def test_manifest_read_handler_fill_threshold_non_int(server_app: MagicMock) -> None:
+    gw = GatewayServer()
+    with pytest.raises(
+        COMError, match=r"manifest: fill_threshold must be an integer between 0 and 100"
+    ):
+        gw._handler_manifest_read({"job_name": "Fronty", "fill_threshold": "abc"})
+    server_app.manifest_read.assert_not_called()
+
+
+def test_manifest_read_handler_fill_threshold_bool(server_app: MagicMock) -> None:
+    gw = GatewayServer()
+    with pytest.raises(
+        COMError, match=r"manifest: fill_threshold must be an integer between 0 and 100"
+    ):
+        gw._handler_manifest_read({"job_name": "Fronty", "fill_threshold": True})
+    server_app.manifest_read.assert_not_called()
+
+
+def test_manifest_read_handler_fill_threshold_out_of_range(server_app: MagicMock) -> None:
+    gw = GatewayServer()
+    with pytest.raises(
+        COMError, match=r"manifest: fill_threshold must be an integer between 0 and 100"
+    ):
+        gw._handler_manifest_read({"job_name": "Fronty", "fill_threshold": 150})
+    server_app.manifest_read.assert_not_called()
+
+
+def test_manifest_read_handler_validate(server_app: MagicMock) -> None:
+    server_app.manifest_read.return_value = {
+        "success": True,
+        "manifest": {},
+        "validation": {"valid": True, "warnings": [], "errors": []},
+    }
+    gw = GatewayServer()
+    result = gw._handler_manifest_read(
+        {"job_name": "Fronty", "validate": True, "token_qty": {"ABC": 4}}
+    )
+    assert result == server_app.manifest_read.return_value
+    server_app.manifest_read.assert_called_once_with(
+        job_name="Fronty",
+        material=None,
+        data_dir=None,
+        nc_root=None,
+        by_token=False,
+        fill_threshold=None,
+        validate=True,
+        token_qty={"ABC": 4},
+    )
+
+
+def test_manifest_read_handler_by_token_false_string(server_app: MagicMock) -> None:
+    server_app.manifest_read.return_value = {"success": True, "manifest": {}}
+    gw = GatewayServer()
+    result = gw._handler_manifest_read(
+        {"job_name": "Fronty", "by_token": "false", "validate": "false"}
+    )
+    assert result == server_app.manifest_read.return_value
+    server_app.manifest_read.assert_called_once_with(
+        job_name="Fronty",
+        material=None,
+        data_dir=None,
+        nc_root=None,
+        by_token=False,
+        fill_threshold=None,
+        validate=False,
+        token_qty=None,
+    )
+
+
+def test_manifest_read_handler_token_qty_string_values(server_app: MagicMock) -> None:
+    server_app.manifest_read.return_value = {"success": True, "manifest": {}}
+    gw = GatewayServer()
+    result = gw._handler_manifest_read({"job_name": "Fronty", "token_qty": {"ABC": "4", 7: "2"}})
+    assert result == server_app.manifest_read.return_value
+    server_app.manifest_read.assert_called_once_with(
+        job_name="Fronty",
+        material=None,
+        data_dir=None,
+        nc_root=None,
+        by_token=False,
+        fill_threshold=None,
+        validate=False,
+        token_qty={"ABC": 4, "7": 2},
+    )
+
+
+def test_manifest_read_handler_token_qty_not_dict(server_app: MagicMock) -> None:
+    gw = GatewayServer()
+    with pytest.raises(COMError, match=r"manifest: token_qty must be a dict"):
+        gw._handler_manifest_read({"job_name": "Fronty", "token_qty": ["ABC", "4"]})
+    server_app.manifest_read.assert_not_called()
+
+
+def test_manifest_read_handler_token_qty_bad_value(server_app: MagicMock) -> None:
+    gw = GatewayServer()
+    with pytest.raises(COMError, match=r"manifest: token_qty values must be integers"):
+        gw._handler_manifest_read({"job_name": "Fronty", "token_qty": {"ABC": "many"}})
+    server_app.manifest_read.assert_not_called()
+
+
+def test_manifest_read_handler_token_qty_negative(server_app: MagicMock) -> None:
+    gw = GatewayServer()
+    with pytest.raises(COMError, match=r"manifest: token_qty values must be non-negative integers"):
+        gw._handler_manifest_read({"job_name": "Fronty", "token_qty": {"ABC": -1}})
+    server_app.manifest_read.assert_not_called()
+
+
+def test_manifest_read_handler_token_qty_bool(server_app: MagicMock) -> None:
+    gw = GatewayServer()
+    with pytest.raises(COMError, match=r"manifest: token_qty values must be non-negative integers"):
+        gw._handler_manifest_read({"job_name": "Fronty", "token_qty": {"ABC": True}})
+    server_app.manifest_read.assert_not_called()
+
+
+def test_manifest_read_handler_relative_nc_root(server_app: MagicMock) -> None:
+    gw = GatewayServer()
+    with pytest.raises(COMError, match=r"manifest: nc_root must be an absolute path"):
+        gw._handler_manifest_read({"job_name": "Fronty", "nc_root": "nc/out"})
+    server_app.manifest_read.assert_not_called()
+
+
+def test_manifest_read_handler_relative_data_dir(server_app: MagicMock) -> None:
+    gw = GatewayServer()
+    with pytest.raises(COMError, match=r"manifest: data_dir must be an absolute path"):
+        gw._handler_manifest_read({"job_name": "Fronty", "data_dir": "Reports/Data"})
+    server_app.manifest_read.assert_not_called()
+
+
+def test_manifest_list_handler_relative_data_dir(server_app: MagicMock) -> None:
+    gw = GatewayServer()
+    with pytest.raises(COMError, match=r"manifest: data_dir must be an absolute path"):
+        gw._handler_manifest_list({"data_dir": "Reports/Data"})
+    server_app.manifest_list.assert_not_called()
+
+
+def test_manifest_list_handler_unc_data_dir(server_app: MagicMock) -> None:
+    server_app.manifest_list.return_value = {"success": True, "manifests": []}
+    gw = GatewayServer()
+    result = gw._handler_manifest_list({"data_dir": r"\\server\share\Reports\Data"})
+    assert result == server_app.manifest_list.return_value
+    server_app.manifest_list.assert_called_once_with(r"\\server\share\Reports\Data")
+
+
+def test_manifest_list_handler_unc_forward_slash_data_dir(server_app: MagicMock) -> None:
+    server_app.manifest_list.return_value = {"success": True, "manifests": []}
+    gw = GatewayServer()
+    result = gw._handler_manifest_list({"data_dir": "//server/share/Reports/Data"})
+    assert result == server_app.manifest_list.return_value
+    server_app.manifest_list.assert_called_once_with("//server/share/Reports/Data")
 
 
 def test_set_nest_list_options_bool_false_strings() -> None:
@@ -2162,19 +2092,31 @@ def test_process_cdm_job_handler_zero_timeout_rejected(server_app: MagicMock) ->
     server_app.process_cdm_job.assert_not_called()
 
 
-def test_process_cdm_job_handler_blank_output_root_omitted(server_app: MagicMock) -> None:
-    server_app.process_cdm_job.return_value = {"success": True}
+def test_process_cdm_job_handler_blank_output_root_rejected(
+    server_app: MagicMock,
+) -> None:
     gw = GatewayServer()
-    result = gw._handler_process_cdm_job({"job_name": "JOB-001", "output_root": "   "})
-    assert result == server_app.process_cdm_job.return_value
-    server_app.process_cdm_job.assert_called_once_with(job_name="JOB-001")
+    with pytest.raises(COMError, match=r"cdm: output_root must be an absolute path"):
+        gw._handler_process_cdm_job({"job_name": "JOB-001", "output_root": "   "})
+    server_app.process_cdm_job.assert_not_called()
 
 
-def test_process_cdm_job_handler_non_string_output_root_coerced(server_app: MagicMock) -> None:
-    server_app.process_cdm_job.return_value = {"success": True}
+def test_process_cdm_job_handler_relative_output_root_rejected(
+    server_app: MagicMock,
+) -> None:
     gw = GatewayServer()
-    gw._handler_process_cdm_job({"job_name": "JOB-001", "output_root": 123})
-    server_app.process_cdm_job.assert_called_once_with(job_name="JOB-001", output_root="123")
+    with pytest.raises(COMError, match=r"cdm: output_root must be an absolute path"):
+        gw._handler_process_cdm_job({"job_name": "JOB-001", "output_root": "out/dir"})
+    server_app.process_cdm_job.assert_not_called()
+
+
+def test_process_cdm_job_handler_non_string_output_root_rejected(
+    server_app: MagicMock,
+) -> None:
+    gw = GatewayServer()
+    with pytest.raises(COMError, match=r"cdm: output_root must be an absolute path"):
+        gw._handler_process_cdm_job({"job_name": "JOB-001", "output_root": 123})
+    server_app.process_cdm_job.assert_not_called()
 
 
 def test_process_cdm_job_handler_watchdog_armed_and_cancelled(server_app: MagicMock) -> None:
@@ -2189,13 +2131,13 @@ def test_process_cdm_job_handler_watchdog_armed_and_cancelled(server_app: MagicM
     watchdog.cancel.assert_called_once()
 
 
-def test_process_cdm_job_handler_watchdog_min_budget(server_app: MagicMock) -> None:
+def test_process_cdm_job_handler_watchdog_default_budget(server_app: MagicMock) -> None:
     server_app.process_cdm_job.return_value = {"success": True}
     gw = GatewayServer()
     watchdog = MagicMock()
     gw._watchdog_arm = MagicMock(return_value=watchdog)
     gw._handler_process_cdm_job({"job_name": "JOB-001"})
-    assert gw._watchdog_arm.call_args.args[0] == 90.0
+    assert gw._watchdog_arm.call_args.args[0] == 330.0
     watchdog.cancel.assert_called_once()
 
 

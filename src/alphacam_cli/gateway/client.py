@@ -437,6 +437,11 @@ class RemoteSession:
         job_name: str | None = None,
         material: str | None = None,
         data_dir: str | None = None,
+        nc_root: str | None = None,
+        by_token: bool = False,
+        fill_threshold: int | None = None,
+        validate: bool = False,
+        token_qty: dict[str, int] | None = None,
     ) -> dict[str, Any]:
         params: dict[str, Any] = {}
         if job_name is not None:
@@ -445,6 +450,16 @@ class RemoteSession:
             params["material"] = material
         if data_dir is not None:
             params["data_dir"] = data_dir
+        if nc_root is not None:
+            params["nc_root"] = nc_root
+        if by_token:
+            params["by_token"] = True
+        if fill_threshold is not None:
+            params["fill_threshold"] = fill_threshold
+        if validate:
+            params["validate"] = True
+        if token_qty:
+            params["token_qty"] = token_qty
         return self._call("manifest_read", params)  # type: ignore[no-any-return]
 
     def find_drawing_files(self, pattern: str = "*.amd") -> list[str]:

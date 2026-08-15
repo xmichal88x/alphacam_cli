@@ -1160,3 +1160,39 @@ Raport: `docs/raporty/2026-08-13-session0-opcjaA.md` (sekcja WDROŻENIE).
 ### Weryfikacja
 - pytest **871 passed**, ruff/mypy czyste, `python -m build` OK.
 - Commit `b27ddaa` (21 plików).
+
+## 2026-08-15 SESSION — ROZSZERZENIE `cdm manifest` (wykonanie spec 2026-08-15-alphacam-cli-manifest-rozszerzenia.md)
+
+### Cel
+`cdm manifest` jako źródło dla skryptu kolejki nestingu i SIM-CNC: token (custom_field_1), NC per arkusz, fill_class, by-token, validate. Korekta podejścia do ścieżek NC: root z bazy (NIE hardcode LICOMDIR) — analiza: production-automation/docs/plans/2026-08-15-alphacam-cli-manifest-fix.md.
+
+### Kluczowe ustalenia (analiza przed implementacją)
+1. **Ścieżki NC tylko z bazy**: root = `AM_ConfigurationSettings` (NCFileOutputLocation → DrawingFileOutputLocation) przez `job_config` (1 PowerShell); względne `LICOMDIR\...` prefixowane `App.LicomdirPath` (COM) — usunięty literał `C:\ALPHACAM\` (cdm_db.py). UNC `\\` i `//` obsłużone.
+2. **Nazwy NC konfigurowane w bazie** (potwierdzone na żywej bazie): `ReplaceSpaceWithUnderscore` (dotyczy TYLKO NC), `Nesting_SplitNestedSheetDrawings` (True = NC per arkusz), `Nesting_UseNameIdentifiers` — sterują dopasowaniem w `find_nc_files`.
+3. Realne wzorce nazw NC: `Arkusz_A1.nc` (split=True), `MDF_18_MDF_18.nc` (split=False, materiał+arkusz).
+4. **sheet_count_light**: utilization czytany na evencie "end" iterparse (spec-compliant na każdej wersji Pythona; na "start" działało empirycznie w 3.12, ale poprawione dla odporności).
+
+### Implementacja (T1-T9 + fixloop 9 iteracji, 0 issues)
+- `core/acrepd.py`: `find_nc_files` (skan *.nc depth≤4, bez symlinków, preferencja katalogów nc/nesting/kod; wzorce: stem(arkusz) → material_sheet → sheet_material → sufixy _N; fallback pozycyjny `nc_matched_by_order`; `nc_unmatched`/`nc_missing`; flagi config sterują), `find_nc_path` (fullname + znormalizowany stem — raport "Arkusz A1.nc" znajdzie "Arkusz_A1.nc"), `aggregate_by_token`, `fill_class`, `validate_manifest`, `sheet_count_light`.
+- `core/application.py`: `manifest_read` (+nc_root override/by_token/fill_threshold/validate/token_qty; `_enrich_manifest_nc` — priorytet nc_root → nc_output → output_root, raport > dysk, superseded → nc_unmatched (filtr używanych przez inne arkusze), nc_missing recompute, warningi scan_attempted), `manifest_list` (sheet_count/first_utilization serwer-side — bug FileNotFoundError na --remote naprawiony).
+- `core/cdm_db.py`: `job_config` (1 subprocess: output_root/nc_output/generate_reports + 3 flagi), wrappery job_output_root/job_nc_config/job_generate_reports, `_resolve_output_path` (drive/UNC/forward-slash, normpath, licomdir).
+- `cli/cdm.py`: opcje --nc-root/--show-all/--by-token/--fill-threshold/--validate/--token-qty (wymaga --validate; duplikaty → exit 2); kolumny Token/Notes; nagłówek `NC: <name> [source]`; sekcje NC unmatched/missing/matched-by-order; `_require_abs_windows_path` (przed COM); warning ignorowanych opcji w trybie listy.
+- `gateway`: manifest_read (kwargs, _validate_job_name, _require_windows_abs_path dla data_dir/nc_root/output_root, fill_threshold int 0-100 nie bool, token_qty dict str→int ≥0 nie bool); PF2: cdm_types/cdm_jobs delegują do core (usunięta duplikacja COM + helper _cdm_automation_manager).
+- `scripts/vdb5_job_output_root.ps1`: +NCFileOutputLocation + 3 flagi nazewnictwa.
+- Fixloop: 9 iteracji review (0 issues na końcu), ruff/mypy 0, **1093 passed**, build wheel OK.
+- PF1: watchdog process_cdm_job default 330s (było 90s gdy raw RPC bez timeout_seconds).
+
+### E2E na maszynie (laptop Monika, gateway Session 0, job "Zamowienie 198")
+- `cdm manifest "Zamowienie 198" --json --by-token --validate`: sheets Arkusz A1 (14 cz., fill full) / Arkusz A2 (1 cz., fill partial); **NC: Arkusz_A1.nc / Arkusz_A2.nc (source=disk)**; nc_root `C:\ALPHACAM\Automatyzacja\Przetworzone Pliki Menadżera Automatyzacji` (z bazy — nie Z: jak w starszych zapisach, potwierdza słuszność braku hardcodu); nc_config: underscore=True, split=True, name_identifiers=False (realne flagi z DB); by_token: token p_..._239nlg4v → 17 szt. (16 na A1 + 1 na A2); validation valid=true (15 części == total_parts).
+- Lista manifestów: kolumny Arkusze/Wypełn. (CusPO 001 → 1 arkusz/29%) przez --remote.
+- `cdm jobs` po PF2 (delegacja do core) działa.
+
+### Backlog pre-existing (zgłoszone przez code-review, NIE naprawiane w tej sesji — świadome)
+- `_RemoteMillData` (remote.py): no-op settery rapid_down_to/drill_type/process_type — CLI i serwer ustawiają te wartości same; rozszerzenie protokołu RPC = osobne zadanie.
+- server.py batch/output_nc: zapis NC pod dowolną ścieżką z RPC (gateway bez auth — świadomy design tailscale); ewentualna whitelist = decyzja.
+- tests/conftest.py: globalny mock ComError wpływa na wszystkie testy (test-infra).
+- acrepd split=False "shared" dopasowanie działa tylko dla identycznie nazwanych arkuszy (fallback pozycyjny pokrywa resztę).
+- Drugi OutputNC w jednej sesji COM wisi (P1 znany) — architektura.
+- vdb5_*.ps1: twarde ścieżki instalacji (maszynowe, świadome).
+- comm/manager.py: _RPC_E_CHANGED_MODE cicha kontynuacja; result_sent guard (low).
+- `get_automation_manager_addin` (core) martwe API (już w TASKS.md).

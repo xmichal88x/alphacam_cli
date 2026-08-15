@@ -781,7 +781,9 @@ alphacam cdm manifest "Zamowienie Test 01"
 
 #### `manifest`
 
-Show nesting results manifests (.acrepd) for CDM jobs — generated automatically by `cdm process` when the job configuration has `GenerateReports` enabled. With a job name, prints the manifest (sheets, part positions, totals); without one, lists all manifests. Each sheet also shows its fill (utilization) and scrap percentages (`Wypełnienie: X% (odpad: Y%)`), derived from the report's `SheetScrap` field. Optionally filter by material (`--material`) or override the data directory (`--dir`, default `LICOMDIR\Reports\Data` on the server). Parts carry the customer and order number from the CSV import row (columns `door_customer_name`/`door_order_number` in the import settings), attached from the database when reading the manifest.
+Show nesting results manifests (.acrepd) for CDM jobs — generated automatically by `cdm process` when the job configuration has `GenerateReports` enabled. With a job name, prints the manifest (sheets, part positions, totals); without one, lists all manifests with sheet-count/fill columns (Arkusze/Wypełn.). Each sheet also shows its fill (utilization) and scrap percentages (`Wypełnienie: X% (odpad: Y%)`), derived from the report's `SheetScrap` field, plus a fill class (`full`/`partial`/`empty`) from `--fill-threshold`. Optionally filter by material (`--material`) or override the data directory (`--dir`, default `LICOMDIR\Reports\Data` on the server). Parts carry the customer and order number from the CSV import row (columns `door_customer_name`/`door_order_number` in the import settings), attached from the database when reading the manifest.
+
+Each sheet is matched to its nesting NC file automatically: the report's `nest_nc_filename` wins when the file exists under the job output root (`nc_source: report`); otherwise the file is discovered by scanning the root for `*.nc` (`nc_source: disk`). The NC root is the `--nc-root` override when given, else the job's `NCFileOutputLocation` (`cdm_db.job_config["nc_output"]`), else `DrawingFileOutputLocation` (`cdm_db.job_config["output_root"]`) — nothing is hardcoded. Naming flags from the job configuration are reported as `nc_config` (`replace_space_with_underscore`, `split_nested_sheet_drawings`, `use_name_identifiers`); unmatched and missing NC files are reported as `nc_unmatched` / `nc_missing`.
 
 **Arguments:**
 
@@ -794,16 +796,26 @@ Show nesting results manifests (.acrepd) for CDM jobs — generated automaticall
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|
 | `--material`, `-m` | `str` | `None` | Filter by material (sheet database name) |
-| `--dir` | `str` | server default | Override reports data directory |
+| `--dir` | `str` | server default | Override reports data directory (must be an absolute Windows path, e.g. `C:\Reports\Data` or `\\server\share`) |
+| `--nc-root` | `str` | job config | Override the NC output root on the server (default: `NCFileOutputLocation`, else `DrawingFileOutputLocation`, of the job's configuration in `cdm_db.job_config`; must be an absolute Windows path, e.g. `Z:\NC\Out` or `\\server\share`) |
+| `--show-all` | `flag` | `False` | Show all custom fields (2-25) in the parts table |
+| `--by-token` | `flag` | `False` | Aggregate parts by project token (`custom_field_1`); requires `job_name` |
+| `--fill-threshold` | `int` | `70` | Sheet fill threshold percent (0-100) for fill classification |
+| `--validate` | `flag` | `False` | Validate manifest consistency (token quantities and counts); requires `job_name`; text exit 0 (OK), 1 (errors), 2 (warnings only) — JSON keeps `validation` in the data and exits 0 |
+| `--token-qty` | `str` | `None` | Expected quantity for a project token, repeatable (`token=qty`) |
 | `--json` | `flag` | `False` | Output raw JSON |
 
-**Example:**
+**Examples:**
 
 ```bash
-alphacam cdm manifest "Zamowienie Test 01"
-alphacam cdm manifest                          # list all manifests
-alphacam cdm manifest "Zamowienie Test 01" --json
+alphacam cdm manifest "Zamowienie 198" --json
+alphacam cdm manifest "Zamowienie 198" --by-token --json
+alphacam cdm manifest "Zamowienie 198" --validate --token-qty 239nlg4v=5
+alphacam cdm manifest "Zamowienie 198" --nc-root Z:\ALPHACAM\Automatyzacja\Przetworzone Pliki Menadżera Automatyzacji
+alphacam cdm manifest                          # list all manifests (Arkusze/Wypełn.)
 ```
+
+**How it works:** the NC root is the `--nc-root` override when given, else the job's `NCFileOutputLocation` (`cdm_db.job_config["nc_output"]`), else `DrawingFileOutputLocation` (`cdm_db.job_config["output_root"]`); the CLI scans it recursively for `*.nc` (depth ≤ 4) and matches files to sheets by name patterns — sheet stem alone, `material_sheet` and `sheet_material` (plus a numeric suffix when `use_name_identifiers`). When names do not match and the sheet/file counts are equal, a positional fallback pairs them in order (`nc_matched_by_order`).
 
 #### `types`
 

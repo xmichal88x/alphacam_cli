@@ -8,7 +8,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from alphacam_cli.core.application import Application
+from alphacam_cli.core.application import Application, _manifest_empty_nc_result
 
 
 def _mock_addin_com(
@@ -734,3 +734,746 @@ def test_manifest_read_rejects_invalid_job_name() -> None:
         ac.manifest_read("a/b")
     with pytest.raises(RuntimeError, match="cdm: job_name is required"):
         ac.manifest_read("   ")
+
+
+def _manifest_with_sheet(name: str, nest_nc_filename: str | None = None) -> dict[str, Any]:
+    return {
+        "job_name": "CusPO 002",
+        "material": "MDF_18",
+        "sheets": [
+            {
+                "id": 1,
+                "name": name,
+                "database_name": "MDF_18",
+                "nest_nc_filename": nest_nc_filename,
+                "parts": [],
+            }
+        ],
+        "total_parts": 0,
+        "unmatched_parts": [],
+        "path": "x.acrepd",
+    }
+
+
+def _mock_manifest_nc(
+    monkeypatch: pytest.MonkeyPatch,
+    nc_root: str | None,
+    nc_config: dict[str, Any] | None = None,
+) -> None:
+    cfg: dict[str, Any] = {"output_root": nc_root, "nc_output": None}
+    if nc_config is not None:
+        cfg.update(nc_config)
+    monkeypatch.setattr(
+        "alphacam_cli.core.application.cdm_db.job_config",
+        lambda *args, **kwargs: cfg,
+    )
+
+
+def test_manifest_read_nc_report_wins_over_disk(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Any
+) -> None:
+    out = tmp_path / "Out"
+    job_dir = out / "CusPO 002"
+    job_dir.mkdir(parents=True)
+    (job_dir / "Raport_NC.nc").write_text("x", encoding="utf-8")
+    (job_dir / "Arkusz_A1.nc").write_text("x", encoding="utf-8")
+    manifest = _manifest_with_sheet("Arkusz A1", nest_nc_filename="Raport_NC.nc")
+    _mock_manifest_read(monkeypatch, manifest, [])
+    _mock_manifest_nc(monkeypatch, str(out))
+
+    ac = Application(MagicMock())
+    result = ac.manifest_read("CusPO 002")
+
+    sheet = result["manifest"]["sheets"][0]
+    assert sheet["nc_filename"] == "Raport_NC.nc"
+    assert sheet["nc_path"] == str(job_dir / "Raport_NC.nc")
+    assert sheet["nc_source"] == "report"
+    assert result["manifest"]["nc_root"] == str(out)
+    assert result["manifest"]["nc_unmatched"] == [str(job_dir / "Arkusz_A1.nc")]
+    assert result["manifest"]["nc_missing"] == []
+
+
+def test_manifest_read_nc_report_stem_normalized_match(
+    tmp_path: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    out = tmp_path / "Out"
+    job_dir = out / "CusPO 002"
+    job_dir.mkdir(parents=True)
+    (job_dir / "Arkusz_A1.nc").write_text("x", encoding="utf-8")
+    manifest = _manifest_with_sheet("Arkusz A1", nest_nc_filename="Arkusz A1.nc")
+    _mock_manifest_read(monkeypatch, manifest, [])
+    _mock_manifest_nc(monkeypatch, str(out))
+
+    ac = Application(MagicMock())
+    result = ac.manifest_read("CusPO 002")
+
+    sheet = result["manifest"]["sheets"][0]
+    assert sheet["nc_filename"] == "Arkusz_A1.nc"
+    assert sheet["nc_path"] == str(job_dir / "Arkusz_A1.nc")
+    assert sheet["nc_source"] == "report"
+    assert result["manifest"]["nc_unmatched"] == []
+    assert result["manifest"]["nc_missing"] == []
+
+
+def test_manifest_read_nc_report_reuses_scan_candidates(
+    tmp_path: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    out = tmp_path / "Out"
+    job_dir = out / "CusPO 002"
+    job_dir.mkdir(parents=True)
+    (job_dir / "Raport_NC.nc").write_text("x", encoding="utf-8")
+    manifest = _manifest_with_sheet("Arkusz A1", nest_nc_filename="Raport_NC.nc")
+    _mock_manifest_read(monkeypatch, manifest, [])
+    _mock_manifest_nc(monkeypatch, str(out))
+    find_nc_path = MagicMock(return_value=str(job_dir / "Raport_NC.nc"))
+    monkeypatch.setattr("alphacam_cli.core.application.acrepd.find_nc_path", find_nc_path)
+
+    ac = Application(MagicMock())
+    result = ac.manifest_read("CusPO 002")
+
+    sheet = result["manifest"]["sheets"][0]
+    assert sheet["nc_filename"] == "Raport_NC.nc"
+    assert sheet["nc_path"] == str(job_dir / "Raport_NC.nc")
+    assert sheet["nc_source"] == "report"
+    find_nc_path.assert_called_once()
+    candidates = find_nc_path.call_args.kwargs["candidates"]
+    assert candidates is not None
+    assert any(c["filename"] == "Raport_NC.nc" for c in candidates)
+
+
+def test_manifest_read_nc_report_name_without_file_warns(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Any,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    out = tmp_path / "Out"
+    job_dir = out / "CusPO 002"
+    job_dir.mkdir(parents=True)
+    (job_dir / "Cos.nc").write_text("x", encoding="utf-8")
+    (job_dir / "Inny.nc").write_text("x", encoding="utf-8")
+    manifest = _manifest_with_sheet("Arkusz A1", nest_nc_filename="NieMa.nc")
+    _mock_manifest_read(monkeypatch, manifest, [])
+    _mock_manifest_nc(monkeypatch, str(out))
+
+    ac = Application(MagicMock())
+    with caplog.at_level("WARNING", logger="alphacam"):
+        result = ac.manifest_read("CusPO 002")
+
+    sheet = result["manifest"]["sheets"][0]
+    assert sheet["nc_filename"] == "NieMa.nc"
+    assert sheet["nc_path"] is None
+    assert sheet["nc_source"] is None
+    assert "report nc file not found on disk" in caplog.text
+    assert result["manifest"]["nc_unmatched"] == [
+        str(job_dir / "Cos.nc"),
+        str(job_dir / "Inny.nc"),
+    ]
+    assert result["success"] is True
+
+
+def test_manifest_read_nc_empty_dir_warns_once(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Any,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    out = tmp_path / "Out"
+    job_dir = out / "CusPO 002"
+    job_dir.mkdir(parents=True)
+    manifest = _manifest_with_sheet("Arkusz A1", nest_nc_filename="Raport_NC.nc")
+    _mock_manifest_read(monkeypatch, manifest, [])
+    _mock_manifest_nc(monkeypatch, str(out))
+
+    ac = Application(MagicMock())
+    with caplog.at_level("WARNING", logger="alphacam"):
+        result = ac.manifest_read("CusPO 002")
+
+    sheet = result["manifest"]["sheets"][0]
+    assert sheet["nc_filename"] == "Raport_NC.nc"
+    assert sheet["nc_path"] is None
+    assert sheet["nc_source"] is None
+    assert caplog.text.count("no nc candidates") == 1
+    assert "report nc file not found on disk" not in caplog.text
+
+
+def test_manifest_read_nc_disk_match(tmp_path: Any, monkeypatch: pytest.MonkeyPatch) -> None:
+    out = tmp_path / "Out"
+    job_dir = out / "CusPO 002"
+    job_dir.mkdir(parents=True)
+    (job_dir / "Arkusz_A1.nc").write_text("x", encoding="utf-8")
+    manifest = _manifest_with_sheet("Arkusz A1")
+    _mock_manifest_read(monkeypatch, manifest, [])
+    _mock_manifest_nc(monkeypatch, str(out))
+
+    ac = Application(MagicMock())
+    result = ac.manifest_read("CusPO 002")
+
+    sheet = result["manifest"]["sheets"][0]
+    assert sheet["nc_filename"] == "Arkusz_A1.nc"
+    assert sheet["nc_path"] == str(job_dir / "Arkusz_A1.nc")
+    assert sheet["nc_source"] == "disk"
+    assert result["manifest"]["nc_unmatched"] == []
+    assert result["manifest"]["nc_missing"] == []
+
+
+def test_manifest_read_nc_report_path_excludes_from_nc_missing(
+    tmp_path: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    out = tmp_path / "Out"
+    job_dir = out / "CusPO 002"
+    report_path = str(job_dir / "Raport_NC.nc")
+    manifest = _manifest_with_sheet("Arkusz A1", nest_nc_filename="Raport_NC.nc")
+    _mock_manifest_read(monkeypatch, manifest, [])
+    _mock_manifest_nc(monkeypatch, str(out))
+    find_nc_files = MagicMock(
+        return_value={
+            "nc_by_sheet": {},
+            "nc_matched_by_order": [],
+            "nc_unmatched": [],
+            "nc_missing": ["Arkusz A1"],
+            "nc_candidates": [],
+        }
+    )
+    monkeypatch.setattr("alphacam_cli.core.application.acrepd.find_nc_files", find_nc_files)
+    monkeypatch.setattr(
+        "alphacam_cli.core.application.acrepd.find_nc_path",
+        MagicMock(return_value=report_path),
+    )
+
+    ac = Application(MagicMock())
+    result = ac.manifest_read("CusPO 002")
+
+    sheet = result["manifest"]["sheets"][0]
+    assert sheet["nc_path"] == report_path
+    assert sheet["nc_source"] == "report"
+    assert result["manifest"]["nc_missing"] == []
+
+
+def test_manifest_read_nc_no_root_keeps_manifest(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    manifest = _manifest_with_sheet("Arkusz A1")
+    _mock_manifest_read(monkeypatch, manifest, [])
+    _mock_manifest_nc(monkeypatch, None)
+
+    ac = Application(MagicMock())
+    with caplog.at_level("WARNING", logger="alphacam"):
+        result = ac.manifest_read("CusPO 002")
+
+    assert result["success"] is True
+    assert result["manifest"]["nc_root"] is None
+    assert result["manifest"]["nc_missing"] == ["Arkusz A1"]
+    assert result["manifest"]["nc_unmatched"] == []
+    assert result["manifest"]["nc_matched_by_order"] == []
+    assert "nc discovery skipped" in caplog.text
+
+
+def test_manifest_empty_nc_result_shape_matches_find_nc_files() -> None:
+    result = _manifest_empty_nc_result([{"name": "A"}, {}])
+
+    assert set(result) == {
+        "nc_by_sheet",
+        "nc_matched_by_order",
+        "nc_unmatched",
+        "nc_missing",
+        "nc_candidates",
+    }
+    assert result["nc_by_sheet"] == {}
+    assert result["nc_matched_by_order"] == []
+    assert result["nc_unmatched"] == []
+    assert result["nc_missing"] == ["A"]
+    assert result["nc_candidates"] == []
+
+
+def test_manifest_read_nc_matched_by_order_in_manifest(
+    tmp_path: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    out = tmp_path / "Out"
+    job_dir = out / "CusPO 002"
+    job_dir.mkdir(parents=True)
+    (job_dir / "B.nc").write_text("x", encoding="utf-8")
+    (job_dir / "A.nc").write_text("x", encoding="utf-8")
+    manifest = _manifest_with_sheet("X1")
+    manifest["sheets"].append(
+        {"id": 2, "name": "X2", "database_name": "MDF_18", "nest_nc_filename": None, "parts": []}
+    )
+    _mock_manifest_read(monkeypatch, manifest, [])
+    _mock_manifest_nc(monkeypatch, str(out))
+
+    ac = Application(MagicMock())
+    result = ac.manifest_read("CusPO 002")
+
+    assert result["manifest"]["sheets"][0]["nc_filename"] == "A.nc"
+    assert result["manifest"]["sheets"][1]["nc_filename"] == "B.nc"
+    assert result["manifest"]["nc_matched_by_order"] == [0, 1]
+    assert result["manifest"]["nc_unmatched"] == []
+    assert result["manifest"]["nc_missing"] == []
+
+
+def test_manifest_read_nc_report_missing_falls_back_to_disk_match(
+    tmp_path: Any, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    out = tmp_path / "Out"
+    job_dir = out / "CusPO 002"
+    job_dir.mkdir(parents=True)
+    (job_dir / "Arkusz_A1.nc").write_text("x", encoding="utf-8")
+    manifest = _manifest_with_sheet("Arkusz A1", nest_nc_filename="NieMa.nc")
+    _mock_manifest_read(monkeypatch, manifest, [])
+    _mock_manifest_nc(monkeypatch, str(out))
+
+    ac = Application(MagicMock())
+    with caplog.at_level("WARNING", logger="alphacam"):
+        result = ac.manifest_read("CusPO 002")
+
+    sheet = result["manifest"]["sheets"][0]
+    assert sheet["nc_filename"] == "Arkusz_A1.nc"
+    assert sheet["nc_path"] == str(job_dir / "Arkusz_A1.nc")
+    assert sheet["nc_source"] == "disk"
+    assert "using disk match" in caplog.text
+    assert result["manifest"]["nc_unmatched"] == []
+    assert result["manifest"]["nc_missing"] == []
+
+
+def test_manifest_read_nc_root_override(tmp_path: Any, monkeypatch: pytest.MonkeyPatch) -> None:
+    out = tmp_path / "Out"
+    override = tmp_path / "Inne"
+    job_dir = override / "CusPO 002"
+    job_dir.mkdir(parents=True)
+    (job_dir / "Arkusz_A1.nc").write_text("x", encoding="utf-8")
+    manifest = _manifest_with_sheet("Arkusz A1")
+    _mock_manifest_read(monkeypatch, manifest, [])
+    _mock_manifest_nc(monkeypatch, str(out))
+
+    ac = Application(MagicMock())
+    result = ac.manifest_read("CusPO 002", nc_root=str(override))
+
+    assert result["manifest"]["nc_root"] == str(override)
+    assert result["manifest"]["sheets"][0]["nc_path"] == str(job_dir / "Arkusz_A1.nc")
+
+
+def test_manifest_read_nc_uses_nc_output_root(
+    tmp_path: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    out = tmp_path / "Out"
+    (out / "CusPO 002").mkdir(parents=True)
+    nc_dir = tmp_path / "NC_Out"
+    job_dir = nc_dir / "CusPO 002"
+    job_dir.mkdir(parents=True)
+    (job_dir / "Arkusz_A1.nc").write_text("x", encoding="utf-8")
+    manifest = _manifest_with_sheet("Arkusz A1")
+    _mock_manifest_read(monkeypatch, manifest, [])
+    _mock_manifest_nc(
+        monkeypatch,
+        str(out),
+        nc_config={"nc_output": str(nc_dir)},
+    )
+
+    ac = Application(MagicMock())
+    result = ac.manifest_read("CusPO 002")
+
+    sheet = result["manifest"]["sheets"][0]
+    assert result["manifest"]["nc_root"] == str(nc_dir)
+    assert sheet["nc_filename"] == "Arkusz_A1.nc"
+    assert sheet["nc_path"] == str(job_dir / "Arkusz_A1.nc")
+    assert sheet["nc_source"] == "disk"
+    assert result["manifest"]["nc_unmatched"] == []
+    assert result["manifest"]["nc_missing"] == []
+
+
+def test_manifest_read_nc_root_override_wins_over_nc_output(
+    tmp_path: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    out = tmp_path / "Out"
+    override = tmp_path / "Inne"
+    job_dir = override / "CusPO 002"
+    job_dir.mkdir(parents=True)
+    (job_dir / "Arkusz_A1.nc").write_text("x", encoding="utf-8")
+    manifest = _manifest_with_sheet("Arkusz A1")
+    _mock_manifest_read(monkeypatch, manifest, [])
+    _mock_manifest_nc(
+        monkeypatch,
+        str(out),
+        nc_config={"nc_output": str(tmp_path / "NC_Out")},
+    )
+
+    ac = Application(MagicMock())
+    result = ac.manifest_read("CusPO 002", nc_root=str(override))
+
+    assert result["manifest"]["nc_root"] == str(override)
+    assert result["manifest"]["sheets"][0]["nc_path"] == str(job_dir / "Arkusz_A1.nc")
+
+
+def test_manifest_read_nc_config_present(tmp_path: Any, monkeypatch: pytest.MonkeyPatch) -> None:
+    out = tmp_path / "Out"
+    (out / "CusPO 002").mkdir(parents=True)
+    manifest = _manifest_with_sheet("Arkusz A1")
+    _mock_manifest_read(monkeypatch, manifest, [])
+    _mock_manifest_nc(monkeypatch, str(out))
+
+    ac = Application(MagicMock())
+    result = ac.manifest_read("CusPO 002")
+
+    assert result["manifest"]["nc_config"] == {
+        "replace_space_with_underscore": None,
+        "split_nested_sheet_drawings": None,
+        "use_name_identifiers": None,
+    }
+
+
+def test_manifest_read_nc_config_from_job_nc_config(
+    tmp_path: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    out = tmp_path / "Out"
+    (out / "CusPO 002").mkdir(parents=True)
+    manifest = _manifest_with_sheet("Arkusz A1")
+    _mock_manifest_read(monkeypatch, manifest, [])
+    _mock_manifest_nc(
+        monkeypatch,
+        str(out),
+        nc_config={
+            "nc_output": str(out),
+            "replace_space_with_underscore": True,
+            "split_nested_sheet_drawings": True,
+            "use_name_identifiers": False,
+        },
+    )
+
+    ac = Application(MagicMock())
+    result = ac.manifest_read("CusPO 002")
+
+    assert result["manifest"]["nc_root"] == str(out)
+    assert result["manifest"]["nc_config"] == {
+        "replace_space_with_underscore": True,
+        "split_nested_sheet_drawings": True,
+        "use_name_identifiers": False,
+    }
+
+
+def test_manifest_read_nc_find_flags_from_job_nc_config(
+    tmp_path: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    out = tmp_path / "Out"
+    (out / "CusPO 002").mkdir(parents=True)
+    manifest = _manifest_with_sheet("Arkusz A1")
+    _mock_manifest_read(monkeypatch, manifest, [])
+    _mock_manifest_nc(
+        monkeypatch,
+        str(out),
+        nc_config={
+            "nc_output": str(out),
+            "replace_space_with_underscore": True,
+            "split_nested_sheet_drawings": False,
+            "use_name_identifiers": False,
+        },
+    )
+    find_nc_files = MagicMock(
+        return_value={
+            "nc_by_sheet": {},
+            "nc_matched_by_order": [],
+            "nc_unmatched": [],
+            "nc_missing": [],
+        }
+    )
+    monkeypatch.setattr("alphacam_cli.core.application.acrepd.find_nc_files", find_nc_files)
+
+    ac = Application(MagicMock())
+    ac.manifest_read("CusPO 002")
+
+    find_nc_files.assert_called_once()
+    assert find_nc_files.call_args.kwargs["config"] == {
+        "replace_space_with_underscore": True,
+        "split_nested_sheet_drawings": False,
+        "use_name_identifiers": False,
+    }
+
+
+def test_manifest_read_nc_find_config_none_when_all_flags_unset(
+    tmp_path: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    out = tmp_path / "Out"
+    (out / "CusPO 002").mkdir(parents=True)
+    manifest = _manifest_with_sheet("Arkusz A1")
+    _mock_manifest_read(monkeypatch, manifest, [])
+    _mock_manifest_nc(monkeypatch, str(out))
+    find_nc_files = MagicMock(
+        return_value={
+            "nc_by_sheet": {},
+            "nc_matched_by_order": [],
+            "nc_unmatched": [],
+            "nc_missing": [],
+        }
+    )
+    monkeypatch.setattr("alphacam_cli.core.application.acrepd.find_nc_files", find_nc_files)
+
+    ac = Application(MagicMock())
+    ac.manifest_read("CusPO 002")
+
+    find_nc_files.assert_called_once()
+    assert find_nc_files.call_args.kwargs["config"] is None
+
+
+def test_manifest_read_nc_scan_failure_no_report_warnings(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Any,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    out = tmp_path / "Out"
+    (out / "CusPO 002").mkdir(parents=True)
+    manifest = _manifest_with_sheet("Arkusz A1", nest_nc_filename="Raport_NC.nc")
+    _mock_manifest_read(monkeypatch, manifest, [])
+    _mock_manifest_nc(monkeypatch, str(out))
+    monkeypatch.setattr(
+        "alphacam_cli.core.application.acrepd.find_nc_files",
+        MagicMock(side_effect=RuntimeError("scan boom")),
+    )
+
+    ac = Application(MagicMock())
+    with caplog.at_level("WARNING", logger="alphacam"):
+        result = ac.manifest_read("CusPO 002")
+
+    sheet = result["manifest"]["sheets"][0]
+    assert result["success"] is True
+    assert sheet["nc_filename"] == "Raport_NC.nc"
+    assert sheet["nc_path"] is None
+    assert sheet["nc_source"] is None
+    assert "nc discovery failed" in caplog.text
+    assert "not found on disk" not in caplog.text
+    assert result["manifest"]["nc_unmatched"] == []
+    assert result["manifest"]["nc_missing"] == ["Arkusz A1"]
+
+
+def test_manifest_read_nc_no_root_report_name_no_warnings(
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    manifest = _manifest_with_sheet("Arkusz A1", nest_nc_filename="Raport_NC.nc")
+    _mock_manifest_read(monkeypatch, manifest, [])
+    _mock_manifest_nc(monkeypatch, None)
+
+    ac = Application(MagicMock())
+    with caplog.at_level("WARNING", logger="alphacam"):
+        result = ac.manifest_read("CusPO 002")
+
+    sheet = result["manifest"]["sheets"][0]
+    assert result["success"] is True
+    assert sheet["nc_filename"] == "Raport_NC.nc"
+    assert sheet["nc_path"] is None
+    assert sheet["nc_source"] is None
+    assert "nc discovery skipped" in caplog.text
+    assert "not found on disk" not in caplog.text
+    assert result["manifest"]["nc_unmatched"] == []
+
+
+def _manifest_with_two_sheets() -> dict[str, Any]:
+    manifest = _manifest_with_sheet("Arkusz A1", nest_nc_filename="Raport_NC.nc")
+    manifest["sheets"].append(
+        {
+            "id": 2,
+            "name": "Arkusz A2",
+            "database_name": "MDF_18",
+            "nest_nc_filename": "Raport_NC.nc",
+            "parts": [],
+        }
+    )
+    return manifest
+
+
+def test_manifest_read_nc_shared_report_name_without_file(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Any,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    out = tmp_path / "Out"
+    (out / "CusPO 002").mkdir(parents=True)
+    manifest = _manifest_with_two_sheets()
+    _mock_manifest_read(monkeypatch, manifest, [])
+    _mock_manifest_nc(monkeypatch, str(out))
+
+    ac = Application(MagicMock())
+    with caplog.at_level("WARNING", logger="alphacam"):
+        result = ac.manifest_read("CusPO 002")
+
+    sheets = result["manifest"]["sheets"]
+    assert [s["nc_filename"] for s in sheets] == ["Raport_NC.nc", "Raport_NC.nc"]
+    assert [s["nc_path"] for s in sheets] == [None, None]
+    assert [s["nc_source"] for s in sheets] == [None, None]
+    assert result["manifest"]["nc_unmatched"] == []
+    assert result["manifest"]["nc_missing"] == ["Arkusz A1", "Arkusz A2"]
+
+
+def test_manifest_read_nc_shared_report_name_with_file(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Any,
+) -> None:
+    out = tmp_path / "Out"
+    job_dir = out / "CusPO 002"
+    job_dir.mkdir(parents=True)
+    (job_dir / "Raport_NC.nc").write_text("x", encoding="utf-8")
+    (job_dir / "Arkusz_A1.nc").write_text("x", encoding="utf-8")
+    (job_dir / "Arkusz_A2.nc").write_text("x", encoding="utf-8")
+    manifest = _manifest_with_two_sheets()
+    _mock_manifest_read(monkeypatch, manifest, [])
+    _mock_manifest_nc(monkeypatch, str(out))
+
+    ac = Application(MagicMock())
+    result = ac.manifest_read("CusPO 002")
+
+    sheets = result["manifest"]["sheets"]
+    report_path = str(job_dir / "Raport_NC.nc")
+    assert [s["nc_filename"] for s in sheets] == ["Raport_NC.nc", "Raport_NC.nc"]
+    assert [s["nc_path"] for s in sheets] == [report_path, report_path]
+    assert [s["nc_source"] for s in sheets] == ["report", "report"]
+    assert report_path not in result["manifest"]["nc_unmatched"]
+    assert result["manifest"]["nc_missing"] == []
+
+
+def test_manifest_read_nc_shared_disk_file_not_unmatched(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Any,
+) -> None:
+    out = tmp_path / "Out"
+    job_dir = out / "CusPO 002"
+    shared_path = str(job_dir / "Arkusz_A1.nc")
+    other_path = str(job_dir / "Inny.nc")
+    report_path = str(job_dir / "Raport_NC.nc")
+    manifest = _manifest_with_sheet("Arkusz A1", nest_nc_filename="Raport_NC.nc")
+    manifest["sheets"].append(
+        {
+            "id": 2,
+            "name": "Arkusz A2",
+            "database_name": "MDF_18",
+            "nest_nc_filename": None,
+            "parts": [],
+        }
+    )
+    _mock_manifest_read(monkeypatch, manifest, [])
+    _mock_manifest_nc(
+        monkeypatch,
+        str(out),
+        nc_config={"nc_output": str(out), "split_nested_sheet_drawings": False},
+    )
+    shared = {"nc_filename": "Arkusz_A1.nc", "nc_path": shared_path, "nc_source": "disk"}
+    find_nc_files = MagicMock(
+        return_value={
+            "nc_by_sheet": {0: dict(shared), 1: dict(shared)},
+            "nc_matched_by_order": [],
+            "nc_unmatched": [other_path],
+            "nc_missing": [],
+            "nc_candidates": [
+                {
+                    "path": shared_path,
+                    "filename": "Arkusz_A1.nc",
+                    "stem": "Arkusz_A1",
+                    "preferred": True,
+                }
+            ],
+        }
+    )
+    monkeypatch.setattr("alphacam_cli.core.application.acrepd.find_nc_files", find_nc_files)
+    monkeypatch.setattr(
+        "alphacam_cli.core.application.acrepd.find_nc_path",
+        MagicMock(return_value=report_path),
+    )
+
+    ac = Application(MagicMock())
+    result = ac.manifest_read("CusPO 002")
+
+    sheets = result["manifest"]["sheets"]
+    assert sheets[0]["nc_filename"] == "Raport_NC.nc"
+    assert sheets[0]["nc_path"] == report_path
+    assert sheets[0]["nc_source"] == "report"
+    assert sheets[1]["nc_filename"] == "Arkusz_A1.nc"
+    assert sheets[1]["nc_path"] == shared_path
+    assert sheets[1]["nc_source"] == "disk"
+    assert shared_path not in result["manifest"]["nc_unmatched"]
+    assert other_path in result["manifest"]["nc_unmatched"]
+
+
+def test_manifest_read_nc_superseded_path_used_by_other_report(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Any,
+) -> None:
+    out = tmp_path / "Out"
+    job_dir = out / "CusPO 002"
+    disk_a = str(job_dir / "Arkusz_A1.nc")
+    report_a = str(job_dir / "Raport_NC.nc")
+    manifest = _manifest_with_sheet("Arkusz A1", nest_nc_filename="Raport_NC.nc")
+    manifest["sheets"].append(
+        {
+            "id": 2,
+            "name": "Arkusz A2",
+            "database_name": "MDF_18",
+            "nest_nc_filename": "Inny_NC.nc",
+            "parts": [],
+        }
+    )
+    _mock_manifest_read(monkeypatch, manifest, [])
+    _mock_manifest_nc(monkeypatch, str(out))
+    find_nc_files = MagicMock(
+        return_value={
+            "nc_by_sheet": {
+                0: {"nc_filename": "Arkusz_A1.nc", "nc_path": disk_a, "nc_source": "disk"},
+                1: None,
+            },
+            "nc_matched_by_order": [],
+            "nc_unmatched": [],
+            "nc_missing": [],
+            "nc_candidates": [],
+        }
+    )
+    monkeypatch.setattr("alphacam_cli.core.application.acrepd.find_nc_files", find_nc_files)
+    monkeypatch.setattr(
+        "alphacam_cli.core.application.acrepd.find_nc_path",
+        MagicMock(side_effect=[report_a, disk_a]),
+    )
+
+    ac = Application(MagicMock())
+    result = ac.manifest_read("CusPO 002")
+
+    sheets = result["manifest"]["sheets"]
+    assert sheets[0]["nc_path"] == report_a
+    assert sheets[0]["nc_source"] == "report"
+    assert sheets[1]["nc_path"] == disk_a
+    assert sheets[1]["nc_source"] == "report"
+    assert result["manifest"]["nc_unmatched"] == []
+
+
+def test_manifest_read_nc_report_wins_removes_positional_index(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Any,
+) -> None:
+    out = tmp_path / "Out"
+    job_dir = out / "CusPO 002"
+    manifest = _manifest_with_sheet("X1", nest_nc_filename="Raport_NC.nc")
+    manifest["sheets"].append(
+        {
+            "id": 2,
+            "name": "X2",
+            "database_name": "MDF_18",
+            "nest_nc_filename": None,
+            "parts": [],
+        }
+    )
+    _mock_manifest_read(monkeypatch, manifest, [])
+    _mock_manifest_nc(monkeypatch, str(out))
+    first = {"nc_filename": "A.nc", "nc_path": str(job_dir / "A.nc"), "nc_source": "disk"}
+    second = {"nc_filename": "B.nc", "nc_path": str(job_dir / "B.nc"), "nc_source": "disk"}
+    find_nc_files = MagicMock(
+        return_value={
+            "nc_by_sheet": {0: first, 1: second},
+            "nc_matched_by_order": [0, 1],
+            "nc_unmatched": [],
+            "nc_missing": [],
+            "nc_candidates": [],
+        }
+    )
+    monkeypatch.setattr("alphacam_cli.core.application.acrepd.find_nc_files", find_nc_files)
+    monkeypatch.setattr(
+        "alphacam_cli.core.application.acrepd.find_nc_path",
+        MagicMock(return_value=str(job_dir / "Raport_NC.nc")),
+    )
+
+    ac = Application(MagicMock())
+    result = ac.manifest_read("CusPO 002")
+
+    assert result["manifest"]["sheets"][0]["nc_source"] == "report"
+    assert result["manifest"]["nc_matched_by_order"] == [1]

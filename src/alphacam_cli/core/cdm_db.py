@@ -452,14 +452,51 @@ def _job_config_read(job_name: str) -> str | None:
     return proc.stdout
 
 
-def job_config(job_name: str) -> dict[str, object] | None:
+def _resolve_output_path(path: str, licomdir: str | None) -> str:
+    """Prefix a relative job output path with ``licomdir``; absolute paths pass through."""
+    if re.match(r"^[A-Za-z]:[\\/]", path) or re.match(r"^\\\\", path) or re.match(r"^//", path):
+        return os.path.normpath(path)
+    if licomdir:
+        return os.path.normpath(licomdir + "\\" + path)
+    logger.warning("cdm job config: relative output path without licomdir: %s", path)
+    return os.path.normpath(path)
+
+
+def _job_config_flag(stdout: str, key: str, *, empty_false: bool) -> bool | None:
+    """Parse a ``key:`` flag line; True/False (case-insensitive) or "1"/"0".
+
+    An empty value becomes False when ``empty_false`` is set (GenerateReports
+    semantics) and None otherwise (NC flag semantics); a missing or
+    unparseable line is None.
+    """
+    match = re.search(rf"(?m)^{re.escape(key)}:[ \t]*(.*)$", stdout)
+    if match is None:
+        return None
+    raw = match.group(1).strip().casefold()
+    if raw == "":
+        return False if empty_false else None
+    if raw in ("true", "1"):
+        return True
+    if raw in ("false", "0"):
+        return False
+    return None
+
+
+def job_config(job_name: str, licomdir: str | None = None) -> dict[str, object] | None:
     """Read the full job configuration in one pass; None when the read fails.
 
-    Returns ``{"output_root": str | None, "generate_reports": bool | None}``
-    parsed from the job configuration's ``DrawingFileOutputLocation`` and
-    ``GenerateReports`` (AM_ConfigurationSettings). Relative output paths
-    (``LICOMDIR\\...``) are prefixed with ``C:\\ALPHACAM\\``. None only when
-    the job has no configuration or the read fails.
+    Returns ``{"output_root": str | None, "nc_output": str | None,
+    "generate_reports": bool | None, "replace_space_with_underscore":
+    bool | None, "split_nested_sheet_drawings": bool | None,
+    "use_name_identifiers": bool | None}`` parsed from the job
+    configuration's ``DrawingFileOutputLocation``, ``NCFileOutputLocation``,
+    ``GenerateReports``, ``ReplaceSpaceWithUnderscore``,
+    ``Nesting_SplitNestedSheetDrawings`` and ``Nesting_UseNameIdentifiers``
+    (AM_ConfigurationSettings). Relative output paths (``LICOMDIR\\...``)
+    are prefixed with ``licomdir`` (the directory above LICOMDIR, e.g.
+    ``C:\\ALPHACAM``) when given; without it the relative path is kept and a
+    warning is logged. None only when the job has no configuration or the
+    read fails.
     """
     stdout = _job_config_read(job_name)
     if stdout is None:
@@ -469,36 +506,68 @@ def job_config(job_name: str) -> dict[str, object] | None:
     if match is not None:
         path = match.group(1).strip()
         if path:
-            if not re.match(r"^[A-Za-z]:", path):
-                path = "C:\\ALPHACAM\\" + path
-            output_root = path
-    generate_reports: bool | None = None
-    match = re.search(r"(?m)^generate_reports:[ \t]*(.*)$", stdout)
+            output_root = _resolve_output_path(path, licomdir)
+    nc_output: str | None = None
+    match = re.search(r"(?m)^nc_output:[ \t]*(.*)$", stdout)
     if match is not None:
-        raw = match.group(1).strip().casefold()
-        if raw == "":
-            generate_reports = False
-        elif raw in ("true", "1"):
-            generate_reports = True
-        elif raw in ("false", "0"):
-            generate_reports = False
-    return {"output_root": output_root, "generate_reports": generate_reports}
+        path = match.group(1).strip()
+        if path:
+            nc_output = _resolve_output_path(path, licomdir)
+    return {
+        "output_root": output_root,
+        "nc_output": nc_output,
+        "generate_reports": _job_config_flag(stdout, "generate_reports", empty_false=True),
+        "replace_space_with_underscore": _job_config_flag(
+            stdout, "replace_space_with_underscore", empty_false=False
+        ),
+        "split_nested_sheet_drawings": _job_config_flag(
+            stdout, "split_nested_sheet_drawings", empty_false=False
+        ),
+        "use_name_identifiers": _job_config_flag(stdout, "use_name_identifiers", empty_false=False),
+    }
 
 
-def job_output_root(job_name: str) -> str | None:
+def job_output_root(job_name: str, licomdir: str | None = None) -> str | None:
     """Read the output root for a job from its configuration; None when missing.
 
     The value is the job configuration's ``DrawingFileOutputLocation``
     (AM_ConfigurationSettings). Relative paths (``LICOMDIR\\...``) are
-    prefixed with ``C:\\ALPHACAM\\``; None when the job has no
+    prefixed with ``licomdir`` when given; None when the job has no
     configuration or the read fails.
     """
-    cfg = job_config(job_name)
+    cfg = job_config(job_name, licomdir=licomdir)
     value = cfg.get("output_root") if cfg else None
     return value if isinstance(value, str) else None
 
 
-def job_generate_reports(job_name: str) -> bool | None:
+def job_nc_config(job_name: str, licomdir: str | None = None) -> dict[str, object] | None:
+    """Read NC naming/output flags for a job from its configuration.
+
+    Returns ``{"nc_output": str | None, "replace_space_with_underscore":
+    bool | None, "split_nested_sheet_drawings": bool | None,
+    "use_name_identifiers": bool | None}`` parsed from
+    ``NCFileOutputLocation``, ``ReplaceSpaceWithUnderscore``,
+    ``Nesting_SplitNestedSheetDrawings`` and ``Nesting_UseNameIdentifiers``
+    (AM_ConfigurationSettings). Flags are True/False (case-insensitive) or
+    "1"/"0"; an empty value stays None. Relative ``nc_output`` paths are
+    prefixed with ``licomdir`` like ``DrawingFileOutputLocation``. None only
+    when the job has no configuration or the read fails.
+    """
+    cfg = job_config(job_name, licomdir=licomdir)
+    if cfg is None:
+        return None
+    return {
+        key: cfg.get(key)
+        for key in (
+            "nc_output",
+            "replace_space_with_underscore",
+            "split_nested_sheet_drawings",
+            "use_name_identifiers",
+        )
+    }
+
+
+def job_generate_reports(job_name: str, licomdir: str | None = None) -> bool | None:
     """Read the GenerateReports flag for a job from its configuration.
 
     The value is the job configuration's ``GenerateReports``
@@ -507,7 +576,7 @@ def job_generate_reports(job_name: str) -> bool | None:
     None when the flag is absent, unparseable, or the job has no
     configuration / the read fails.
     """
-    cfg = job_config(job_name)
+    cfg = job_config(job_name, licomdir=licomdir)
     value = cfg.get("generate_reports") if cfg else None
     return value if isinstance(value, bool) else None
 

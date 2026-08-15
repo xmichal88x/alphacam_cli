@@ -834,7 +834,7 @@ class Application:
             )
         if count < 1:
             raise RuntimeError(f"cdm: job not found: {job_name}")  # noqa: TRY003
-        cfg = cdm_db.job_config(job_name)
+        cfg = cdm_db.job_config(job_name, licomdir=self.licomdir_path)
         if output_root is None:
             root = cfg.get("output_root") if cfg else None
             output_root = root if isinstance(root, str) else None
@@ -1414,10 +1414,20 @@ class Application:
             raise RuntimeError(  # noqa: TRY003
                 f"manifest: reports data directory not found: {data_dir}"
             )
+        manifests = []
+        for manifest in acrepd.manifest_files(data_dir):
+            try:
+                sheet_count, first_utilization = acrepd.sheet_count_light(manifest["path"])
+            except Exception:  # noqa: BLE001
+                logger.warning("manifest: sheet_count_light failed for %s", manifest["path"])
+                sheet_count, first_utilization = 0, None
+            manifest["sheet_count"] = sheet_count
+            manifest["first_utilization"] = first_utilization
+            manifests.append(manifest)
         return {
             "success": True,
             "directory": data_dir,
-            "manifests": acrepd.manifest_files(data_dir),
+            "manifests": manifests,
         }
 
     def manifest_read(
@@ -1425,6 +1435,11 @@ class Application:
         job_name: str | None = None,
         material: str | None = None,
         data_dir: str | None = None,
+        nc_root: str | None = None,
+        by_token: bool = False,
+        fill_threshold: int | None = None,
+        validate: bool = False,
+        token_qty: dict[str, int] | None = None,
     ) -> dict[str, Any]:
         """Read a nesting results manifest (.acrepd) for a job and optional material."""
         if job_name is None:
@@ -1440,7 +1455,16 @@ class Application:
             raise RuntimeError(f"manifest: not found: {job_name}")  # noqa: TRY003
         manifest = acrepd.parse_manifest(path)
         _enrich_manifest_customer(manifest, job_name)
-        return {"success": True, "manifest": manifest}
+        _enrich_manifest_nc(manifest, job_name, nc_root, licomdir=self.licomdir_path)
+        for sheet in manifest.get("sheets") or []:
+            if isinstance(sheet, dict):
+                sheet["fill_class"] = acrepd.fill_class(sheet.get("utilization"), fill_threshold)
+        result: dict[str, Any] = {"success": True, "manifest": manifest}
+        if by_token:
+            result["by_token"] = acrepd.aggregate_by_token(manifest)
+        if validate or token_qty:
+            result["validation"] = acrepd.validate_manifest(manifest, token_qty)
+        return result
 
     def delete_cdm_job(self, job_name: str) -> dict[str, Any]:
         """Delete a CDM job from the database (headless, no dialogs)."""
@@ -1560,6 +1584,187 @@ def _enrich_manifest_customer(manifest: dict[str, Any], job_name: str) -> None:
             label = names.get(n) or f"custom_field_{n}"
             named[label] = value.strip()
         part["custom_fields"] = named
+
+
+_NC_CONFIG_KEYS = (
+    "replace_space_with_underscore",
+    "split_nested_sheet_drawings",
+    "use_name_identifiers",
+)
+
+
+def _manifest_empty_nc_result(
+    sheets: list[dict[str, Any]],
+) -> dict[str, Any]:
+    """Return an empty NC discovery result (no root / scan failure)."""
+    return {
+        "nc_by_sheet": {},
+        "nc_matched_by_order": [],
+        "nc_unmatched": [],
+        "nc_missing": [sheet["name"] for sheet in sheets if isinstance(sheet.get("name"), str)],
+        "nc_candidates": [],
+    }
+
+
+def _enrich_manifest_nc(
+    manifest: dict[str, Any],
+    job_name: str,
+    nc_root: str | None,
+    licomdir: str | None = None,
+) -> None:
+    """Fill sheet nc_filename/nc_path/nc_source from the report and the disk.
+
+    Report names (``nest_nc_filename``) win over disk matches when the file
+    exists under the job output root; a report name without a file keeps the
+    name, falling back to a disk match when one exists. Per-sheet warnings
+    are only emitted when the disk scan actually ran; a disk match that
+    loses to a report is reported as unmatched. Disk discovery uses
+    ``acrepd.find_nc_files``. A missing root or a failed read only logs a
+    warning — the manifest is still returned. The scan root is the explicit
+    ``nc_root`` override, else the job's ``NCFileOutputLocation``
+    (``nc_output``), else ``DrawingFileOutputLocation`` (``output_root``);
+    NC naming flags come from the same ``cdm_db.job_config`` read and
+    ``licomdir`` prefixes relative job output paths.
+    """
+    sheets = manifest.get("sheets") or []
+    if not isinstance(sheets, list):
+        sheets = []
+    nc_config: dict[str, Any] = {key: None for key in _NC_CONFIG_KEYS}
+    try:
+        job_cfg = cdm_db.job_config(job_name, licomdir=licomdir)
+    except Exception as e:
+        logger.warning("manifest: job config read failed for %s: %r", job_name, e)
+        job_cfg = None
+    if job_cfg:
+        for key in nc_config:
+            value = job_cfg.get(key)
+            if value is not None:
+                nc_config[key] = value
+    flags: dict[str, Any] | None = {k: v for k, v in nc_config.items() if v is not None}
+    if not flags:
+        flags = None
+    root: str | None = nc_root
+    if root is None:
+        nc_output = job_cfg.get("nc_output") if job_cfg else None
+        if isinstance(nc_output, str) and nc_output:
+            root = nc_output
+        else:
+            output_root = job_cfg.get("output_root") if job_cfg else None
+            root = output_root if isinstance(output_root, str) else None
+    if root is None:
+        logger.warning("manifest: no nc root for %s, nc discovery skipped", job_name)
+        result = _manifest_empty_nc_result(sheets)
+    else:
+        try:
+            result = acrepd.find_nc_files(
+                job_root=os.path.join(root, job_name),
+                sheets=sheets,
+                material=manifest.get("material"),
+                config=flags,
+            )
+        except Exception as e:
+            logger.warning("manifest: nc discovery failed for %s: %r", job_name, e)
+            result = _manifest_empty_nc_result(sheets)
+    nc_candidates = result.get("nc_candidates")
+    scan_run = bool(root)
+    if root is not None and not nc_candidates:
+        logger.warning(
+            "manifest: no nc candidates under %s",
+            os.path.join(root, job_name),
+        )
+    scan_attempted = scan_run and bool(nc_candidates)
+    report_used: set[str] = set()
+    superseded: list[str] = []
+    order_removed: set[int] = set()
+    for index, sheet in enumerate(sheets):
+        if not isinstance(sheet, dict):
+            continue
+        if sheet.get("nc_filename") or sheet.get("nc_path"):
+            continue
+        disk_match = result["nc_by_sheet"].get(index)
+        report_name = sheet.get("nest_nc_filename")
+        if isinstance(report_name, str) and report_name.strip():
+            report_name = report_name.strip()
+            report_path = (
+                acrepd.find_nc_path(
+                    os.path.join(root, job_name),
+                    report_name,
+                    candidates=nc_candidates,
+                )
+                if root
+                else None
+            )
+            sheet["nc_path"] = report_path
+            if report_path is not None:
+                sheet["nc_filename"] = os.path.basename(report_path)
+                sheet["nc_source"] = "report"
+                report_used.add(report_path)
+                if disk_match is not None and disk_match["nc_path"] != report_path:
+                    superseded.append(disk_match["nc_path"])
+                    if isinstance(result.get("nc_matched_by_order"), list):
+                        order_removed.add(index)
+            elif disk_match is not None:
+                sheet["nc_filename"] = disk_match["nc_filename"]
+                sheet["nc_path"] = disk_match["nc_path"]
+                sheet["nc_source"] = "disk"
+                if scan_attempted:
+                    logger.warning(
+                        "manifest: report nc file not found on disk (%s), using disk match %s",
+                        report_name,
+                        disk_match["nc_path"],
+                    )
+            else:
+                sheet["nc_filename"] = report_name
+                sheet["nc_path"] = None
+                sheet["nc_source"] = None
+                if scan_attempted:
+                    logger.warning("manifest: report nc file not found on disk: %s", report_name)
+            continue
+        if disk_match is not None:
+            sheet["nc_filename"] = disk_match["nc_filename"]
+            sheet["nc_path"] = disk_match["nc_path"]
+            sheet["nc_source"] = "disk"
+    nc_unmatched = result["nc_unmatched"]
+    if report_used:
+        used_norm = {os.path.normpath(path).casefold() for path in report_used}
+        nc_unmatched = [
+            path for path in nc_unmatched if os.path.normpath(path).casefold() not in used_norm
+        ]
+    used_by_other_sheets = {
+        os.path.normpath(sheet["nc_path"]).casefold()
+        for sheet in sheets
+        if isinstance(sheet, dict) and sheet.get("nc_path")
+    }
+    nc_unmatched = [
+        path
+        for path in nc_unmatched + superseded
+        if os.path.normpath(path).casefold() not in used_by_other_sheets
+    ]
+    deduped: list[str] = []
+    seen: set[str] = set()
+    for path in nc_unmatched:
+        norm_path = os.path.normpath(path).casefold()
+        if norm_path not in seen:
+            seen.add(norm_path)
+            deduped.append(path)
+    nc_unmatched = deduped
+    manifest["nc_root"] = root
+    manifest["nc_config"] = nc_config
+    manifest["nc_unmatched"] = nc_unmatched
+    manifest["nc_missing"] = [
+        sheet.get("name")
+        for sheet in sheets
+        if isinstance(sheet, dict)
+        and isinstance(sheet.get("name"), str)
+        and not sheet.get("nc_path")
+    ]
+    if "nc_matched_by_order" in result:
+        if order_removed:
+            manifest["nc_matched_by_order"] = [
+                index for index in result["nc_matched_by_order"] if index not in order_removed
+            ]
+        else:
+            manifest["nc_matched_by_order"] = result["nc_matched_by_order"]
 
 
 _FIELD_SETTERS: dict[str, str] = {

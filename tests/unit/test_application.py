@@ -607,3 +607,67 @@ def test_apply_mill_style_error(mock_com: MagicMock) -> None:
             ac = Application(raw)
             with pytest.raises(RuntimeError, match="Failed to apply mill style"):
                 ac.apply_mill_style(r"C:\ALPHACAM\LICOMDIR\Styles\Edge.ary")
+
+
+def test_manifest_list_adds_sheet_stats(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: pathlib.Path
+) -> None:
+    monkeypatch.setattr(
+        "alphacam_cli.core.application.acrepd._reports_data_dir",
+        lambda licomdir_path, data_dir: str(tmp_path),
+    )
+    manifest = {
+        "path": "C:/Reports/Data/Fronty - MDF_18.acrepd",
+        "job_name": "Fronty",
+        "material": "MDF_18",
+        "size": 1234,
+        "mtime": 1700000000.0,
+    }
+    monkeypatch.setattr(
+        "alphacam_cli.core.application.acrepd.manifest_files",
+        lambda data_dir: [manifest],
+    )
+    monkeypatch.setattr(
+        "alphacam_cli.core.application.acrepd.sheet_count_light",
+        lambda path: (2, 29),
+    )
+    result = Application(MagicMock()).manifest_list(None)
+    assert result["manifests"] == [
+        {
+            "path": "C:/Reports/Data/Fronty - MDF_18.acrepd",
+            "job_name": "Fronty",
+            "material": "MDF_18",
+            "size": 1234,
+            "mtime": 1700000000.0,
+            "sheet_count": 2,
+            "first_utilization": 29,
+        }
+    ]
+
+
+def test_manifest_list_sheet_stats_error_fallback(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: pathlib.Path
+) -> None:
+    monkeypatch.setattr(
+        "alphacam_cli.core.application.acrepd._reports_data_dir",
+        lambda licomdir_path, data_dir: str(tmp_path),
+    )
+    monkeypatch.setattr(
+        "alphacam_cli.core.application.acrepd.manifest_files",
+        lambda data_dir: [
+            {
+                "path": "C:/Reports/Data/Fronty - MDF_18.acrepd",
+                "job_name": "Fronty",
+                "material": "MDF_18",
+                "size": 1234,
+                "mtime": 1700000000.0,
+            }
+        ],
+    )
+    monkeypatch.setattr(
+        "alphacam_cli.core.application.acrepd.sheet_count_light",
+        lambda path: (_ for _ in ()).throw(RuntimeError("boom")),
+    )
+    result = Application(MagicMock()).manifest_list(None)
+    assert result["manifests"][0]["sheet_count"] == 0
+    assert result["manifests"][0]["first_utilization"] is None

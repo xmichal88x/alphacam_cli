@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import os
 import pathlib
 import textwrap
+from typing import Any
 
 import pytest
 
@@ -647,6 +649,98 @@ def test_manifest_files(tmp_path: pathlib.Path) -> None:
     assert isinstance(manifests[1]["mtime"], float)
 
 
+def test_sheet_count_light_full(manifest_file: pathlib.Path) -> None:
+    assert acrepd.sheet_count_light(str(manifest_file)) == (2, 29)
+
+
+def test_sheet_count_light_scrap_zero(tmp_path: pathlib.Path) -> None:
+    path = tmp_path / "Fronty - MDF_18.acrepd"
+    path.write_text(
+        _FULL_MANIFEST_XML.replace("<SheetScrap>71</SheetScrap>", "<SheetScrap>0</SheetScrap>"),
+        encoding="utf-8",
+    )
+    assert acrepd.sheet_count_light(str(path)) == (2, 100)
+
+
+def test_sheet_count_light_scrap_non_numeric(tmp_path: pathlib.Path) -> None:
+    path = tmp_path / "Fronty - MDF_18.acrepd"
+    path.write_text(
+        _FULL_MANIFEST_XML.replace("<SheetScrap>71</SheetScrap>", "<SheetScrap>abc</SheetScrap>"),
+        encoding="utf-8",
+    )
+    assert acrepd.sheet_count_light(str(path)) == (2, None)
+
+
+def test_sheet_count_light_missing_scrap(tmp_path: pathlib.Path) -> None:
+    path = tmp_path / "Fronty - MDF_18.acrepd"
+    path.write_text(_FULL_MANIFEST_XML.replace("<SheetScrap>71</SheetScrap>", ""), encoding="utf-8")
+    assert acrepd.sheet_count_light(str(path)) == (2, None)
+
+
+def test_sheet_count_light_namespaced(tmp_path: pathlib.Path) -> None:
+    xml = """\
+<?xml version="1.0" encoding="utf-8"?>
+<NewDataSet xmlns="urn:schemas-microsoft-com:xml-vistadb">
+  <AC_04_SHEETS>
+    <SheetScrap>71</SheetScrap>
+  </AC_04_SHEETS>
+  <AC_04_SHEETS>
+    <SheetScrap>12</SheetScrap>
+  </AC_04_SHEETS>
+</NewDataSet>
+"""
+    path = tmp_path / "namespaced.acrepd"
+    path.write_text(xml, encoding="utf-8")
+    assert acrepd.sheet_count_light(str(path)) == (2, 29)
+
+
+def test_sheet_count_light_diffgram_skips_before_after(tmp_path: pathlib.Path) -> None:
+    path = tmp_path / "Fronty - MDF_18.acrepd"
+    path.write_text(_DIFFGRAM_MODIFIED_MANIFEST_XML, encoding="utf-8")
+    assert acrepd.sheet_count_light(str(path)) == (2, 29)
+
+
+def test_sheet_count_light_empty(tmp_path: pathlib.Path) -> None:
+    path = tmp_path / "empty.acrepd"
+    path.write_text("<NewDataSet />", encoding="utf-8")
+    assert acrepd.sheet_count_light(str(path)) == (0, None)
+
+
+def test_sheet_count_light_large_file_sheets_late(tmp_path: pathlib.Path) -> None:
+    parts = "<AC_05_PARTS><PartID>1</PartID><PartName>P</PartName></AC_05_PARTS>\n" * 8000
+    xml = (
+        '<?xml version="1.0" encoding="utf-8"?>\n'
+        "<NewDataSet>\n"
+        "  <AC_02_JOB><JobName>X</JobName></AC_02_JOB>\n" + parts + "\n"
+        "  <AC_04_SHEETS>\n"
+        "    <SheetName>S1</SheetName>\n"
+        "    <SheetScrap>70</SheetScrap>\n"
+        "  </AC_04_SHEETS>\n"
+        "  <AC_04_SHEETS>\n"
+        "    <SheetName>S2</SheetName>\n"
+        "  </AC_04_SHEETS>\n"
+        "</NewDataSet>\n"
+    )
+    assert len(xml.encode("utf-8")) > 300_000
+    path = tmp_path / "large.acrepd"
+    path.write_text(xml, encoding="utf-8")
+    assert acrepd.sheet_count_light(str(path)) == (2, 30)
+
+
+def test_sheet_count_light_missing_file(
+    tmp_path: pathlib.Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    with caplog.at_level("WARNING", logger="alphacam_cli.core.acrepd"):
+        assert acrepd.sheet_count_light(str(tmp_path / "nope.acrepd")) == (0, None)
+    assert "sheet_count_light failed" in caplog.text
+
+
+def test_sheet_count_light_invalid_xml(tmp_path: pathlib.Path) -> None:
+    path = tmp_path / "broken.acrepd"
+    path.write_text("<xs:schema><AC_02_JOB>", encoding="utf-8")
+    assert acrepd.sheet_count_light(str(path)) == (0, None)
+
+
 def test_attach_sheet_cdm_partial_match_warns(caplog: pytest.LogCaptureFixture) -> None:
     sheets = [{"id": 1}, {"id": 2}]
     rows = [
@@ -729,3 +823,593 @@ def test_reports_data_dir_no_dirs_returns_first_candidate(tmp_path: pathlib.Path
     assert acrepd._reports_data_dir(str(tmp_path)) == str(
         tmp_path / "LICOMDIR" / "Reports" / "Data"
     )
+
+
+def _sheet(name: str) -> dict[str, object]:
+    return {"id": 1, "name": name, "database_name": name, "parts": []}
+
+
+def _nc(root: pathlib.Path, *parts: str) -> pathlib.Path:
+    path = root.joinpath(*parts)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text("x", encoding="utf-8")
+    return path
+
+
+def test_find_nc_files_sheet_stem_match(tmp_path: pathlib.Path) -> None:
+    _nc(tmp_path, "Arkusz_A1.nc")
+    result = acrepd.find_nc_files(
+        str(tmp_path),
+        [_sheet("Arkusz A1")],
+        material="MDF_18",
+        config={"replace_space_with_underscore": True},
+    )
+
+    assert result["nc_by_sheet"] == {
+        0: {
+            "nc_filename": "Arkusz_A1.nc",
+            "nc_path": str(tmp_path / "Arkusz_A1.nc"),
+            "nc_source": "disk",
+        }
+    }
+    assert result["nc_matched_by_order"] == []
+    assert result["nc_unmatched"] == []
+    assert result["nc_missing"] == []
+
+
+def test_find_nc_files_material_sheet_match_split_false(
+    tmp_path: pathlib.Path,
+) -> None:
+    _nc(tmp_path, "MDF_18_MDF_18.nc")
+    result = acrepd.find_nc_files(
+        str(tmp_path),
+        [_sheet("MDF_18")],
+        material="MDF_18",
+        config={
+            "replace_space_with_underscore": True,
+            "split_nested_sheet_drawings": False,
+        },
+    )
+
+    assert result["nc_by_sheet"][0]["nc_filename"] == "MDF_18_MDF_18.nc"
+    assert result["nc_missing"] == []
+    assert result["nc_unmatched"] == []
+
+
+def test_find_nc_files_sheet_material_reverse_match_try_all(
+    tmp_path: pathlib.Path,
+) -> None:
+    _nc(tmp_path, "Arkusz_A1_MDF_18.nc")
+    result = acrepd.find_nc_files(str(tmp_path), [_sheet("Arkusz A1")], material="MDF_18")
+
+    assert result["nc_by_sheet"][0]["nc_filename"] == "Arkusz_A1_MDF_18.nc"
+    assert result["nc_missing"] == []
+    assert result["nc_unmatched"] == []
+
+
+def test_find_nc_files_pattern_priority_prefers_plain_stem(
+    tmp_path: pathlib.Path,
+) -> None:
+    _nc(tmp_path, "m_a.nc")
+    _nc(tmp_path, "a.nc")
+    result = acrepd.find_nc_files(str(tmp_path), [_sheet("a")], material="m")
+
+    assert result["nc_by_sheet"][0]["nc_filename"] == "a.nc"
+    assert result["nc_missing"] == []
+    assert result["nc_unmatched"] == [str(tmp_path / "m_a.nc")]
+
+
+def test_find_nc_files_pattern_priority_material_sheet_before_sheet_material(
+    tmp_path: pathlib.Path,
+) -> None:
+    _nc(tmp_path, "a_m.nc")
+    _nc(tmp_path, "m_a.nc")
+    result = acrepd.find_nc_files(str(tmp_path), [_sheet("a")], material="m")
+
+    assert result["nc_by_sheet"][0]["nc_filename"] == "m_a.nc"
+    assert result["nc_missing"] == []
+    assert result["nc_unmatched"] == [str(tmp_path / "a_m.nc")]
+
+
+def test_find_nc_files_sheet_material_reverse_match_split_false(
+    tmp_path: pathlib.Path,
+) -> None:
+    _nc(tmp_path, "Arkusz_A1_MDF_18.nc")
+    result = acrepd.find_nc_files(
+        str(tmp_path),
+        [_sheet("Arkusz A1")],
+        material="MDF_18",
+        config={
+            "replace_space_with_underscore": True,
+            "split_nested_sheet_drawings": False,
+        },
+    )
+
+    assert result["nc_by_sheet"][0]["nc_filename"] == "Arkusz_A1_MDF_18.nc"
+    assert result["nc_missing"] == []
+    assert result["nc_unmatched"] == []
+
+
+def test_find_nc_files_split_false_unamed_sheets_keep_file_unmatched(
+    tmp_path: pathlib.Path,
+) -> None:
+    _nc(tmp_path, "MDF_18_S1.nc")
+    result = acrepd.find_nc_files(
+        str(tmp_path),
+        [_sheet(""), _sheet("")],
+        material="MDF_18",
+        config={
+            "replace_space_with_underscore": True,
+            "split_nested_sheet_drawings": False,
+        },
+    )
+
+    assert result["nc_by_sheet"] == {}
+    assert result["nc_unmatched"] == [str(tmp_path / "MDF_18_S1.nc")]
+
+
+def test_find_nc_files_material_sheet_match_try_all(tmp_path: pathlib.Path) -> None:
+    _nc(tmp_path, "MDF_18_MDF_18.nc")
+    result = acrepd.find_nc_files(str(tmp_path), [_sheet("MDF_18")], material="MDF_18")
+
+    assert result["nc_by_sheet"][0]["nc_filename"] == "MDF_18_MDF_18.nc"
+    assert result["nc_missing"] == []
+    assert result["nc_unmatched"] == []
+
+
+def test_find_nc_files_order_fallback(tmp_path: pathlib.Path) -> None:
+    _nc(tmp_path, "B.nc")
+    _nc(tmp_path, "A.nc")
+    result = acrepd.find_nc_files(str(tmp_path), [_sheet("X1"), _sheet("X2")])
+
+    assert result["nc_by_sheet"][0]["nc_filename"] == "A.nc"
+    assert result["nc_by_sheet"][1]["nc_filename"] == "B.nc"
+    assert result["nc_matched_by_order"] == [0, 1]
+    assert result["nc_missing"] == []
+    assert result["nc_unmatched"] == []
+
+
+def test_find_nc_files_missing_root(tmp_path: pathlib.Path) -> None:
+    result = acrepd.find_nc_files(str(tmp_path / "nope"), [_sheet("X1"), _sheet("X2")])
+
+    assert result["nc_by_sheet"] == {}
+    assert result["nc_matched_by_order"] == []
+    assert result["nc_unmatched"] == []
+    assert result["nc_missing"] == ["X1", "X2"]
+
+
+def test_find_nc_files_no_files(tmp_path: pathlib.Path) -> None:
+    result = acrepd.find_nc_files(str(tmp_path), [_sheet("X1"), _sheet("X2")])
+
+    assert result["nc_by_sheet"] == {}
+    assert result["nc_matched_by_order"] == []
+    assert result["nc_unmatched"] == []
+    assert result["nc_missing"] == ["X1", "X2"]
+
+
+def test_find_nc_files_unmatched_and_missing(tmp_path: pathlib.Path) -> None:
+    _nc(tmp_path, "Arkusz_A1.nc")
+    _nc(tmp_path, "Inny.nc")
+    _nc(tmp_path, "Cos.nc")
+    result = acrepd.find_nc_files(str(tmp_path), [_sheet("Arkusz A1"), _sheet("Arkusz A2")])
+
+    assert result["nc_by_sheet"][0]["nc_filename"] == "Arkusz_A1.nc"
+    assert result["nc_matched_by_order"] == []
+    assert result["nc_unmatched"] == [
+        str(tmp_path / "Cos.nc"),
+        str(tmp_path / "Inny.nc"),
+    ]
+    assert result["nc_missing"] == ["Arkusz A2"]
+
+
+def test_find_nc_files_prefers_token_dirs(tmp_path: pathlib.Path) -> None:
+    _nc(tmp_path, "Arkusz_A1.nc")
+    _nc(tmp_path, "nc", "Arkusz_A1.nc")
+    _nc(tmp_path, "NESTING_out", "Arkusz_A2.nc")
+    result = acrepd.find_nc_files(str(tmp_path), [_sheet("Arkusz A1"), _sheet("Arkusz A2")])
+
+    assert result["nc_by_sheet"][0]["nc_path"] == str(tmp_path / "nc" / "Arkusz_A1.nc")
+    assert result["nc_by_sheet"][1]["nc_path"] == str(tmp_path / "NESTING_out" / "Arkusz_A2.nc")
+    assert result["nc_missing"] == []
+    assert result["nc_unmatched"] == [str(tmp_path / "Arkusz_A1.nc")]
+
+
+def test_find_nc_files_max_depth(tmp_path: pathlib.Path) -> None:
+    _nc(tmp_path, "a", "b", "c", "d", "X.nc")
+    _nc(tmp_path, "a", "b", "c", "d", "e", "Y.nc")
+    result = acrepd.find_nc_files(str(tmp_path), [_sheet("X")])
+
+    assert result["nc_by_sheet"][0]["nc_path"] == str(tmp_path / "a" / "b" / "c" / "d" / "X.nc")
+    assert result["nc_missing"] == []
+    assert result["nc_unmatched"] == []
+
+
+def test_find_nc_files_name_identifiers_suffix(tmp_path: pathlib.Path) -> None:
+    _nc(tmp_path, "Arkusz_A1_2.nc")
+    result = acrepd.find_nc_files(
+        str(tmp_path),
+        [_sheet("Arkusz A1")],
+        config={
+            "replace_space_with_underscore": True,
+            "split_nested_sheet_drawings": True,
+            "use_name_identifiers": True,
+        },
+    )
+
+    assert result["nc_by_sheet"][0]["nc_filename"] == "Arkusz_A1_2.nc"
+    assert result["nc_missing"] == []
+    assert result["nc_unmatched"] == []
+
+
+def test_find_nc_files_replace_space_false(tmp_path: pathlib.Path) -> None:
+    _nc(tmp_path, "Arkusz A1.nc")
+    result = acrepd.find_nc_files(
+        str(tmp_path),
+        [_sheet("Arkusz A1")],
+        config={"replace_space_with_underscore": False},
+    )
+
+    assert result["nc_by_sheet"][0]["nc_filename"] == "Arkusz A1.nc"
+    assert result["nc_missing"] == []
+
+
+def test_find_nc_files_config_none_values_match_default(tmp_path: pathlib.Path) -> None:
+    _nc(tmp_path, "a.nc")
+    _nc(tmp_path, "m_a.nc")
+    result = acrepd.find_nc_files(
+        str(tmp_path),
+        [_sheet("a")],
+        material="m",
+        config={
+            "replace_space_with_underscore": None,
+            "split_nested_sheet_drawings": None,
+            "use_name_identifiers": None,
+        },
+    )
+
+    assert result["nc_by_sheet"][0]["nc_filename"] == "a.nc"
+    assert result["nc_missing"] == []
+    assert result["nc_unmatched"] == [str(tmp_path / "m_a.nc")]
+
+
+@pytest.mark.skipif(os.name == "nt", reason="symlinks")
+def test_find_nc_files_does_not_follow_symlinks(tmp_path: pathlib.Path) -> None:
+    out = tmp_path / "out"
+    out.mkdir()
+    real = tmp_path / "real"
+    real.mkdir()
+    (real / "X.nc").write_text("x", encoding="utf-8")
+    os.symlink(real, out / "link")
+    result = acrepd.find_nc_files(str(out), [_sheet("X")])
+
+    assert result["nc_by_sheet"] == {}
+    assert result["nc_missing"] == ["X"]
+    assert result["nc_unmatched"] == []
+
+
+def test_find_nc_files_includes_nc_candidates(tmp_path: pathlib.Path) -> None:
+    _nc(tmp_path, "Arkusz_A1.nc")
+    result = acrepd.find_nc_files(str(tmp_path), [_sheet("Arkusz A1")])
+
+    assert result["nc_candidates"] == [
+        {
+            "path": str(tmp_path / "Arkusz_A1.nc"),
+            "filename": "Arkusz_A1.nc",
+            "stem": "Arkusz_A1",
+            "preferred": False,
+        }
+    ]
+    assert result["nc_by_sheet"][0]["nc_filename"] == "Arkusz_A1.nc"
+
+
+def test_find_nc_path_with_candidates_skips_scan(tmp_path: pathlib.Path) -> None:
+    _nc(tmp_path, "Arkusz_A1.nc")
+
+    assert acrepd.find_nc_path(str(tmp_path), "Arkusz_A1.nc", candidates=[]) is None
+    found = acrepd._nc_scan(str(tmp_path))
+    assert acrepd.find_nc_path(str(tmp_path), "Arkusz_A1.nc", candidates=found) == str(
+        tmp_path / "Arkusz_A1.nc"
+    )
+
+
+def test_find_nc_path(tmp_path: pathlib.Path) -> None:
+    _nc(tmp_path, "nc", "Fronty - MDF_18_s1.nc")
+
+    found = acrepd.find_nc_path(str(tmp_path), "Fronty - MDF_18_s1.nc")
+
+    assert found == str(tmp_path / "nc" / "Fronty - MDF_18_s1.nc")
+    assert acrepd.find_nc_path(str(tmp_path), "brak.nc") is None
+
+
+def test_find_nc_path_matches_stem_after_normalization(tmp_path: pathlib.Path) -> None:
+    _nc(tmp_path, "Arkusz_A1.nc")
+
+    found = acrepd.find_nc_path(str(tmp_path), "Arkusz A1.nc")
+
+    assert found == str(tmp_path / "Arkusz_A1.nc")
+    assert acrepd.find_nc_path(str(tmp_path), "Inny_Arkusz.nc") is None
+
+
+def _token_part(name: str, qty: Any, token: Any = None, order: Any = None) -> dict[str, Any]:
+    part: dict[str, Any] = {"name": name, "quantity_on_sheet": qty, "custom_field_1": token}
+    if order is not None:
+        part["csv_order_number"] = order
+    return part
+
+
+def _token_manifest(
+    sheets: list[tuple[str, list[dict[str, Any]]]],
+    unmatched: list[dict[str, Any]] | None = None,
+) -> dict[str, Any]:
+    return {
+        "sheets": [{"name": name, "parts": parts} for name, parts in sheets],
+        "unmatched_parts": unmatched or [],
+    }
+
+
+def test_aggregate_by_token_groups_and_sums() -> None:
+    manifest = _token_manifest(
+        [
+            (
+                "Arkusz A1",
+                [
+                    _token_part("p1", 4, "ABC", "Z-001"),
+                    _token_part("p2", 2, "DEF"),
+                    _token_part("p3", 3, "ABC"),
+                ],
+            ),
+            ("Arkusz A2", [_token_part("p4", 1, "DEF", "Z-002")]),
+        ],
+        [_token_part("p5", 5, "ABC")],
+    )
+
+    result = acrepd.aggregate_by_token(manifest)
+
+    assert [g["token"] for g in result] == ["ABC", "DEF"]
+    assert result[0]["total_qty"] == 12
+    assert result[0]["sheets"] == [
+        {"sheet": "Arkusz A1", "qty": 7},
+        {"sheet": "?", "qty": 5},
+    ]
+    assert result[0]["csv_order_number"] == "Z-001"
+    assert result[1]["total_qty"] == 3
+    assert result[1]["sheets"] == [
+        {"sheet": "Arkusz A1", "qty": 2},
+        {"sheet": "Arkusz A2", "qty": 1},
+    ]
+    assert result[1]["csv_order_number"] == "Z-002"
+
+
+def test_aggregate_by_token_no_token_group_last() -> None:
+    manifest = _token_manifest(
+        [
+            ("Arkusz A1", [_token_part("p1", 2, "  "), _token_part("p2", 1, "XYZ")]),
+            ("Arkusz A2", [_token_part("p3", 3)]),
+        ],
+        [_token_part("p4", 4, None)],
+    )
+
+    result = acrepd.aggregate_by_token(manifest)
+
+    assert [g["token"] for g in result] == ["XYZ", None]
+    assert result[1]["total_qty"] == 9
+    assert result[1]["sheets"] == [
+        {"sheet": "Arkusz A1", "qty": 2},
+        {"sheet": "Arkusz A2", "qty": 3},
+        {"sheet": "?", "qty": 4},
+    ]
+    assert result[1]["csv_order_number"] is None
+
+
+def test_aggregate_by_token_none_qty_as_zero() -> None:
+    manifest = _token_manifest(
+        [
+            ("Arkusz A1", [_token_part("p1", None, "ABC"), _token_part("p2", 2, "ABC")]),
+            ("Arkusz A2", [_token_part("p3", "nie-liczba", "ABC")]),
+        ]
+    )
+
+    result = acrepd.aggregate_by_token(manifest)
+
+    assert result[0]["total_qty"] == 2
+    assert result[0]["sheets"] == [
+        {"sheet": "Arkusz A1", "qty": 2},
+        {"sheet": "Arkusz A2", "qty": 0},
+    ]
+
+
+def test_aggregate_by_token_first_nonempty_order_number() -> None:
+    manifest = _token_manifest(
+        [
+            ("Arkusz A1", [_token_part("p1", 1, "ABC", "  "), _token_part("p2", 1, "ABC")]),
+            ("Arkusz A2", [_token_part("p3", 1, "ABC", "Z-999")]),
+        ]
+    )
+
+    result = acrepd.aggregate_by_token(manifest)
+
+    assert result[0]["csv_order_number"] == "Z-999"
+
+
+def test_aggregate_by_token_sort_case_insensitive() -> None:
+    manifest = _token_manifest(
+        [
+            ("Arkusz A1", [_token_part("p1", 1, "beta")]),
+            ("Arkusz A2", [_token_part("p2", 1, "Alpha")]),
+            ("Arkusz A3", [_token_part("p3", 1, "ALPHA")]),
+        ]
+    )
+
+    result = acrepd.aggregate_by_token(manifest)
+
+    assert [g["token"] for g in result] == ["ALPHA", "Alpha", "beta"]
+
+
+def test_aggregate_by_token_case_sensitive_grouping() -> None:
+    manifest = _token_manifest(
+        [
+            ("Arkusz A1", [_token_part("p1", 1, "ABC"), _token_part("p2", 2, "abc")]),
+        ]
+    )
+
+    result = acrepd.aggregate_by_token(manifest)
+
+    assert [g["token"] for g in result] == ["ABC", "abc"]
+    assert result[0]["total_qty"] == 1
+    assert result[1]["total_qty"] == 2
+
+
+def test_aggregate_by_token_empty_manifest() -> None:
+    assert acrepd.aggregate_by_token({"sheets": [], "unmatched_parts": []}) == []
+
+
+def _validation_manifest(
+    sheets: list[tuple[str, list[dict[str, Any]]]],
+    unmatched: list[dict[str, Any]] | None = None,
+    total_parts: int | None = None,
+) -> dict[str, Any]:
+    manifest = _token_manifest(sheets, unmatched)
+    manifest["total_parts"] = (
+        total_parts if total_parts is not None else sum(len(parts) for _, parts in sheets)
+    )
+    return manifest
+
+
+def test_validate_manifest_ok() -> None:
+    manifest = _validation_manifest(
+        [
+            ("Arkusz A1", [_token_part("p1", 4, "ABC", "Z-001"), _token_part("p2", 3, "ABC")]),
+            ("Arkusz A2", [_token_part("p3", 2, "DEF", "Z-002")]),
+        ]
+    )
+
+    result = acrepd.validate_manifest(manifest, {"ABC": 7, "DEF": 2})
+
+    assert result == {"valid": True, "warnings": [], "errors": []}
+
+
+def test_validate_manifest_token_qty_mismatch_error() -> None:
+    manifest = _validation_manifest(
+        [
+            ("Arkusz A1", [_token_part("p1", 4, "ABC"), _token_part("p2", 3, "ABC")]),
+            ("Arkusz A2", [_token_part("p3", 2, "DEF")]),
+        ]
+    )
+
+    result = acrepd.validate_manifest(manifest, {"ABC": 8})
+
+    assert result["valid"] is False
+    assert result["errors"] == ['token "ABC": expected 8, got 7']
+
+
+def test_validate_manifest_missing_token_error() -> None:
+    manifest = _validation_manifest([("Arkusz A1", [_token_part("p1", 4, "ABC")])])
+
+    result = acrepd.validate_manifest(manifest, {"XYZ": 5})
+
+    assert result["valid"] is False
+    assert result["errors"] == ['token "XYZ": expected 5, got 0']
+
+
+def test_validate_manifest_total_parts_mismatch_error() -> None:
+    manifest = _validation_manifest(
+        [("Arkusz A1", [_token_part("p1", 4, "ABC"), _token_part("p2", 3, "ABC")])],
+        total_parts=5,
+    )
+
+    result = acrepd.validate_manifest(manifest)
+
+    assert result["valid"] is False
+    assert result["errors"] == ["total_parts mismatch: expected 5, got 2"]
+
+
+def test_validate_manifest_parts_without_order_and_token_warning() -> None:
+    manifest = _validation_manifest(
+        [
+            ("Arkusz A1", [_token_part("p1", 4, "ABC"), _token_part("p2", 2)]),
+            ("Arkusz A2", [_token_part("p3", 1)]),
+        ]
+    )
+
+    result = acrepd.validate_manifest(manifest)
+
+    assert result["valid"] is True
+    assert result["warnings"] == ["2 parts without csv_order_number and custom_field_1"]
+    assert result["errors"] == []
+
+
+def test_validate_manifest_valid_true_with_warnings() -> None:
+    manifest = _validation_manifest(
+        [
+            ("Arkusz A1", [_token_part("p1", 4, "ABC", "Z-001"), _token_part("p2", 2)]),
+            ("Arkusz A2", [_token_part("p3", 1, "DEF", "Z-002")]),
+        ]
+    )
+
+    result = acrepd.validate_manifest(manifest, {"ABC": 4, "DEF": 1})
+
+    assert result["valid"] is True
+    assert result["warnings"] == ["1 parts without csv_order_number and custom_field_1"]
+    assert result["errors"] == []
+
+
+def test_validate_manifest_valid_false_with_errors() -> None:
+    manifest = _validation_manifest(
+        [
+            ("Arkusz A1", [_token_part("p1", 4, "ABC", "Z-001")]),
+            ("Arkusz A2", [_token_part("p3", 1, "DEF", "Z-002")]),
+        ]
+    )
+
+    result = acrepd.validate_manifest(manifest, {"ABC": 5, "DEF": 1})
+
+    assert result["valid"] is False
+    assert result["errors"] == ['token "ABC": expected 5, got 4']
+    assert result["warnings"] == []
+
+
+def test_aggregate_by_token_strips_token_whitespace() -> None:
+    manifest = _token_manifest(
+        [
+            ("Arkusz A1", [_token_part("p1", 2, " ABC ")]),
+            ("Arkusz A2", [_token_part("p2", 3, "ABC")]),
+        ]
+    )
+
+    result = acrepd.aggregate_by_token(manifest)
+
+    assert [g["token"] for g in result] == ["ABC"]
+    assert result[0]["total_qty"] == 5
+
+
+def test_fill_class_full_partial_empty() -> None:
+    assert acrepd.fill_class(100) == "full"
+    assert acrepd.fill_class(85) == "full"
+    assert acrepd.fill_class(70) == "full"
+    assert acrepd.fill_class(69) == "partial"
+    assert acrepd.fill_class(50) == "partial"
+    assert acrepd.fill_class(1) == "partial"
+    assert acrepd.fill_class(0) == "empty"
+    assert acrepd.fill_class(None) == "empty"
+
+
+def test_fill_class_custom_threshold() -> None:
+    assert acrepd.fill_class(50, threshold=50) == "full"
+    assert acrepd.fill_class(49, threshold=50) == "partial"
+    assert acrepd.fill_class(30, threshold=50) == "partial"
+    assert acrepd.fill_class(0, threshold=50) == "empty"
+    assert acrepd.fill_class(None, threshold=50) == "empty"
+
+
+def test_fill_class_threshold_boundaries() -> None:
+    assert acrepd.fill_class(1, threshold=0) == "full"
+    assert acrepd.fill_class(0, threshold=0) == "empty"
+    assert acrepd.fill_class(100, threshold=100) == "full"
+    assert acrepd.fill_class(99, threshold=100) == "partial"
+
+
+def test_fill_class_invalid_threshold_falls_back_to_default() -> None:
+    assert acrepd.fill_class(85, threshold=101) == "full"
+    assert acrepd.fill_class(85, threshold=-1) == "full"
+    assert acrepd.fill_class(69, threshold=150) == "partial"
+    assert acrepd.fill_class(69, threshold=None) == "partial"

@@ -309,7 +309,19 @@ def test_job_output_root_polish_chars(monkeypatch: pytest.MonkeyPatch) -> None:
 
 def test_job_output_root_relative_prefixed(monkeypatch: pytest.MonkeyPatch) -> None:
     _mock_run(monkeypatch, stdout=r"output: LICOMDIR\Styles\Fronty" + "\n")
-    assert cdm_db.job_output_root("order") == r"C:\ALPHACAM\LICOMDIR\Styles\Fronty"
+    assert (
+        cdm_db.job_output_root("order", licomdir=r"C:\ALPHACAM")
+        == r"C:\ALPHACAM\LICOMDIR\Styles\Fronty"
+    )
+
+
+def test_job_output_root_relative_without_licomdir_warns(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    _mock_run(monkeypatch, stdout=r"output: LICOMDIR\Styles\Fronty" + "\n")
+    with caplog.at_level("WARNING", logger="alphacam"):
+        assert cdm_db.job_output_root("order") == r"LICOMDIR\Styles\Fronty"
+    assert "relative output path without licomdir" in caplog.text
 
 
 def test_job_output_root_empty(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -387,28 +399,228 @@ def test_job_config_both_fields(monkeypatch: pytest.MonkeyPatch) -> None:
     run = _mock_run(monkeypatch, stdout="output: C:\\out\ngenerate_reports: True\n")
     assert cdm_db.job_config("order") == {
         "output_root": r"C:\out",
+        "nc_output": None,
         "generate_reports": True,
+        "replace_space_with_underscore": None,
+        "split_nested_sheet_drawings": None,
+        "use_name_identifiers": None,
     }
     args, _ = run.call_args
     assert "-JobName:order" in args[0]
 
 
+def test_job_config_nc_keys_single_read(monkeypatch: pytest.MonkeyPatch) -> None:
+    stdout = (
+        "output: C:\\out\n"
+        "nc_output: LICOMDIR\\NC\n"
+        "generate_reports: True\n"
+        "replace_space_with_underscore: True\n"
+        "split_nested_sheet_drawings: 0\n"
+        "use_name_identifiers: 1\n"
+    )
+    run = _mock_run(monkeypatch, stdout=stdout)
+    assert cdm_db.job_config("order", licomdir=r"C:\ALPHACAM") == {
+        "output_root": r"C:\out",
+        "nc_output": r"C:\ALPHACAM\LICOMDIR\NC",
+        "generate_reports": True,
+        "replace_space_with_underscore": True,
+        "split_nested_sheet_drawings": False,
+        "use_name_identifiers": True,
+    }
+    assert run.call_count == 1
+
+
 def test_job_config_relative_output_root(monkeypatch: pytest.MonkeyPatch) -> None:
     _mock_run(monkeypatch, stdout="output: LICOMDIR\\Styles\\Fronty\ngenerate_reports: 0\n")
-    assert cdm_db.job_config("order") == {
+    assert cdm_db.job_config("order", licomdir=r"C:\ALPHACAM") == {
         "output_root": r"C:\ALPHACAM\LICOMDIR\Styles\Fronty",
+        "nc_output": None,
         "generate_reports": False,
+        "replace_space_with_underscore": None,
+        "split_nested_sheet_drawings": None,
+        "use_name_identifiers": None,
     }
+
+
+def test_job_config_custom_licomdir(monkeypatch: pytest.MonkeyPatch) -> None:
+    _mock_run(monkeypatch, stdout="output: LICOMDIR\\Styles\\Fronty\ngenerate_reports: 1\n")
+    assert cdm_db.job_config("order", licomdir=r"C:\Custom\Root") == {
+        "output_root": r"C:\Custom\Root\LICOMDIR\Styles\Fronty",
+        "nc_output": None,
+        "generate_reports": True,
+        "replace_space_with_underscore": None,
+        "split_nested_sheet_drawings": None,
+        "use_name_identifiers": None,
+    }
+
+
+def test_job_config_relative_without_licomdir_warns(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    _mock_run(monkeypatch, stdout="output: LICOMDIR\\Styles\\Fronty\ngenerate_reports: 0\n")
+    with caplog.at_level("WARNING", logger="alphacam"):
+        assert cdm_db.job_config("order") == {
+            "output_root": r"LICOMDIR\Styles\Fronty",
+            "nc_output": None,
+            "generate_reports": False,
+            "replace_space_with_underscore": None,
+            "split_nested_sheet_drawings": None,
+            "use_name_identifiers": None,
+        }
+    assert "relative output path without licomdir" in caplog.text
+
+
+def test_job_config_absolute_without_licomdir_no_warning(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    _mock_run(monkeypatch, stdout="output: D:\\out\ngenerate_reports: 0\n")
+    with caplog.at_level("WARNING", logger="alphacam"):
+        assert cdm_db.job_config("order") == {
+            "output_root": r"D:\out",
+            "nc_output": None,
+            "generate_reports": False,
+            "replace_space_with_underscore": None,
+            "split_nested_sheet_drawings": None,
+            "use_name_identifiers": None,
+        }
+    assert "relative output path without licomdir" not in caplog.text
+
+
+def test_job_config_unc_output_root_not_prefixed(monkeypatch: pytest.MonkeyPatch) -> None:
+    _mock_run(monkeypatch, stdout="output: \\\\server\\share\\out\ngenerate_reports: 0\n")
+    assert cdm_db.job_config("order", licomdir=r"C:\ALPHACAM") == {
+        "output_root": r"\\server\share\out",
+        "nc_output": None,
+        "generate_reports": False,
+        "replace_space_with_underscore": None,
+        "split_nested_sheet_drawings": None,
+        "use_name_identifiers": None,
+    }
+
+
+def test_resolve_output_path_normpath(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: list[str] = []
+    monkeypatch.setattr(os.path, "normpath", lambda p: calls.append(p) or p)
+    assert cdm_db._resolve_output_path(r"a\b", r"C:\ALPHACAM") == r"C:\ALPHACAM\a\b"
+    assert calls == [r"C:\ALPHACAM\a\b"]
+    calls.clear()
+    assert (
+        cdm_db._resolve_output_path(r"\\server\share\out", r"C:\ALPHACAM") == r"\\server\share\out"
+    )
+    assert calls == [r"\\server\share\out"]
+    calls.clear()
+    assert (
+        cdm_db._resolve_output_path(r"//server/share/out", r"C:\ALPHACAM") == r"//server/share/out"
+    )
+    assert calls == [r"//server/share/out"]
+
+
+def test_job_config_forward_slash_unc_output_root_not_prefixed(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _mock_run(monkeypatch, stdout="output: //server/share/out\ngenerate_reports: 0\n")
+    monkeypatch.setattr(os.path, "normpath", lambda p: p)
+    assert cdm_db.job_config("order", licomdir=r"C:\ALPHACAM") == {
+        "output_root": "//server/share/out",
+        "nc_output": None,
+        "generate_reports": False,
+        "replace_space_with_underscore": None,
+        "split_nested_sheet_drawings": None,
+        "use_name_identifiers": None,
+    }
+
+
+def test_job_nc_config_all_flags(monkeypatch: pytest.MonkeyPatch) -> None:
+    stdout = (
+        "output: C:\\out\n"
+        "nc_output: LICOMDIR\\NC\n"
+        "generate_reports: True\n"
+        "replace_space_with_underscore: True\n"
+        "split_nested_sheet_drawings: TRUE\n"
+        "use_name_identifiers: false\n"
+    )
+    _mock_run(monkeypatch, stdout=stdout)
+    assert cdm_db.job_nc_config("order", licomdir=r"C:\ALPHACAM") == {
+        "nc_output": r"C:\ALPHACAM\LICOMDIR\NC",
+        "replace_space_with_underscore": True,
+        "split_nested_sheet_drawings": True,
+        "use_name_identifiers": False,
+    }
+
+
+def test_job_nc_config_numeric_flags(monkeypatch: pytest.MonkeyPatch) -> None:
+    stdout = (
+        "replace_space_with_underscore: 1\n"
+        "split_nested_sheet_drawings: 0\n"
+        "use_name_identifiers: 1\n"
+    )
+    _mock_run(monkeypatch, stdout=stdout)
+    assert cdm_db.job_nc_config("order") == {
+        "nc_output": None,
+        "replace_space_with_underscore": True,
+        "split_nested_sheet_drawings": False,
+        "use_name_identifiers": True,
+    }
+
+
+def test_job_nc_config_nulls(monkeypatch: pytest.MonkeyPatch) -> None:
+    stdout = (
+        "nc_output: \n"
+        "replace_space_with_underscore: \n"
+        "split_nested_sheet_drawings: \n"
+        "use_name_identifiers: \n"
+    )
+    _mock_run(monkeypatch, stdout=stdout)
+    assert cdm_db.job_nc_config("order") == {
+        "nc_output": None,
+        "replace_space_with_underscore": None,
+        "split_nested_sheet_drawings": None,
+        "use_name_identifiers": None,
+    }
+
+
+def test_job_nc_config_missing_lines(monkeypatch: pytest.MonkeyPatch) -> None:
+    _mock_run(monkeypatch, stdout="output: C:\\out\n")
+    assert cdm_db.job_nc_config("order") == {
+        "nc_output": None,
+        "replace_space_with_underscore": None,
+        "split_nested_sheet_drawings": None,
+        "use_name_identifiers": None,
+    }
+
+
+def test_job_nc_config_nonzero_returncode(monkeypatch: pytest.MonkeyPatch) -> None:
+    _mock_run(monkeypatch, stdout="", returncode=1)
+    assert cdm_db.job_nc_config("order") is None
+
+
+def test_job_nc_config_subprocess_failure(monkeypatch: pytest.MonkeyPatch) -> None:
+    _mock_run(monkeypatch).side_effect = FileNotFoundError("powershell")
+    assert cdm_db.job_nc_config("order") is None
 
 
 def test_job_config_missing_lines(monkeypatch: pytest.MonkeyPatch) -> None:
     _mock_run(monkeypatch, stdout="not a config\n")
-    assert cdm_db.job_config("order") == {"output_root": None, "generate_reports": None}
+    assert cdm_db.job_config("order") == {
+        "output_root": None,
+        "nc_output": None,
+        "generate_reports": None,
+        "replace_space_with_underscore": None,
+        "split_nested_sheet_drawings": None,
+        "use_name_identifiers": None,
+    }
 
 
 def test_job_config_line_breaks_not_eaten(monkeypatch: pytest.MonkeyPatch) -> None:
     _mock_run(monkeypatch, stdout="output:\ngenerate_reports:\n")
-    assert cdm_db.job_config("order") == {"output_root": None, "generate_reports": False}
+    assert cdm_db.job_config("order") == {
+        "output_root": None,
+        "nc_output": None,
+        "generate_reports": False,
+        "replace_space_with_underscore": None,
+        "split_nested_sheet_drawings": None,
+        "use_name_identifiers": None,
+    }
 
 
 def test_job_config_nonzero_returncode(monkeypatch: pytest.MonkeyPatch) -> None:

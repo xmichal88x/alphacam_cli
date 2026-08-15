@@ -367,9 +367,21 @@ class RemoteApplication:
         job_name: str | None = None,
         material: str | None = None,
         data_dir: str | None = None,
+        nc_root: str | None = None,
+        by_token: bool = False,
+        fill_threshold: int | None = None,
+        validate: bool = False,
+        token_qty: dict[str, int] | None = None,
     ) -> dict[str, Any]:
         return self._session.manifest_read(  # type: ignore[no-any-return]
-            job_name=job_name, material=material, data_dir=data_dir
+            job_name=job_name,
+            material=material,
+            data_dir=data_dir,
+            nc_root=nc_root,
+            by_token=by_token,
+            fill_threshold=fill_threshold,
+            validate=validate,
+            token_qty=token_qty,
         )
 
 

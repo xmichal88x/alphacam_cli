@@ -354,3 +354,15 @@ Zmiana zachowania: brak aktywnego rysunku/geometrii → RuntimeError (wcześniej
 - [x] Watchdog STA (threading.Timer → os._exit) + scripts/scm_service_recovery.ps1
 - [x] scripts/sync_to_machine.sh (SHA1 per plik)
 - [x] E2E na maszynie: 2 pełne cykle create→import→process po restarcie (36.8s/35.9s Sukces) + import na świeżym Acam; pytest 871 passed
+
+---
+
+## ROZSZERZENIE `cdm manifest` (2026-08-15) — WYKONANE, fixloop 0 issues
+
+- [x] **NC discovery**: `acrepd.find_nc_files` (skan depth≤4, wzorce wielowzorcowe + flagi configu, fallback pozycyjny, nc_unmatched/nc_missing), `_enrich_manifest_nc` w `manifest_read` (nc_root override > nc_output > output_root; raport > dysk; superseded → unmatched z filtrem użytych), `nc_config` realne flagi z DB.
+- [x] **Ścieżki tylko z bazy**: `job_config` 1 subprocess (output_root/nc_output/generate_reports + ReplaceSpaceWithUnderscore/SplitNestedSheetDrawings/UseNameIdentifiers), `_resolve_output_path` (licomdir z COM, UNC \\ i //, normpath) — usunięty hardcode C:\ALPHACAM\.
+- [x] **CLI**: --nc-root/--show-all/--by-token/--fill-threshold/--validate/--token-qty; kolumny Token/Notes; `NC: <name> [source]`; sekcje NC unmatched/missing; walidacje abs path przed COM.
+- [x] **Gateway**: kwargs, _validate_job_name, abs-path (data_dir/nc_root/output_root), fill_threshold int 0-100, token_qty dict int≥0; PF2: cdm_types/cdm_jobs delegują do core (dedup).
+- [x] **sheet_count_light** na evencie "end" (odporność multi-wersja); manifest_list serwer-side (bug --remote FileNotFoundError).
+- [x] Weryfikacja: ruff/mypy 0, **1093 passed**, build OK, E2E job "Zamowienie 198" (NC per arkusz, by_token, validate, nc_config) — log w tasks.md.
+- [ ] PF1: watchdog process default 330s (zrobione w kodzie; usługa bez restytu — sanity na maszynie wykonane).

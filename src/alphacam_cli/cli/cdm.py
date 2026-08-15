@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from datetime import datetime
 from typing import Any
 
@@ -18,6 +19,20 @@ from alphacam_cli.com.manager import alphacam_context
 from alphacam_cli.core.application import _validate_due_date
 
 app = typer.Typer(help="Cabinet Door Manufacturing (CDM Automation Manager add-in)")
+
+
+def _require_abs_windows_path(value: str | None, name: str) -> str | None:
+    if value is None:
+        return None
+    path = value.strip()
+    if (
+        not re.match(r"^[A-Za-z]:[\\/]", path)
+        and not re.match(r"^\\\\", path)
+        and not re.match(r"^//", path)
+    ):
+        console.print(f"[red]Error:[/red] {name} must be an absolute path")
+        raise typer.Exit(code=2)
+    return path
 
 
 @app.command()
@@ -91,6 +106,7 @@ def process(
     in-proc on the gateway COM reference (no PsExec required).
     """
     require_platform()
+    output_root = _require_abs_windows_path(output_root, "--output-root")
     kwargs: dict[str, Any] = {"job_name": job_name}
     if timeout != 300:
         kwargs["timeout_seconds"] = timeout
@@ -296,17 +312,88 @@ def manifest(
         "--dir",
         help="Override reports data directory (default: LICOMDIR\\Reports\\Data on server)",
     ),
+    nc_root: str | None = typer.Option(
+        None,
+        "--nc-root",
+        help="Override NC output root on the server (default: from job configuration)",
+    ),
+    show_all: bool = typer.Option(
+        False, "--show-all", help="Show all custom fields (2-25) in the parts table"
+    ),
+    by_token: bool = typer.Option(
+        False, "--by-token", help="Aggregate parts by project token (custom_field_1)"
+    ),
+    fill_threshold: int | None = typer.Option(
+        None,
+        "--fill-threshold",
+        help="Sheet fill threshold percent (0-100) for fill classification (default: 70)",
+    ),
+    validate: bool = typer.Option(
+        False, "--validate", help="Validate manifest consistency (token quantities and counts)"
+    ),
+    token_qty: list[str] | None = typer.Option(  # noqa: B008
+        None,
+        "--token-qty",
+        help="Expected quantity for a project token, repeatable (token=qty)",
+    ),
     json_out: bool = typer.Option(False, "--json", help="Output raw JSON"),
 ) -> None:
     """Show nesting results manifests (.acrepd) for CDM jobs."""
     require_platform()
+    if by_token and not job_name:
+        console.print("[red]Error:[/red] --by-token requires a job name")
+        raise typer.Exit(code=2)
+    if validate and not job_name:
+        console.print("[red]Error:[/red] --validate requires a job name")
+        raise typer.Exit(code=2)
+    if fill_threshold is not None and not 0 <= fill_threshold <= 100:
+        console.print("[red]Error:[/red] --fill-threshold must be between 0 and 100")
+        raise typer.Exit(code=2)
+    data_dir = _require_abs_windows_path(data_dir, "--dir")
+    if token_qty and not validate:
+        console.print("[red]Error:[/red] --token-qty requires --validate")
+        raise typer.Exit(code=2)
+    token_qtys = _parse_token_qtys(token_qty or []) or None
+    if job_name:
+        nc_root = _require_abs_windows_path(nc_root, "--nc-root")
     with alphacam_context(visible=get_visible()) as raw:
         ac = resolve_app(raw)
         if job_name:
-            _print_manifest(ac, job_name, material, data_dir, json_out)
+            exit_code = _print_manifest(
+                ac,
+                job_name,
+                material,
+                data_dir,
+                json_out,
+                nc_root,
+                show_all,
+                by_token,
+                fill_threshold,
+                validate,
+                token_qtys,
+            )
+            if exit_code:
+                raise typer.Exit(code=exit_code)
         else:
-            if material:
-                console.print("[yellow]WARNING:[/yellow] --material ignored without job name")
+            ignored = []
+            if material is not None:
+                ignored.append("--material")
+            if nc_root is not None:
+                ignored.append("--nc-root")
+            if show_all:
+                ignored.append("--show-all")
+            if by_token:
+                ignored.append("--by-token")
+            if fill_threshold is not None:
+                ignored.append("--fill-threshold")
+            if validate:
+                ignored.append("--validate")
+            if token_qty:
+                ignored.append("--token-qty")
+            if ignored:
+                console.print(
+                    f"[yellow]WARNING:[/yellow] {' '.join(ignored)} ignored without job name"
+                )
             _print_manifest_list(ac, data_dir, json_out)
 
 
@@ -324,6 +411,37 @@ def _manifest_mtime(mtime: Any) -> str:
         return str(mtime)
 
 
+def _trunc(value: Any, n: int) -> str:
+    text = str(value or "")
+    if not text:
+        return "-"
+    if len(text) > n:
+        return text[: max(n - 3, 1)] + "..."
+    return text
+
+
+def _parse_token_qtys(raw_items: list[str]) -> dict[str, int]:
+    result: dict[str, int] = {}
+    for raw in raw_items:
+        token, sep, qty = raw.partition("=")
+        if not sep or not token:
+            console.print(f'[red]Error:[/red] invalid --token-qty "{raw}" (expected token=qty)')
+            raise typer.Exit(code=2)
+        try:
+            value = int(qty)
+        except ValueError:
+            console.print(f'[red]Error:[/red] invalid --token-qty "{raw}" (expected token=qty)')
+            raise typer.Exit(code=2) from None
+        if value < 0:
+            console.print(f'[red]Error:[/red] invalid --token-qty "{raw}" (expected token=qty)')
+            raise typer.Exit(code=2)
+        if token in result:
+            console.print(f'[red]Error:[/red] duplicate --token-qty for token "{token}"')
+            raise typer.Exit(code=2)
+        result[token] = value
+    return result
+
+
 def _print_manifest_list(ac: Any, data_dir: str | None, json_out: bool) -> None:
     data = ac.manifest_list(data_dir)
     if json_out:
@@ -336,13 +454,18 @@ def _print_manifest_list(ac: Any, data_dir: str | None, json_out: bool) -> None:
     t = Table(title="CDM Nesting Manifests")
     t.add_column("Job", style="green")
     t.add_column("Material")
+    t.add_column("Arkusze", justify="right")
+    t.add_column("Wypełn.", justify="right")
     t.add_column("Size (kB)", justify="right")
     t.add_column("Modified")
     t.add_column("Path", style="dim")
     for m in manifests:
+        utilization = m.get("first_utilization")
         t.add_row(
             str(m.get("job_name", "") or ""),
             str(m.get("material", "") or ""),
+            str(m.get("sheet_count", 0)),
+            f"{utilization}%" if isinstance(utilization, (int, float)) else "-",
             _manifest_size_kb(m.get("size")),
             _manifest_mtime(m.get("mtime")),
             str(m.get("path", "") or ""),
@@ -351,12 +474,31 @@ def _print_manifest_list(ac: Any, data_dir: str | None, json_out: bool) -> None:
 
 
 def _print_manifest(
-    ac: Any, job_name: str, material: str | None, data_dir: str | None, json_out: bool
-) -> None:
-    data = ac.manifest_read(job_name, material, data_dir)
+    ac: Any,
+    job_name: str,
+    material: str | None,
+    data_dir: str | None,
+    json_out: bool,
+    nc_root: str | None = None,
+    show_all: bool = False,
+    by_token: bool = False,
+    fill_threshold: int | None = None,
+    validate: bool = False,
+    token_qty: dict[str, int] | None = None,
+) -> int | None:
+    data = ac.manifest_read(
+        job_name=job_name,
+        material=material,
+        data_dir=data_dir,
+        nc_root=nc_root,
+        by_token=by_token,
+        fill_threshold=fill_threshold,
+        validate=validate,
+        token_qty=token_qty,
+    )
     if json_out:
         console.print_json(data=data)
-        return
+        return None
     manifest = data.get("manifest", {})
     header = f"[cyan]Manifest:[/cyan] {manifest.get('job_name') or job_name}"
     if manifest.get("material"):
@@ -375,9 +517,18 @@ def _print_manifest(
             f"x{str(sheet.get('thickness', '') or '')} mm, części: {sheet.get('part_count', 0)}"
         )
         if sheet.get("scrap") is not None or sheet.get("utilization") is not None:
+            fill_label = sheet.get("fill_class") or "empty"
             console.print(
-                f"     Wypełnienie: {sheet.get('utilization')}% (odpad: {sheet.get('scrap')}%)"
+                f"     Wypełnienie: {sheet.get('utilization')}% (odpad: {sheet.get('scrap')}%) "
+                f"[fill: {fill_label}]",
+                markup=False,
             )
+        nc_file = sheet.get("nc_filename")
+        nc_label = str(nc_file) if nc_file else "BRAK"
+        nc_source = sheet.get("nc_source")
+        if isinstance(nc_source, str) and nc_source:
+            nc_label += f" [{nc_source}]"
+        console.print(f"     NC: {nc_label}", markup=False)
         parts = sheet.get("parts", [])
         if not parts:
             console.print("[dim]No parts on sheet[/dim]")
@@ -393,6 +544,11 @@ def _print_manifest(
         t.add_column("Zamówienie")
         t.add_column("Handle")
         t.add_column("CSV order/item")
+        t.add_column("Token")
+        t.add_column("Notes", overflow="fold")
+        if show_all:
+            for i in range(2, 26):
+                t.add_column(f"CF{i}")
         for part in parts:
             csv_ref = ""
             if part.get("csv_order_number") or part.get("csv_item_number"):
@@ -401,7 +557,7 @@ def _print_manifest(
                     for k in ("csv_order_number", "csv_item_number")
                     if part.get(k)
                 )
-            t.add_row(
+            cols = [
                 str(part.get("name", "") or ""),
                 str(part.get("quantity_on_sheet", "") or ""),
                 str(part.get("x", "") or ""),
@@ -412,8 +568,78 @@ def _print_manifest(
                 str(part.get("csv_order_number") or ""),
                 str(part.get("handle_name", "") or ""),
                 csv_ref,
-            )
+                _trunc(part.get("custom_field_1"), 20),
+                _trunc(part.get("production_comment"), 30),
+            ]
+            if show_all:
+                for i in range(2, 26):
+                    cols.append(_trunc(part.get(f"custom_field_{i}"), 20))
+            t.add_row(*cols)
         console.print(t)
+    nc_unmatched = manifest.get("nc_unmatched", [])
+    if isinstance(nc_unmatched, list) and nc_unmatched:
+        console.print("\n[cyan]NC unmatched:[/cyan]")
+        for path in nc_unmatched:
+            console.print(f"    {path}")
+    nc_missing = manifest.get("nc_missing", [])
+    if isinstance(nc_missing, list) and nc_missing:
+        console.print("\n[cyan]NC missing:[/cyan]")
+        for name in nc_missing:
+            console.print(f"    {name}")
+    nc_matched = manifest.get("nc_matched_by_order", [])
+    if isinstance(nc_matched, list) and nc_matched:
+        sheets = manifest.get("sheets", [])
+        labels: list[str] = []
+        for index in nc_matched:
+            if (
+                isinstance(index, int)
+                and 0 <= index < len(sheets)
+                and isinstance(sheets[index].get("name"), str)
+            ):
+                labels.append(sheets[index]["name"])
+            else:
+                labels.append(str(index))
+        console.print(f"\n[cyan]NC matched by order:[/cyan] {', '.join(labels)}")
+    if by_token:
+        _print_manifest_by_token(data)
+    if validate:
+        _print_validation(data.get("validation") or {})
+        return _validation_exit_code(data)
+    return None
+
+
+def _print_validation(validation: dict[str, Any]) -> None:
+    console.print("\n[cyan]Validation:[/cyan]")
+    for err in validation.get("errors", []):
+        console.print(f"[red]ERROR:[/red] {err}")
+    for warning in validation.get("warnings", []):
+        console.print(f"[yellow]WARNING:[/yellow] {warning}")
+    errors = validation.get("errors", [])
+    if errors:
+        console.print(f"[red]VALID: FAILED ({len(errors)} errors)[/red]")
+    else:
+        console.print("[green]VALID: OK[/green]")
+
+
+def _validation_exit_code(data: dict[str, Any]) -> int:
+    validation = data.get("validation") or {}
+    errors = validation.get("errors", [])
+    if errors:
+        return 1
+    if validation.get("warnings"):
+        return 2
+    return 0
+
+
+def _print_manifest_by_token(data: dict[str, Any]) -> None:
+    console.print("\n[cyan]By token:[/cyan]")
+    for group in data.get("by_token", []):
+        token = group.get("token")
+        label = str(token) if token else "(no token)"
+        order = group.get("csv_order_number") or "-"
+        console.print(f"Token: {label}  Qty: {group.get('total_qty', 0)}  Order: {order}")
+        for sheet in group.get("sheets", []):
+            console.print(f"     Arkusz {sheet.get('sheet')}: {sheet.get('qty')}")
 
 
 import_settings_app = typer.Typer(help="CDM import settings")
