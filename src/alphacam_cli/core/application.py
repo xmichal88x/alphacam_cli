@@ -3,6 +3,7 @@ from __future__ import annotations
 import glob
 import os
 import time
+from collections.abc import Iterator
 from datetime import datetime
 from typing import TYPE_CHECKING, Any, ClassVar
 
@@ -25,6 +26,10 @@ from alphacam_cli.core.tool import Tool
 _ADDINS_INTERFACE_TYPELIB = "{D216BAAC-A717-4793-92D3-1AE37AE3AC2E}"
 _ADDINS_TYPELIB = "{A87DD4DB-67C9-4F1B-BC79-A71EE8C7D1E5}"
 _ADDINS_INTERFACE_CLSID = "{39BFE38A-D3E4-43EA-89D0-584C776B97A9}"
+
+_MANIFEST_FRESH_TOLERANCE = 0.0
+_MANIFEST_POLL_ATTEMPTS = 3
+_MANIFEST_POLL_INTERVAL = 0.5
 
 
 def _try_com_job_setter(job: Any, candidates: tuple[str, ...], value: Any) -> bool:
@@ -90,6 +95,13 @@ def _validate_job_name(name: str) -> str:
             f"cdm: invalid job name: {name!r} (control characters are not allowed)"
         )
     return name
+
+
+def _manifest_job_matches(parsed: Any, job_name: str) -> bool:
+    """Return whether a parsed .acrepd manifest embeds ``job_name``."""
+    parsed_job = parsed.get("job") if isinstance(parsed, dict) else None
+    parsed_job_name = parsed_job.get("job_name") if isinstance(parsed_job, dict) else None
+    return isinstance(parsed_job_name, str) and parsed_job_name.casefold() == job_name.casefold()
 
 
 class Application:
@@ -803,11 +815,16 @@ class Application:
         terminates on its own, and the client-side RPC timeout protects the
         caller. Results come from the Automation Manager job log via
         ``headless.read_job_result``. When the job configuration enables
-        ``GenerateReports`` and processing succeeded, the report manifest
-        (.acrepd) is created automatically after processing; the outcome
-        lands in the ``returned["report"]`` key. Report failures never
-        invalidate a successful process run, and reports are never
-        generated for a failed process.
+        ``GenerateReports`` and processing succeeded, the Automation Manager
+        generates the report manifest (.acrepd) itself after processing,
+        writing it to ``LICOMDIR\\Reports\\Data``. The CLI only verifies that
+        a fresh manifest (mtime at or after the process start time) was
+        created in the reports data directory and returns its filename in
+        ``report.manifest_file``. When several fresh manifests exist for the
+        job (multi-material), the newest one by mtime is reported; the
+        manifest's embedded job name is verified against ``job_name`` before
+        success is reported. Report failures never invalidate a successful
+        process run, and reports are never generated for a failed process.
         """
         job_name = _validate_job_name(job_name)
         count = cdm_db.job_count(job_name)
@@ -851,10 +868,121 @@ class Application:
             )
         elif cfg["generate_reports"] and success:
             try:
-                report = self._run_reports_data_collection(job_name)
+                data_dir = acrepd._reports_data_dir(self.licomdir_path)
+                manifest: dict[str, Any] | None = None
+                fallback_used = False
+                last_candidate: dict[str, Any] | None = None
+                last_mismatch: dict[str, Any] | None = None
+                last_parse_error: Exception | None = None
+                parsed_ok = False
+                for _attempt in range(_MANIFEST_POLL_ATTEMPTS):
+                    manifests = [
+                        m
+                        for m in acrepd.manifest_files(data_dir)
+                        if m.get("mtime") is not None
+                        and float(m["mtime"]) >= t0_wall - _MANIFEST_FRESH_TOLERANCE
+                    ]
+                    fallback_used = False
+                    named = sorted(
+                        [
+                            m
+                            for m in manifests
+                            if isinstance(m.get("job_name"), str)
+                            and m["job_name"].casefold() == job_name.casefold()
+                        ],
+                        key=lambda m: float(m["mtime"]),
+                        reverse=True,
+                    )
+                    candidates = (
+                        named
+                        if named
+                        else sorted(manifests, key=lambda m: float(m["mtime"]), reverse=True)
+                    )
+                    if not named and candidates:
+                        fallback_used = True
+                    parsed_ok = False
+                    cycle_parse_error: Exception | None = None
+                    for m in candidates:
+                        last_candidate = m
+                        try:
+                            parsed = acrepd.parse_manifest(m["path"])
+                        except Exception as e:
+                            cycle_parse_error = e
+                            continue
+                        parsed_ok = True
+                        if _manifest_job_matches(parsed, job_name):
+                            manifest = m
+                            break
+                        last_mismatch = m
+                    if manifest is not None:
+                        break
+                    if named:
+                        named_paths = {m["path"] for m in named}
+                        for m in sorted(
+                            [x for x in manifests if x["path"] not in named_paths],
+                            key=lambda x: float(x["mtime"]),
+                            reverse=True,
+                        ):
+                            last_candidate = m
+                            try:
+                                parsed = acrepd.parse_manifest(m["path"])
+                            except Exception as e:
+                                cycle_parse_error = e
+                                continue
+                            parsed_ok = True
+                            if _manifest_job_matches(parsed, job_name):
+                                manifest = m
+                                fallback_used = True
+                                break
+                            last_mismatch = m
+                        if manifest is not None:
+                            break
+                    if parsed_ok:
+                        break
+                    if cycle_parse_error is not None:
+                        last_parse_error = cycle_parse_error
+                    if _attempt < _MANIFEST_POLL_ATTEMPTS - 1:
+                        time.sleep(_MANIFEST_POLL_INTERVAL)
+                if manifest is not None:
+                    if fallback_used:
+                        warnings.append(
+                            f'cdm: manifest name does not match job "{job_name}", '
+                            f"using {os.path.basename(manifest['path'])}"
+                        )
+                    report = {
+                        "success": True,
+                        "manifest_file": os.path.basename(manifest["path"]),
+                        "manifest_path": manifest["path"],
+                        "manifest_size": manifest.get("size"),
+                    }
+                elif last_candidate is not None and parsed_ok and last_mismatch is not None:
+                    report = {
+                        "success": False,
+                        "error": "manifest content does not match job",
+                    }
+                    if fallback_used:
+                        warnings.append(
+                            f'cdm: manifest name does not match job "{job_name}", '
+                            f"using {os.path.basename(last_mismatch['path'])}"
+                        )
+                    warnings.append(
+                        f'cdm: manifest content does not match job "{job_name}" '
+                        f"in {last_mismatch['path']}"
+                    )
+                elif last_parse_error is not None:
+                    report = {"success": False, "error": str(last_parse_error)}
+                    warnings.append(f"cdm: report manifest check failed: {last_parse_error}")
+                else:
+                    report = {
+                        "success": False,
+                        "error": "no .acrepd manifest found after processing",
+                    }
+                    warnings.append(
+                        f"cdm: report manifest not found after processing in {data_dir}"
+                    )
             except Exception as e:
                 report = {"success": False, "error": str(e)}
-                warnings.append(f"cdm: report not created: {e}")
+                warnings.append(f"cdm: report manifest check failed: {e}")
         elif not success:
             report = {"success": False, "error": "process failed; report not generated"}
         returned = {
@@ -1301,6 +1429,7 @@ class Application:
         """Read a nesting results manifest (.acrepd) for a job and optional material."""
         if job_name is None:
             return self.manifest_list(data_dir)
+        job_name = _validate_job_name(job_name)
         data_dir = acrepd._reports_data_dir(self.licomdir_path, data_dir)
         if not os.path.isdir(data_dir):
             raise RuntimeError(  # noqa: TRY003
@@ -1309,7 +1438,9 @@ class Application:
         path = acrepd.find_manifest(data_dir, job_name, material)
         if path is None:
             raise RuntimeError(f"manifest: not found: {job_name}")  # noqa: TRY003
-        return {"success": True, "manifest": acrepd.parse_manifest(path)}
+        manifest = acrepd.parse_manifest(path)
+        _enrich_manifest_customer(manifest, job_name)
+        return {"success": True, "manifest": manifest}
 
     def delete_cdm_job(self, job_name: str) -> dict[str, Any]:
         """Delete a CDM job from the database (headless, no dialogs)."""
@@ -1328,6 +1459,107 @@ class Application:
         except Exception as e:
             raise RuntimeError(f"cdm: delete job failed: {e}") from e  # noqa: TRY003
         return {"success": True, "job_name": job_name}
+
+
+def _iter_manifest_parts(manifest: dict[str, Any]) -> Iterator[dict[str, Any]]:
+    """Yield every part dict of a manifest (sheet parts and unmatched parts)."""
+    for sheet in manifest.get("sheets") or []:
+        if not isinstance(sheet, dict):
+            continue
+        for part in sheet.get("parts") or []:
+            if isinstance(part, dict):
+                yield part
+    for part in manifest.get("unmatched_parts") or []:
+        if isinstance(part, dict):
+            yield part
+
+
+def _order_detail_sort_key(detail: dict[str, Any]) -> tuple[bool, int]:
+    """Sort order details by cdm_pk; details without a cdm_pk go last (stable)."""
+    pk = detail.get("cdm_pk")
+    if isinstance(pk, int):
+        return (False, pk)
+    return (True, 0)
+
+
+def _enrich_manifest_customer(manifest: dict[str, Any], job_name: str) -> None:
+    """Fill part csv_customer_name/csv_order_number/csv_item_number from the database.
+
+    Parts are matched by name ``"<job_name>_<style>_<n>"``, where ``<style>`` is
+    the detail type_name (falling back to style_name) and ``<n>`` is the
+    occurrence number of the style in order detail order (sorted by cdm_pk).
+    Only empty values are filled; unmatched parts stay unchanged. A database
+    read failure only logs a warning — the manifest is still returned.
+    """
+    try:
+        details = cdm_db.order_details(job_name)
+    except Exception as e:
+        logger.warning("manifest: order details read failed for %s: %r", job_name, e)
+        return
+    if not details:
+        return
+    try:
+        names = cdm_db.custom_field_names()
+    except Exception as e:
+        logger.warning("manifest: custom field names read failed for %s: %r", job_name, e)
+        names = {}
+    ordered = sorted((d for d in details if isinstance(d, dict)), key=_order_detail_sort_key)
+    counts: dict[str, int] = {}
+    detail_by_key: dict[tuple[str, int], dict[str, Any]] = {}
+    for detail in ordered:
+        style = detail.get("type_name")
+        if not isinstance(style, str) or not style:
+            style = detail.get("style_name")
+        if not isinstance(style, str) or not style:
+            continue
+        counts[style] = counts.get(style, 0) + 1
+        detail_by_key[(style, counts[style])] = detail
+
+    prefix = f"{job_name}_"
+    for part in _iter_manifest_parts(manifest):
+        name = part.get("name")
+        if not isinstance(name, str) or not name.startswith(prefix):
+            continue
+        style, sep, n_str = name[len(prefix) :].rpartition("_")
+        if not sep or not style:
+            continue
+        try:
+            n = int(n_str)
+        except (TypeError, ValueError):
+            continue
+        matched = detail_by_key.get((style, n))
+        if matched is None:
+            continue
+        fill_keys = [
+            "csv_customer_name",
+            "csv_order_number",
+            "csv_item_number",
+            "production_comment",
+        ]
+        fill_keys += [f"custom_field_{n}" for n in range(1, 26)]
+        custom_fields = matched.get("custom_fields")
+        if not isinstance(custom_fields, dict):
+            custom_fields = {}
+        for key in fill_keys:
+            if not part.get(key):
+                if key == "production_comment":
+                    part[key] = matched.get("production_comment")
+                elif key.startswith("custom_field_"):
+                    field_num = key.removeprefix("custom_field_")
+                    value = custom_fields.get(field_num)
+                    if isinstance(value, str) and value.strip():
+                        part[key] = value
+                else:
+                    part[key] = matched.get(key)
+    for part in _iter_manifest_parts(manifest):
+        named: dict[str, str] = {}
+        for n in range(1, 26):
+            value = part.get(f"custom_field_{n}")
+            if not isinstance(value, str) or not value.strip():
+                continue
+            label = names.get(n) or f"custom_field_{n}"
+            named[label] = value.strip()
+        part["custom_fields"] = named
 
 
 _FIELD_SETTERS: dict[str, str] = {

@@ -33,6 +33,7 @@ function Get-DblVal {
 $strFields = @{
     'JobName' = 'job_name'
     'StyleName' = 'style_name'
+    'TypeName' = 'type_name'
     'CSV_CustomerName' = 'csv_customer_name'
     'CSV_OrderNumber' = 'csv_order_number'
     'CSV_ItemNumber' = 'csv_item_number'
@@ -73,7 +74,7 @@ $boolFields = @{
 try {
     $conn.Open()
     $cmd = $conn.CreateCommand()
-    $cmd.CommandText = 'SELECT * FROM CDM_OrderDetails d INNER JOIN AM_JobDetails j ON d.fkJobDetailID = j.JobDetailID'
+    $cmd.CommandText = 'SELECT * FROM CDM_OrderDetails d INNER JOIN AM_JobDetails j ON d.fkJobDetailID = j.JobDetailID INNER JOIN CDM_DoorTypes t ON d.fkTypeID = t.DoorTypeID'
     if ($JobName) {
         $escaped = $JobName.Replace("'", "''")
         $cmd.CommandText += " WHERE j.JobName = '$escaped'"

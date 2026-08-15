@@ -33,6 +33,7 @@ _MANIFEST_ROWS = """\
     <SheetPartCount>2</SheetPartCount>
     <SheetUniquePartCount>2</SheetUniquePartCount>
     <SheetQuantity>1</SheetQuantity>
+    <SheetScrap>71</SheetScrap>
     <SheetImage>img1</SheetImage>
   </AC_04_SHEETS>
   <AC_04_SHEETS>
@@ -92,24 +93,31 @@ _MANIFEST_ROWS = """\
     <CDMSheetPressName>PRESS-2</CDMSheetPressName>
   </AC_SHEET_CDM>
   <AC_PART_CDM>
+    <CDMPartType>P003</CDMPartType>
     <CDMPartHandleName>H-001</CDMPartHandleName>
     <CDMPartCSVCustomerName>Klient A</CDMPartCSVCustomerName>
-    <CDMPartCSVOrderNumber>Z-001</CDMPartCSVOrderNumber>
-    <CDMPartCSVItemNumber>I-1</CDMPartCSVItemNumber>
+    <CDMPartCSVCustomerOrderNumber>Z-001</CDMPartCSVCustomerOrderNumber>
+    <CDMPartCSVCustomerItemNumber>I-1</CDMPartCSVCustomerItemNumber>
+    <CDMPartProductionComment>uwaga produkcyjna</CDMPartProductionComment>
+    <CDMPartCustom1>CF1</CDMPartCustom1>
+    <CDMPartCustom2>CF2</CDMPartCustom2>
+    <CDMPartNestNCFilename>Fronty - MDF_18_p1.nc</CDMPartNestNCFilename>
     <CDMPartPressSheetName>PRESS-1</CDMPartPressSheetName>
   </AC_PART_CDM>
   <AC_PART_CDM>
+    <CDMPartType>P003</CDMPartType>
     <CDMPartHandleName>H-002</CDMPartHandleName>
     <CDMPartCSVCustomerName>Klient B</CDMPartCSVCustomerName>
-    <CDMPartCSVOrderNumber>Z-002</CDMPartCSVOrderNumber>
-    <CDMPartCSVItemNumber>I-2</CDMPartCSVItemNumber>
+    <CDMPartCSVCustomerOrderNumber>Z-002</CDMPartCSVCustomerOrderNumber>
+    <CDMPartCSVCustomerItemNumber>I-2</CDMPartCSVCustomerItemNumber>
     <CDMPartPressSheetName>PRESS-1</CDMPartPressSheetName>
   </AC_PART_CDM>
   <AC_PART_CDM>
+    <CDMPartType>P003</CDMPartType>
     <CDMPartHandleName>H-003</CDMPartHandleName>
     <CDMPartCSVCustomerName>Klient C</CDMPartCSVCustomerName>
-    <CDMPartCSVOrderNumber>Z-003</CDMPartCSVOrderNumber>
-    <CDMPartCSVItemNumber>I-3</CDMPartCSVItemNumber>
+    <CDMPartCSVCustomerOrderNumber>Z-003</CDMPartCSVCustomerOrderNumber>
+    <CDMPartCSVCustomerItemNumber>I-3</CDMPartCSVCustomerItemNumber>
     <CDMPartPressSheetName>PRESS-2</CDMPartPressSheetName>
   </AC_PART_CDM>
 """
@@ -248,69 +256,76 @@ _SCHEMA_ONLY_XML = """\
 _CDM_BY_ID_MANIFEST_XML = (
     _FULL_MANIFEST_XML.replace(
         "<CDMSheetNestNCFileName>Fronty - MDF_18_s1.nc</CDMSheetNestNCFileName>",
-        "<CDMSheetID>2</CDMSheetID>\n"
+        "<CDMSheetReportID>2</CDMSheetReportID>\n"
         "    <CDMSheetNestNCFileName>Fronty - MDF_18_s1.nc</CDMSheetNestNCFileName>",
     )
     .replace(
         "<CDMSheetNestNCFileName>Fronty - MDF_18_s2.nc</CDMSheetNestNCFileName>",
-        "<CDMSheetID>1</CDMSheetID>\n"
+        "<CDMSheetReportID>1</CDMSheetReportID>\n"
         "    <CDMSheetNestNCFileName>Fronty - MDF_18_s2.nc</CDMSheetNestNCFileName>",
     )
     .replace(
         "<CDMPartHandleName>H-001</CDMPartHandleName>",
-        "<CDMPartID>2</CDMPartID>\n    <CDMPartHandleName>H-001</CDMPartHandleName>",
+        "<CDMPartReportID>2</CDMPartReportID>\n    <CDMPartHandleName>H-001</CDMPartHandleName>",
     )
     .replace(
         "<CDMPartHandleName>H-002</CDMPartHandleName>",
-        "<CDMPartID>1</CDMPartID>\n    <CDMPartHandleName>H-002</CDMPartHandleName>",
+        "<CDMPartReportID>1</CDMPartReportID>\n    <CDMPartHandleName>H-002</CDMPartHandleName>",
     )
     .replace(
         "<CDMPartHandleName>H-003</CDMPartHandleName>",
-        "<CDMPartID>3</CDMPartID>\n    <CDMPartHandleName>H-003</CDMPartHandleName>",
+        "<CDMPartReportID>3</CDMPartReportID>\n    <CDMPartHandleName>H-003</CDMPartHandleName>",
     )
 )
 
 _CDM_ZERO_MATCH_MANIFEST_XML = _FULL_MANIFEST_XML.replace(
     "<CDMPartHandleName>H-001</CDMPartHandleName>",
-    "<CDMPartID>999</CDMPartID>\n    <CDMPartHandleName>H-001</CDMPartHandleName>",
+    "<CDMPartReportID>999</CDMPartReportID>\n    <CDMPartHandleName>H-001</CDMPartHandleName>",
 ).replace(
     "<CDMPartHandleName>H-002</CDMPartHandleName>",
-    "<CDMPartID>1000</CDMPartID>\n    <CDMPartHandleName>H-002</CDMPartHandleName>",
+    "<CDMPartReportID>1000</CDMPartReportID>\n    <CDMPartHandleName>H-002</CDMPartHandleName>",
 )
 
 _CDM_DUPLICATE_ID_MANIFEST_XML = _FULL_MANIFEST_XML.replace(
     """  <AC_PART_CDM>
+    <CDMPartType>P003</CDMPartType>
     <CDMPartHandleName>H-001</CDMPartHandleName>
     <CDMPartCSVCustomerName>Klient A</CDMPartCSVCustomerName>
-    <CDMPartCSVOrderNumber>Z-001</CDMPartCSVOrderNumber>
-    <CDMPartCSVItemNumber>I-1</CDMPartCSVItemNumber>
+    <CDMPartCSVCustomerOrderNumber>Z-001</CDMPartCSVCustomerOrderNumber>
+    <CDMPartCSVCustomerItemNumber>I-1</CDMPartCSVCustomerItemNumber>
+    <CDMPartProductionComment>uwaga produkcyjna</CDMPartProductionComment>
+    <CDMPartCustom1>CF1</CDMPartCustom1>
+    <CDMPartCustom2>CF2</CDMPartCustom2>
+    <CDMPartNestNCFilename>Fronty - MDF_18_p1.nc</CDMPartNestNCFilename>
     <CDMPartPressSheetName>PRESS-1</CDMPartPressSheetName>
   </AC_PART_CDM>
   <AC_PART_CDM>
+    <CDMPartType>P003</CDMPartType>
     <CDMPartHandleName>H-002</CDMPartHandleName>
     <CDMPartCSVCustomerName>Klient B</CDMPartCSVCustomerName>
-    <CDMPartCSVOrderNumber>Z-002</CDMPartCSVOrderNumber>
-    <CDMPartCSVItemNumber>I-2</CDMPartCSVItemNumber>
+    <CDMPartCSVCustomerOrderNumber>Z-002</CDMPartCSVCustomerOrderNumber>
+    <CDMPartCSVCustomerItemNumber>I-2</CDMPartCSVCustomerItemNumber>
     <CDMPartPressSheetName>PRESS-1</CDMPartPressSheetName>
   </AC_PART_CDM>
   <AC_PART_CDM>
+    <CDMPartType>P003</CDMPartType>
     <CDMPartHandleName>H-003</CDMPartHandleName>
     <CDMPartCSVCustomerName>Klient C</CDMPartCSVCustomerName>
-    <CDMPartCSVOrderNumber>Z-003</CDMPartCSVOrderNumber>
-    <CDMPartCSVItemNumber>I-3</CDMPartCSVItemNumber>
+    <CDMPartCSVCustomerOrderNumber>Z-003</CDMPartCSVCustomerOrderNumber>
+    <CDMPartCSVCustomerItemNumber>I-3</CDMPartCSVCustomerItemNumber>
     <CDMPartPressSheetName>PRESS-2</CDMPartPressSheetName>
   </AC_PART_CDM>""",
     """  <AC_PART_CDM>
-    <CDMPartID>1</CDMPartID>
+    <CDMPartReportID>1</CDMPartReportID>
     <CDMPartHandleName>HANDLE-A</CDMPartHandleName>
     <CDMPartCSVCustomerName>Klient A</CDMPartCSVCustomerName>
-    <CDMPartCSVOrderNumber>Z-001</CDMPartCSVOrderNumber>
-    <CDMPartCSVItemNumber>I-1</CDMPartCSVItemNumber>
+    <CDMPartCSVCustomerOrderNumber>Z-001</CDMPartCSVCustomerOrderNumber>
+    <CDMPartCSVCustomerItemNumber>I-1</CDMPartCSVCustomerItemNumber>
     <CDMPartPressSheetName>PRESS-1</CDMPartPressSheetName>
   </AC_PART_CDM>
   <AC_PART_CDM>
-    <CDMPartID>1</CDMPartID>
-    <CDMPartCSVOrderNumber>Z-ORDER-B</CDMPartCSVOrderNumber>
+    <CDMPartReportID>1</CDMPartReportID>
+    <CDMPartCSVCustomerOrderNumber>Z-ORDER-B</CDMPartCSVCustomerOrderNumber>
   </AC_PART_CDM>""",
 )
 
@@ -371,6 +386,8 @@ def test_parse_manifest_full(manifest_file: pathlib.Path) -> None:
     assert s1["part_count"] == 2
     assert s1["unique_part_count"] == 2
     assert s1["quantity"] == 1
+    assert s1["scrap"] == 71
+    assert s1["utilization"] == 29
     assert s1["has_image"] is True
     assert s1["nest_nc_filename"] == "Fronty - MDF_18_s1.nc"
     assert s1["press_name"] == "PRESS-1"
@@ -379,6 +396,8 @@ def test_parse_manifest_full(manifest_file: pathlib.Path) -> None:
     assert s2["name"] == "Arkusz A2"
     assert s2["database_name"] == "MDF_18"
     assert s2["width"] == 2800.0
+    assert s2["scrap"] is None
+    assert s2["utilization"] is None
     assert s2["has_image"] is False
     assert s2["nest_nc_filename"] == "Fronty - MDF_18_s2.nc"
     assert s2["press_name"] == "PRESS-2"
@@ -404,10 +423,15 @@ def test_parse_manifest_full(manifest_file: pathlib.Path) -> None:
     assert p1["material"] == "MDF_18"
     assert p1["nest_kit_number"] == "3"
     assert p1["has_image"] is False
+    assert p1["type"] == "P003"
     assert p1["handle_name"] == "H-001"
     assert p1["csv_customer_name"] == "Klient A"
     assert p1["csv_order_number"] == "Z-001"
     assert p1["csv_item_number"] == "I-1"
+    assert p1["production_comment"] == "uwaga produkcyjna"
+    assert p1["custom_field_1"] == "CF1"
+    assert p1["custom_field_2"] == "CF2"
+    assert p1["nest_nc_filename"] == "Fronty - MDF_18_p1.nc"
     assert p1["press_sheet_name"] == "PRESS-1"
 
     p2 = s1["parts"][1]
@@ -415,18 +439,36 @@ def test_parse_manifest_full(manifest_file: pathlib.Path) -> None:
     assert p2["x"] == 10.5
     assert p2["y"] == 20.25
     assert p2["quantity_on_sheet"] == 2
+    assert p2["type"] == "P003"
     assert p2["handle_name"] == "H-002"
     assert p2["csv_order_number"] == "Z-002"
+    assert p2["csv_item_number"] == "I-2"
 
     p3 = s2["parts"][0]
     assert p3["name"] == "PF-004"
     assert p3["sheet_id"] == 2
     assert p3["x"] == 5.5
     assert p3["y"] == 6.75
+    assert p3["type"] == "P003"
     assert p3["handle_name"] == "H-003"
     assert p3["csv_customer_name"] == "Klient C"
     assert p3["csv_order_number"] == "Z-003"
     assert p3["csv_item_number"] == "I-3"
+
+
+def test_parse_manifest_sheet_scrap_zero(tmp_path: pathlib.Path) -> None:
+    path = tmp_path / "Fronty - MDF_18.acrepd"
+    path.write_text(
+        _FULL_MANIFEST_XML.replace("<SheetScrap>71</SheetScrap>", "<SheetScrap>0</SheetScrap>"),
+        encoding="utf-8",
+    )
+    manifest = acrepd.parse_manifest(str(path))
+
+    s1 = manifest["sheets"][0]
+    assert s1["scrap"] == 0
+    assert s1["utilization"] == 100
+    assert manifest["sheets"][1]["scrap"] is None
+    assert manifest["sheets"][1]["utilization"] is None
 
 
 def test_parse_manifest_unmatched_parts_list(tmp_path: pathlib.Path) -> None:
@@ -434,7 +476,7 @@ def test_parse_manifest_unmatched_parts_list(tmp_path: pathlib.Path) -> None:
     path.write_text(_UNMATCHED_MANIFEST_XML, encoding="utf-8")
     manifest = acrepd.parse_manifest(str(path))
 
-    assert manifest["total_parts"] == 2
+    assert manifest["total_parts"] == 3
     assert len(manifest["sheets"][1]["parts"]) == 0
 
     unmatched = manifest["unmatched_parts"]
@@ -603,6 +645,21 @@ def test_manifest_files(tmp_path: pathlib.Path) -> None:
     assert manifests[1]["material"] == "MDF_20"
     assert manifests[1]["size"] == 20
     assert isinstance(manifests[1]["mtime"], float)
+
+
+def test_attach_sheet_cdm_partial_match_warns(caplog: pytest.LogCaptureFixture) -> None:
+    sheets = [{"id": 1}, {"id": 2}]
+    rows = [
+        {"cdmsheetid": "1", "cdmsheetpressname": "PRESS-1"},
+        {"cdmsheetid": "99", "cdmsheetpressname": "PRESS-X"},
+    ]
+
+    with caplog.at_level("WARNING", logger="alphacam_cli.core.acrepd"):
+        acrepd._attach_sheet_cdm(sheets, rows)
+
+    assert "acrepd: 1 of 2 CDM rows matched by cdmsheetid" in caplog.text
+    assert sheets[0]["press_name"] == "PRESS-1"
+    assert sheets[1].get("press_name") is None
 
 
 def test_name_parts_splits_from_end(tmp_path: pathlib.Path) -> None:

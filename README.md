@@ -781,7 +781,7 @@ alphacam cdm manifest "Zamowienie Test 01"
 
 #### `manifest`
 
-Show nesting results manifests (.acrepd) for CDM jobs — generated automatically by `cdm process` when the job configuration has `GenerateReports` enabled. With a job name, prints the manifest (sheets, part positions, totals); without one, lists all manifests. Optionally filter by material (`--material`) or override the data directory (`--dir`, default `LICOMDIR\Reports\Data` on the server).
+Show nesting results manifests (.acrepd) for CDM jobs — generated automatically by `cdm process` when the job configuration has `GenerateReports` enabled. With a job name, prints the manifest (sheets, part positions, totals); without one, lists all manifests. Each sheet also shows its fill (utilization) and scrap percentages (`Wypełnienie: X% (odpad: Y%)`), derived from the report's `SheetScrap` field. Optionally filter by material (`--material`) or override the data directory (`--dir`, default `LICOMDIR\Reports\Data` on the server). Parts carry the customer and order number from the CSV import row (columns `door_customer_name`/`door_order_number` in the import settings), attached from the database when reading the manifest.
 
 **Arguments:**
 
@@ -1184,11 +1184,11 @@ pip install pywin32
 
 ### Unit tests (Linux & Windows)
 
-734+ unit tests covering CLI, COM manager, drawing, tool, application, machining, nesting, events, config, and remote gateway modules.
+956+ unit tests covering CLI, COM manager, drawing, tool, application, machining, nesting, events, config, and remote gateway modules.
 
 ```bash
 pip install -e ".[dev]"
-pytest tests/unit/ -v           # 734 tests, 3 skipped
+pytest tests/unit/ -v           # 956 tests, 3 skipped
 pytest tests/unit/ --cov        # with coverage report
 ```
 

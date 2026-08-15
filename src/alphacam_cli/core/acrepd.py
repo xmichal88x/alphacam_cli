@@ -36,6 +36,7 @@ _SHEET_FIELDS: dict[str, str] = {
     "sheetpartcount": "part_count",
     "sheetuniquepartcount": "unique_part_count",
     "sheetquantity": "quantity",
+    "sheetscrap": "scrap",
 }
 
 _SHEET_CDM_FIELDS: dict[str, str] = {
@@ -43,7 +44,7 @@ _SHEET_CDM_FIELDS: dict[str, str] = {
     "cdmsheetpressname": "press_name",
 }
 
-_SHEET_CDM_KEYS = ("cdmsheetid", "sheetid")
+_SHEET_CDM_KEYS = ("cdmsheetid", "cdmsheetreportid", "sheetid")
 
 _PART_FIELDS: dict[str, str] = {
     "partid": "id",
@@ -68,12 +69,16 @@ _PART_FIELDS: dict[str, str] = {
 _PART_CDM_FIELDS: dict[str, str] = {
     "cdmparthandlename": "handle_name",
     "cdmpartcsvcustomername": "csv_customer_name",
-    "cdmpartcsvordernumber": "csv_order_number",
-    "cdmpartcsvitemnumber": "csv_item_number",
+    "cdmpartcsvcustomerordernumber": "csv_order_number",
+    "cdmpartcsvcustomeritemnumber": "csv_item_number",
+    "cdmpartproductioncomment": "production_comment",
+    "cdmpartnestncfilename": "nest_nc_filename",
+    "cdmparttype": "type",
     "cdmpartpresssheetname": "press_sheet_name",
 }
+_PART_CDM_FIELDS.update({f"cdmpartcustom{n}": f"custom_field_{n}" for n in range(1, 26)})
 
-_PART_CDM_KEYS = ("cdmpartid", "partid")
+_PART_CDM_KEYS = ("cdmpartid", "cdmpartreportid", "partid")
 
 _SHEET_NUMERIC: dict[str, Callable[..., Any]] = {
     "id": int,
@@ -83,6 +88,7 @@ _SHEET_NUMERIC: dict[str, Callable[..., Any]] = {
     "part_count": int,
     "unique_part_count": int,
     "quantity": int,
+    "scrap": int,
 }
 
 _PART_NUMERIC: dict[str, Callable[..., Any]] = {
@@ -237,6 +243,9 @@ def _attach_part_cdm(parts: list[dict[str, Any]], cdm_rows: list[dict[str, str]]
         logger.warning(
             "acrepd: no parts matched by %s, falling back to positional attach", part_id_key
         )
+    logger.warning(
+        "acrepd: no CDM part ID key found, attaching %d rows positionally", len(cdm_rows)
+    )
     for index, target in enumerate(parts):
         if index < len(cdm_rows):
             target.update(_mapped(cdm_rows[index], _PART_CDM_FIELDS))
@@ -268,6 +277,9 @@ def _attach_sheet_cdm(sheets: list[dict[str, Any]], cdm_rows: list[dict[str, str
         logger.warning(
             "acrepd: no sheets matched by %s, falling back to positional attach", sheet_id_key
         )
+    logger.warning(
+        "acrepd: no CDM sheet ID key found, attaching %d rows positionally", len(cdm_rows)
+    )
     for index, target in enumerate(sheets):
         if index < len(cdm_rows):
             target.update(_mapped(cdm_rows[index], _SHEET_CDM_FIELDS))
@@ -275,8 +287,8 @@ def _attach_sheet_cdm(sheets: list[dict[str, Any]], cdm_rows: list[dict[str, str
 
 def parse_manifest(path: str) -> dict[str, Any]:
     """Parse an .acrepd nesting results manifest (VistaDB DataSet XML)."""
-    if os.path.getsize(path) > _MAX_ACREPD_SIZE:
-        size = os.path.getsize(path)
+    size = os.path.getsize(path)
+    if size > _MAX_ACREPD_SIZE:
         raise RuntimeError(  # noqa: TRY003
             f"manifest: file too large: {size} bytes (max {_MAX_ACREPD_SIZE})"
         )
@@ -304,6 +316,7 @@ def parse_manifest(path: str) -> dict[str, Any]:
         sheet["parts"] = []
         for key, cast in _SHEET_NUMERIC.items():
             sheet[key] = _num(sheet[key], cast)
+        sheet["utilization"] = None if sheet["scrap"] is None else max(0, 100 - int(sheet["scrap"]))
         sheets.append(sheet)
     _attach_sheet_cdm(sheets, sheet_cdm_rows)
 
@@ -333,7 +346,7 @@ def parse_manifest(path: str) -> dict[str, Any]:
         "job": job,
         "drawings": drawings,
         "sheets": sheets,
-        "total_parts": sum(len(sheet["parts"]) for sheet in sheets),
+        "total_parts": sum(len(sheet["parts"]) for sheet in sheets) + len(unmatched_parts),
         "unmatched_parts": unmatched_parts,
         "path": path,
     }

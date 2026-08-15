@@ -1087,6 +1087,33 @@ def test_order_details_value_wrap(monkeypatch: pytest.MonkeyPatch) -> None:
     assert details[0]["style_name"] == "P003"
 
 
+# --- custom_field_names ---
+
+
+def test_custom_field_names_parses(monkeypatch: pytest.MonkeyPatch) -> None:
+    _mock_run(monkeypatch, stdout='{"1": "project_token", "5": "inne"}')
+    assert cdm_db.custom_field_names() == {1: "project_token", 5: "inne"}
+
+
+def test_custom_field_names_skips_invalid(monkeypatch: pytest.MonkeyPatch) -> None:
+    _mock_run(monkeypatch, stdout='{"1": "project_token", "x": "no", "3": "  ", "4": 7}')
+    assert cdm_db.custom_field_names() == {1: "project_token"}
+
+
+def test_custom_field_names_wrapped_value(monkeypatch: pytest.MonkeyPatch) -> None:
+    _mock_run(monkeypatch, stdout='{"value": {"1": "project_token", "5": "inne"}}')
+    assert cdm_db.custom_field_names() == {1: "project_token", 5: "inne"}
+
+
+def test_custom_field_names_fallback(monkeypatch: pytest.MonkeyPatch) -> None:
+    _mock_run(monkeypatch).side_effect = FileNotFoundError("powershell")
+    assert cdm_db.custom_field_names() == {}
+    _mock_run(monkeypatch, stdout="", returncode=1)
+    assert cdm_db.custom_field_names() == {}
+    _mock_run(monkeypatch, stdout="not json")
+    assert cdm_db.custom_field_names() == {}
+
+
 # --- door_paths ---
 
 _DOOR_PATH_ROW = (

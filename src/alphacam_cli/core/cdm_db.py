@@ -810,6 +810,40 @@ def order_details(job_name: str | None = None) -> list[dict[str, Any]]:
     return [item for item in data if isinstance(item, dict)]
 
 
+def custom_field_names() -> dict[int, str]:
+    """Read CDM custom field display names (AM_Settings) as {1: "project_token", ...}."""
+    script_path = os.path.join(_scripts_dir(), "vdb5_custom_field_names.ps1")
+    try:
+        proc = subprocess.run(
+            ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", script_path],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=20,
+            check=False,
+        )
+        if proc.returncode != 0 or not proc.stdout.strip():
+            return {}
+        data = json.loads(proc.stdout)
+    except Exception as e:
+        logger.warning("cdm custom field names: vdb5 read failed: %r", e)
+        return {}
+    if isinstance(data, dict) and "value" in data:
+        data = data["value"]
+    if not isinstance(data, dict):
+        return {}
+    names: dict[int, str] = {}
+    for key, value in data.items():
+        try:
+            n = int(key)
+        except (TypeError, ValueError):
+            continue
+        if isinstance(value, str) and value.strip():
+            names[n] = value.strip()
+    return names
+
+
 def door_paths(type_name: str | None = None) -> list[dict[str, Any]]:
     """Read CDM_DoorPaths rows (joined with CDM_DoorTypes) from the vdb5 database."""
     script_path = os.path.join(_scripts_dir(), "vdb5_door_paths.ps1")

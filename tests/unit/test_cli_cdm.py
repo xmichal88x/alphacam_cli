@@ -1494,6 +1494,8 @@ _MANIFEST_READ_DATA = {
                 "part_count": 1,
                 "unique_part_count": 1,
                 "quantity": 1,
+                "scrap": 71,
+                "utilization": 29,
                 "nest_nc_filename": "x.nc",
                 "press_name": None,
                 "has_image": False,
@@ -1515,8 +1517,8 @@ _MANIFEST_READ_DATA = {
                         "material": "MDF_18",
                         "nest_kit_number": "3",
                         "handle_name": None,
-                        "csv_customer_name": None,
-                        "csv_order_number": None,
+                        "csv_customer_name": "Klient Test",
+                        "csv_order_number": "ZAM-001",
                         "csv_item_number": None,
                         "press_sheet_name": None,
                         "has_image": False,
@@ -1578,7 +1580,10 @@ def test_cdm_manifest_read_command() -> None:
         result = runner.invoke(app, ["cdm", "manifest", "JOB"])
     assert result.exit_code == 0
     assert "Arkusz A1" in result.stderr
+    assert "Wypełnienie: 29% (odpad: 71%)" in result.stderr
     assert "PF-002Small_4" in result.stderr
+    assert "Klient Test" in result.stderr
+    assert "ZAM-001" in result.stderr
     assert "Total parts: 1" in result.stderr
     mock_manifest_read.assert_called_once_with("JOB", None, None)
 
@@ -1791,7 +1796,7 @@ def test_cdm_process_command_report_ok() -> None:
                 "processed": True,
                 "report": {
                     "success": True,
-                    "settings_file": r"C:\Reports\JOB-001.acreps",
+                    "manifest_file": "JOB-001 - MDF18.acrepd",
                 },
             },
         ) as mock_process,
@@ -1799,7 +1804,7 @@ def test_cdm_process_command_report_ok() -> None:
         result = runner.invoke(app, ["cdm", "process", "JOB-001"])
     assert result.exit_code == 0
     assert "Report: OK" in result.stderr
-    assert "JOB-001.acreps" in result.stderr
+    assert "JOB-001 - MDF18.acrepd" in result.stderr
     mock_process.assert_called_once_with(job_name="JOB-001")
 
 

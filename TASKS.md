@@ -194,29 +194,35 @@ Zmiana zachowania: brak aktywnego rysunku/geometrii → RuntimeError (wcześniej
 
 ---
 
-## Manifest (arkusz→WO) — braki zdiagnozowane 2026-08-09
+## Manifest (arkusz→WO) — aktualizacja 2026-08-14 (decyzja: tylko CDM)
 
-### M1 — Odczyt wyników nestingu (BLOKER manifestu)
-- [ ] **core/nesting.py + core/drawing.py**: wrapper na `GetNestData` / `NestPartInstance` (pozycja, rotacja, sheet assignment) / `GetNestInformation` — obecnie `create_nest_data()` zwraca surowy COM (drawing.py:39), brak jakiegokolwiek odczytu wyników nestingu
-- [ ] **CLI: komenda `nest inspect`** — odczyt wynikowego nestingu: części → arkusz, pozycje, rotacje (wyjście JSON/tekst)
+### KLIENT I ZAMÓWIENIE PER CZĘŚĆ — DZIAŁA E2E (2026-08-14)
+- **Ustawienia importu (GUI):** "Ustawienia Importu CSV 3" (ID 18, Selected) — 8 kolumn: Style,Qty,W,H,DesignDims,Materiał,Klient(261),Zamówienie(262). "sklep CSV" (ID 3) rozszerzony przeze mnie o 261/262 (kol 9/10 — INSERT do AM_ImportSettingsParameter) — ZOSTAJE w bazie (odpowiednik zmiany GUI). Jeśli dodać kolumnę item (263) — item też wejdzie.
+- **XML .acrepd ZAWIERA dane CDM** (CaptureCDMData działa, gdy detale mają dane CSV): CDMPartCSVCustomerName, CDMPartCSVCustomerOrderNumber, CDMPartCSVCustomerItemNumber, CDMPartType, CDMPartProductionComment, CDMPartCustom1..25, CDMPartNestNCFilename, CDMPartHandleName, CDMPartPressSheetName. AC_02_JOB NIE ma JobCustomerName/JobPO.
+- **BUG naprawiony:** `_PART_CDM_FIELDS` miał złe nazwy kluczy — `cdmpartcsvordernumber`/`cdmpartcsvitemnumber` (XML: `cdmpartcsvcustomerordernumber`/`cdmpartcsvcustomeritemnumber`) → klient wchodził, zamówienie/item = None. Fix: poprawione nazwy + `cdmpartproductioncomment`, `cdmpartnestncfilename`, `cdmparttype`, `cdmpartcustom1..25`; `_PART_CDM_KEYS`/`_SHEET_CDM_KEYS` + `cdmpartreportid`/`cdmsheetreportid` (CDMPartReportID==PartID); testy z prawdziwymi tagami PascalCase (934 passed).
+- Wzbogacanie z bazy (`_enrich_manifest_customer`) zostaje jako FALLBACK (nie nadpisuje XML).
+- **E2E (Csv3Test 004):** create → import csv3 (ID 18) → process (raport auto OK) → manifest: `P003_1 → Klient 7 / PO-2026-007`, `P003_2 ×2 → Klient 8 / PO-2026-008`; scrap=81, utilization=19, type='P003'. Cleanup done.
+- **Odkrycie poboczne:** zmiana w GUI "osobny raport dla każdego arkusza" → makro zamyka rysunek nestingu po procesowaniu → data collection "active drawing has no geometry"; po przywróceniu ustawień działa. Opcjonalny fallback (niedokończony): data collection na OTWARTYM rysunku nestingu z output_root (probe: geo 164/tp 29, ale CreateReportsJob failował RPC).
 
-### M2 — Odczyt wynikowego .anl (BLOKER manifestu)
-- [ ] **cli/nest.py**: po `nd.DoNest()` (i w trybie advanced po `nesting.Nest`) odczytać wynik — obecnie komenda kończy się po nestingu bez odczytu wyników (nest.py:258-260)
-- [ ] **Parser .anl wynikowego** (części, ilości, przypisanie do arkuszy)
+### Decyzja właściciela (2026-08-14)
+- Automatyzacja opiera się WYŁĄCZNIE na CDM (Automation Manager). Tor ręcznego nakładania `nest run` NIE jest rozwijany.
+- Tor CDM jest kompletny: `cdm process` (headless, Session 0) → automatyczny raport `.acrepd` (GenerateReports z konfiguracji joba) → `cdm manifest` (odczyt wyników: arkusze, części z pozycjami x/y, rotacją, ilościami, csv_order_number, csv_item_number, nest_nc_filename).
 
-### M3 — CDM: wyniki nestingu (zależne od RQ-PA-016 / eksperymentu na produkcji)
-- [ ] **cli/cdm.py**: komenda odczytu wyników CDM po przetworzeniu przez Automation Manager (co wypluwa: arkusz → drzwi) — na razie order-details czyta tylko dane wejściowe zamówienia; do potwierdzenia formatu wyników na produkcji
+### Zamknięte
+- [x] **M3 — CDM: wyniki nestingu** — `cdm process` + `cdm manifest` + parser `.acrepd` (core/acrepd.py). Testy 930/930, E2E na laptopie Monika: process → .acrepd automatycznie → manifest z pozycjami części.
 
-### M4 — .ard nie generowany mimo deklaracji
-- [ ] **cli/nest.py**: help `run` deklaruje "Output directory for .anl and .ard files" (nest.py:29) ale .ard nie jest zapisywany — poprawić (albo generować raport, albo zmienić help)
+### Anulowane (tor `nest run` nieużywany — automatyzacja tylko przez CDM)
+- [x] ~~M1 — CLI `nest inspect` (odczyt wyników GetNestInformation dla nest run)~~ — anulowane 2026-08-14; core (GetNestInformation/NestPartInstance w drawing.py/nesting.py) zostaje jako warstwa API
+- [x] ~~M2 — odczyt wynikowego .anl po DoNest()~~ — anulowane 2026-08-14
+- [x] ~~M4 — .ard deklarowany w help nest.py:29~~ — anulowane 2026-08-14 (tor nieużywany)
 
-### M5 — Walidacja konwencji nazw części vs numer WO
-- [ ] Komenda/skrypt walidujący czy nazwy części w CSV/CDM pasują do wzorca `WC-<order>-<product>` (konwencja konektora Woo→WO) — wspiera weryfikację blokera A.4 planu automatyzacji
+### Otwarte — mostek manifest → MES (następny krok)
+- [ ] **M5 — powiązanie `.acrepd` → WO**: walidacja że csv_order_number/csv_item_number z manifestu pasują do konwencji WC-<order>-<product> (konektor Woo→WO) oraz że nazwy części (Style) w CSV importowanym do CDM niosą numer WO — wspiera domykanie WO w OpenMES po M30
+- [ ] **M5b — test na danych produkcyjnych**: pierwszy pełny cykl: cdm import (CSV z Woo) → cdm process → cdm manifest → walidacja powiązania z WO → raport
 
-### M6 — Zależności i weryfikacja (nie blokery)
-- [ ] Testy integracyjne (3 workflows: create→mill→nc, batch, nest) — czekają na Windows+AlphaCAM (już w sekcji wymagających Windows; odwołać się do tego)
-- [ ] Weryfikacja marshal path na realnym AlphaCAM (już w sekcji wymagających Windows)
-- [ ] RQ-PA-016 (repo production-automation): co dokładnie generuje CDM po przetworzeniu CSV — determinuje implementację M3
+### Zależności (repo production-automation)
+- RQ-PA-016 (co generuje CDM) — rozstrzygnięte przez .acrepd (potwierdzone E2E)
+- Konektor Woo→WO (order_no = WC-<order_number>-<product_id>) — definiuje konwencję dla M5
 
 ---
 
@@ -289,6 +295,15 @@ Zmiana zachowania: brak aktywnego rysunku/geometrii → RuntimeError (wcześniej
 - [x] **test_cli.py:196-354** — `-> None` do 18 funkcji (mypy strict) ✅
 - [x] **batch.py:93** — Progress description po `break` z pętli ✅
 - [x] **batch.py:108** — Log warningów gdy `fail_count=0` a są warningi ✅
+
+## Fixloop: manifest poll w process_cdm_job (2026-08-15, code review #3 — 4 issues)
+
+- [x] **#1 lepki `cycle_parse_error`** — `parsed_ok` per cykl (True gdy jakikolwiek kandydat sparsowany); retry tylko gdy `not parsed_ok`; raport: "content does not match" gdy był poprawny parse, "invalid XML" tylko przy samych błędach ✅
+- [x] **#2 luka fallbacku** — gdy kandydaci pasujący nazwą nie przejdą weryfikacji zawartości → druga pętla po pozostałych świeżych manifestach (mtime desc, `fallback_used=True` przy matchu) ✅
+- [x] **#3 stale `fallback_used`** — reset `fallback_used=False` na start każdego cyklu; warning nazwa tylko gdy FINALNY manifest z fallbacku ✅
+- [x] **#4 testy** — `test_process_cdm_job_report_mixed_candidates_content_mismatch_no_retry` (1 parse-fail + 1 content-mismatch → "content does not match", 2 wywołania parse, 0 sleep) + `test_process_cdm_job_report_named_content_mismatch_uses_other_fresh` (fallback do innego świeżego → sukces z warningiem) ✅
+- [x] Helper `_manifest_job_matches(parsed, job_name)` (DRY — match zawartości w obu pętlach)
+- Weryfikacja: pytest **956 passed, 3 skipped** ✅ ruff ✅ mypy src/ 0 błędów ✅
 
 ## Pre-existing issues (do rozważenia)
 

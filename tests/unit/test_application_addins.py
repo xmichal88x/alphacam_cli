@@ -428,3 +428,309 @@ def test_run_query_active_drawing(monkeypatch: pytest.MonkeyPatch) -> None:
     drw.run_query.assert_called_once_with(
         r"C:\ALPHACAM\LICOMDIR\Queries\Menadżer_Warstw_Fronty.agq"
     )
+
+
+def _mock_manifest_read(
+    monkeypatch: pytest.MonkeyPatch, manifest: dict[str, Any], details: list[dict[str, Any]]
+) -> None:
+    monkeypatch.setattr(
+        "alphacam_cli.core.application.acrepd._reports_data_dir",
+        lambda *args, **kwargs: os.path.abspath("."),
+    )
+    monkeypatch.setattr(
+        "alphacam_cli.core.application.acrepd.find_manifest",
+        lambda *args, **kwargs: "x.acrepd",
+    )
+    monkeypatch.setattr(
+        "alphacam_cli.core.application.acrepd.parse_manifest",
+        lambda *args, **kwargs: manifest,
+    )
+    monkeypatch.setattr(
+        "alphacam_cli.core.application.cdm_db.order_details",
+        lambda *args, **kwargs: details,
+    )
+
+
+def _manifest_with_parts(*parts: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "job_name": "CusPO 002",
+        "material": "MDF_18",
+        "sheets": [{"id": 1, "parts": list(parts)}],
+        "total_parts": len(parts),
+        "unmatched_parts": [],
+        "path": "x.acrepd",
+    }
+
+
+def _empty_cdm_part(name: str) -> dict[str, Any]:
+    return {
+        "id": 1,
+        "sheet_id": 1,
+        "name": name,
+        "csv_customer_name": None,
+        "csv_order_number": None,
+        "csv_item_number": None,
+    }
+
+
+def test_manifest_read_enriches_parts_from_order_details(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    manifest = _manifest_with_parts(
+        _empty_cdm_part("CusPO 002_Typ Frontu 3_1"),
+        _empty_cdm_part("CusPO 002_Typ Frontu 3_2"),
+    )
+    details = [
+        {
+            "style_name": "Typ Frontu 3",
+            "cdm_pk": 2,
+            "csv_customer_name": "Klient A",
+            "csv_order_number": "ZAM-100",
+            "csv_item_number": "IT-2",
+        },
+        {
+            "style_name": "Typ Frontu 3",
+            "cdm_pk": 1,
+            "csv_customer_name": "Klient B",
+            "csv_order_number": "ZAM-200",
+            "csv_item_number": "IT-1",
+        },
+    ]
+    _mock_manifest_read(monkeypatch, manifest, details)
+    monkeypatch.setattr("alphacam_cli.core.application.cdm_db.custom_field_names", lambda: {})
+
+    ac = Application(MagicMock())
+    result = ac.manifest_read("CusPO 002")
+
+    parts = result["manifest"]["sheets"][0]["parts"]
+    assert parts[0]["csv_customer_name"] == "Klient B"
+    assert parts[0]["csv_order_number"] == "ZAM-200"
+    assert parts[0]["csv_item_number"] == "IT-1"
+    assert parts[1]["csv_customer_name"] == "Klient A"
+    assert parts[1]["csv_order_number"] == "ZAM-100"
+    assert parts[1]["csv_item_number"] == "IT-2"
+
+
+def test_manifest_read_keeps_existing_and_unmatched_values(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    with_xml = _empty_cdm_part("CusPO 002_Typ Frontu 3_1")
+    with_xml["csv_customer_name"] = "Klient z XML"
+    with_xml["csv_order_number"] = ""
+    manifest = _manifest_with_parts(
+        _empty_cdm_part("OtherJob_Style_1"),
+        with_xml,
+        _empty_cdm_part("CusPO 002_Bad Name"),
+        _empty_cdm_part("CusPO 002_Typ Frontu 3_9"),
+    )
+    details = [
+        {
+            "style_name": "Typ Frontu 3",
+            "cdm_pk": 1,
+            "csv_customer_name": "Klient A",
+            "csv_order_number": "ZAM-100",
+            "csv_item_number": "IT-1",
+        },
+    ]
+    _mock_manifest_read(monkeypatch, manifest, details)
+    monkeypatch.setattr("alphacam_cli.core.application.cdm_db.custom_field_names", lambda: {})
+
+    ac = Application(MagicMock())
+    result = ac.manifest_read("CusPO 002")
+
+    parts = result["manifest"]["sheets"][0]["parts"]
+    assert parts[0]["csv_customer_name"] is None
+    assert parts[0]["csv_order_number"] is None
+    assert parts[1]["csv_customer_name"] == "Klient z XML"
+    assert parts[1]["csv_order_number"] == "ZAM-100"
+    assert parts[1]["csv_item_number"] == "IT-1"
+    assert parts[2]["csv_customer_name"] is None
+    assert parts[2]["csv_order_number"] is None
+    assert parts[3]["csv_customer_name"] is None
+    assert parts[3]["csv_order_number"] is None
+
+
+def test_manifest_read_enriches_by_type_name_with_mismatched_style_name(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    manifest = _manifest_with_parts(_empty_cdm_part("CusPO 002_P003_1"))
+    details = [
+        {
+            "type_name": "P003",
+            "style_name": "PS_03",
+            "cdm_pk": 68,
+            "csv_customer_name": "Klient A",
+            "csv_order_number": "196",
+            "csv_item_number": "IT-1",
+        },
+    ]
+    _mock_manifest_read(monkeypatch, manifest, details)
+    monkeypatch.setattr("alphacam_cli.core.application.cdm_db.custom_field_names", lambda: {})
+
+    ac = Application(MagicMock())
+    result = ac.manifest_read("CusPO 002")
+
+    part = result["manifest"]["sheets"][0]["parts"][0]
+    assert part["csv_customer_name"] == "Klient A"
+    assert part["csv_order_number"] == "196"
+    assert part["csv_item_number"] == "IT-1"
+
+
+def test_manifest_read_falls_back_to_style_name_without_type_name(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    manifest = _manifest_with_parts(_empty_cdm_part("CusPO 002_Typ Frontu 3_1"))
+    details = [
+        {
+            "style_name": "Typ Frontu 3",
+            "cdm_pk": 1,
+            "csv_customer_name": "Klient A",
+            "csv_order_number": "ZAM-100",
+            "csv_item_number": "IT-1",
+        },
+    ]
+    _mock_manifest_read(monkeypatch, manifest, details)
+    monkeypatch.setattr("alphacam_cli.core.application.cdm_db.custom_field_names", lambda: {})
+
+    ac = Application(MagicMock())
+    result = ac.manifest_read("CusPO 002")
+
+    part = result["manifest"]["sheets"][0]["parts"][0]
+    assert part["csv_customer_name"] == "Klient A"
+    assert part["csv_order_number"] == "ZAM-100"
+    assert part["csv_item_number"] == "IT-1"
+
+
+def test_manifest_read_order_details_failure_keeps_manifest(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    manifest = _manifest_with_parts(_empty_cdm_part("CusPO 002_Typ Frontu 3_1"))
+    _mock_manifest_read(monkeypatch, manifest, [])
+    monkeypatch.setattr(
+        "alphacam_cli.core.application.cdm_db.order_details",
+        lambda *args, **kwargs: (_ for _ in ()).throw(RuntimeError("vdb5 down")),
+    )
+
+    ac = Application(MagicMock())
+    with caplog.at_level("WARNING", logger="alphacam"):
+        result = ac.manifest_read("CusPO 002")
+
+    assert result["success"] is True
+    part = result["manifest"]["sheets"][0]["parts"][0]
+    assert part["csv_customer_name"] is None
+    assert part["csv_order_number"] is None
+    assert "order details read failed" in caplog.text
+
+
+def _cdm_part_with_custom_fields(name: str) -> dict[str, Any]:
+    part = _empty_cdm_part(name)
+    for n in range(1, 26):
+        part[f"custom_field_{n}"] = None
+    return part
+
+
+def test_manifest_read_custom_fields_with_names(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    manifest = _manifest_with_parts(_cdm_part_with_custom_fields("CusPO 002_Typ Frontu 3_1"))
+    details = [
+        {
+            "type_name": "Typ Frontu 3",
+            "custom_fields": {"1": "tok_abc", "5": "wart5"},
+            "production_comment": "kom",
+            "csv_customer_name": "A",
+            "csv_order_number": "Z",
+            "csv_item_number": "I",
+            "cdm_pk": 1,
+        },
+    ]
+    _mock_manifest_read(monkeypatch, manifest, details)
+    monkeypatch.setattr(
+        "alphacam_cli.core.application.cdm_db.custom_field_names",
+        lambda: {1: "project_token", 5: "inne"},
+    )
+
+    ac = Application(MagicMock())
+    result = ac.manifest_read("CusPO 002")
+
+    part = result["manifest"]["sheets"][0]["parts"][0]
+    assert part["custom_field_1"] == "tok_abc"
+    assert part["custom_field_5"] == "wart5"
+    assert part["production_comment"] == "kom"
+    assert part["custom_fields"] == {"project_token": "tok_abc", "inne": "wart5"}
+
+
+def test_manifest_read_custom_fields_fallback_names(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    manifest = _manifest_with_parts(_cdm_part_with_custom_fields("CusPO 002_Typ Frontu 3_1"))
+    details = [
+        {
+            "type_name": "Typ Frontu 3",
+            "custom_fields": {"1": "tok_abc"},
+            "cdm_pk": 1,
+        },
+    ]
+    _mock_manifest_read(monkeypatch, manifest, details)
+    monkeypatch.setattr("alphacam_cli.core.application.cdm_db.custom_field_names", lambda: {})
+
+    ac = Application(MagicMock())
+    result = ac.manifest_read("CusPO 002")
+
+    part = result["manifest"]["sheets"][0]["parts"][0]
+    assert part["custom_field_1"] == "tok_abc"
+    assert part["custom_fields"] == {"custom_field_1": "tok_abc"}
+
+
+def test_manifest_read_custom_fields_empty_value(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    manifest = _manifest_with_parts(_cdm_part_with_custom_fields("CusPO 002_Typ Frontu 3_1"))
+    details = [
+        {
+            "type_name": "Typ Frontu 3",
+            "custom_fields": {"1": ""},
+            "cdm_pk": 1,
+        },
+    ]
+    _mock_manifest_read(monkeypatch, manifest, details)
+    monkeypatch.setattr("alphacam_cli.core.application.cdm_db.custom_field_names", lambda: {})
+
+    ac = Application(MagicMock())
+    result = ac.manifest_read("CusPO 002")
+
+    part = result["manifest"]["sheets"][0]["parts"][0]
+    assert part["custom_field_1"] is None
+    assert part["custom_fields"] == {}
+
+
+def test_manifest_read_custom_fields_keeps_existing(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    part = _cdm_part_with_custom_fields("CusPO 002_Typ Frontu 3_1")
+    part["custom_field_1"] = "z XML"
+    manifest = _manifest_with_parts(part)
+    details = [
+        {
+            "type_name": "Typ Frontu 3",
+            "custom_fields": {"1": "z DB"},
+            "cdm_pk": 1,
+        },
+    ]
+    _mock_manifest_read(monkeypatch, manifest, details)
+    monkeypatch.setattr("alphacam_cli.core.application.cdm_db.custom_field_names", lambda: {})
+
+    ac = Application(MagicMock())
+    result = ac.manifest_read("CusPO 002")
+
+    part = result["manifest"]["sheets"][0]["parts"][0]
+    assert part["custom_field_1"] == "z XML"
+    assert part["custom_fields"] == {"custom_field_1": "z XML"}
+
+
+def test_manifest_read_rejects_invalid_job_name() -> None:
+    ac = Application(MagicMock())
+    with pytest.raises(RuntimeError, match="cdm: invalid job name"):
+        ac.manifest_read("a/b")
+    with pytest.raises(RuntimeError, match="cdm: job_name is required"):
+        ac.manifest_read("   ")

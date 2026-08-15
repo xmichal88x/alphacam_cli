@@ -118,7 +118,8 @@ def process(
             console.print(f"[green]Status: {status}[/green]")
         report = result.get("report") or {}
         if report.get("success"):
-            console.print(f"[green]Report: OK ({report.get('settings_file') or '?'})[/green]")
+            report_name = report.get("manifest_file") or "?"
+            console.print(f"[green]Report: OK ({report_name})[/green]")
         elif report.get("skipped"):
             error = (
                 report.get("error")
@@ -373,6 +374,10 @@ def _print_manifest(
             f"{str(sheet.get('width', '') or '')}x{str(sheet.get('length', '') or '')}"
             f"x{str(sheet.get('thickness', '') or '')} mm, części: {sheet.get('part_count', 0)}"
         )
+        if sheet.get("scrap") is not None or sheet.get("utilization") is not None:
+            console.print(
+                f"     Wypełnienie: {sheet.get('utilization')}% (odpad: {sheet.get('scrap')}%)"
+            )
         parts = sheet.get("parts", [])
         if not parts:
             console.print("[dim]No parts on sheet[/dim]")
@@ -384,6 +389,8 @@ def _print_manifest(
         t.add_column("Y", justify="right")
         t.add_column("Rot", justify="right")
         t.add_column("WxL", justify="right")
+        t.add_column("Klient")
+        t.add_column("Zamówienie")
         t.add_column("Handle")
         t.add_column("CSV order/item")
         for part in parts:
@@ -401,6 +408,8 @@ def _print_manifest(
                 str(part.get("y", "") or ""),
                 str(part.get("rotation", "") or ""),
                 f"{str(part.get('width', '') or '')}x{str(part.get('length', '') or '')}",
+                str(part.get("csv_customer_name") or ""),
+                str(part.get("csv_order_number") or ""),
                 str(part.get("handle_name", "") or ""),
                 csv_ref,
             )

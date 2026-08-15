@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import pathlib
+import time
 from unittest.mock import ANY, MagicMock, PropertyMock
 
 import pytest
@@ -2223,8 +2224,6 @@ def test_process_cdm_job_report_disabled(monkeypatch: pytest.MonkeyPatch) -> Non
         generate_reports=False,
         read_result={"success": True, "status": "Sukces"},
     )
-    collector = MagicMock(return_value={"success": True, "settings_file": "x.acreps"})
-    monkeypatch.setattr(Application, "_run_reports_data_collection", collector)
     result = Application(run).process_cdm_job("JOB-001")
     assert result["success"] is True
     assert result["report"] == {
@@ -2233,7 +2232,6 @@ def test_process_cdm_job_report_disabled(monkeypatch: pytest.MonkeyPatch) -> Non
         "error": "reports disabled for job configuration (GenerateReports=False)",
     }
     assert "warnings" not in result
-    collector.assert_not_called()
 
 
 def test_process_cdm_job_report_skipped_when_process_failed(
@@ -2244,15 +2242,12 @@ def test_process_cdm_job_report_skipped_when_process_failed(
         generate_reports=True,
         read_result={"success": False, "status": "missing"},
     )
-    collector = MagicMock(return_value={"success": True, "settings_file": "x.acreps"})
-    monkeypatch.setattr(Application, "_run_reports_data_collection", collector)
     result = Application(run).process_cdm_job("JOB-001")
     assert result["success"] is False
     assert result["report"] == {
         "success": False,
         "error": "process failed; report not generated",
     }
-    collector.assert_not_called()
 
 
 def test_process_cdm_job_report_flag_read_failed(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -2278,15 +2273,12 @@ def test_process_cdm_job_report_flag_missing_or_unparseable(
         "alphacam_cli.core.cdm_db.job_config",
         MagicMock(return_value={"output_root": "C:/out", "generate_reports": None}),
     )
-    collector = MagicMock(return_value={"success": True, "settings_file": "x.acreps"})
-    monkeypatch.setattr(Application, "_run_reports_data_collection", collector)
     result = Application(run).process_cdm_job("JOB-001")
     assert result["success"] is True
     assert result["report"] == {"success": False, "error": "report flag read failed"}
     assert result["warnings"] == [
         "cdm: report flag read failed (GenerateReports missing or unparseable in job config)"
     ]
-    collector.assert_not_called()
 
 
 def test_process_cdm_job_report_created(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -2295,81 +2287,506 @@ def test_process_cdm_job_report_created(monkeypatch: pytest.MonkeyPatch) -> None
         generate_reports=True,
         read_result={"success": True, "status": "Sukces"},
     )
-    collector = MagicMock(
-        return_value={
-            "success": True,
-            "active_drawing": True,
-            "settings_file": "JOB-001.acrepd",
-        }
+    monkeypatch.setattr(
+        "alphacam_cli.core.application.acrepd._reports_data_dir",
+        lambda licomdir_path: "C:/Reports/Data",
     )
-    monkeypatch.setattr(Application, "_run_reports_data_collection", collector)
+    monkeypatch.setattr(
+        "alphacam_cli.core.application.acrepd.manifest_files",
+        lambda data_dir: [
+            {
+                "path": "C:/Reports/Data/JOB-001 - MDF18.acrepd",
+                "job_name": "JOB-001",
+                "material": "MDF18",
+                "size": 1234,
+                "mtime": time.time() + 60,
+            }
+        ],
+    )
+    monkeypatch.setattr(
+        "alphacam_cli.core.application.acrepd.parse_manifest",
+        lambda path: {"job": {"job_name": "JOB-001"}},
+    )
     result = Application(run).process_cdm_job("JOB-001")
     assert result["success"] is True
     assert result["report"] == {
         "success": True,
-        "active_drawing": True,
-        "settings_file": "JOB-001.acrepd",
+        "manifest_file": "JOB-001 - MDF18.acrepd",
+        "manifest_path": "C:/Reports/Data/JOB-001 - MDF18.acrepd",
+        "manifest_size": 1234,
     }
     assert "warnings" not in result
-    collector.assert_called_once_with("JOB-001")
 
 
-def test_process_cdm_job_report_failure_warns(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_process_cdm_job_report_manifest_job_name_case_insensitive(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     run, _ = _mock_process(
         monkeypatch,
         generate_reports=True,
         read_result={"success": True, "status": "Sukces"},
     )
+    monkeypatch.setattr(
+        "alphacam_cli.core.application.acrepd._reports_data_dir",
+        lambda licomdir_path: "C:/Reports/Data",
+    )
+    monkeypatch.setattr(
+        "alphacam_cli.core.application.acrepd.manifest_files",
+        lambda data_dir: [
+            {
+                "path": "C:/Reports/Data/job-001.acrepd",
+                "job_name": "job-001",
+                "material": None,
+                "size": 99,
+                "mtime": time.time() + 60,
+            }
+        ],
+    )
+    monkeypatch.setattr(
+        "alphacam_cli.core.application.acrepd.parse_manifest",
+        lambda path: {"job": {"job_name": "job-001"}},
+    )
+    result = Application(run).process_cdm_job("JOB-001")
+    assert result["success"] is True
+    assert result["report"]["success"] is True
+    assert result["report"]["manifest_file"] == "job-001.acrepd"
 
-    def _boom(self, job_name=None) -> None:
-        raise RuntimeError(  # noqa: TRY003
-            "reports: no report data saved (drawing empty?)"
-        )
 
-    monkeypatch.setattr(Application, "_run_reports_data_collection", _boom)
+def test_process_cdm_job_report_manifest_fallback_when_name_mismatch(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    run, _ = _mock_process(
+        monkeypatch,
+        generate_reports=True,
+        read_result={"success": True, "status": "Sukces"},
+    )
+    monkeypatch.setattr(
+        "alphacam_cli.core.application.acrepd._reports_data_dir",
+        lambda licomdir_path: "C:/Reports/Data",
+    )
+    monkeypatch.setattr(
+        "alphacam_cli.core.application.acrepd.manifest_files",
+        lambda data_dir: [
+            {
+                "path": "C:/Reports/Data/OTHER - MDF18.acrepd",
+                "job_name": "OTHER",
+                "material": "MDF18",
+                "size": 777,
+                "mtime": time.time() + 60,
+            }
+        ],
+    )
+    monkeypatch.setattr(
+        "alphacam_cli.core.application.acrepd.parse_manifest",
+        lambda path: {"job": {"job_name": "OTHER"}},
+    )
     result = Application(run).process_cdm_job("JOB-001")
     assert result["success"] is True
     assert result["report"] == {
         "success": False,
-        "error": "reports: no report data saved (drawing empty?)",
+        "error": "manifest content does not match job",
     }
     assert result["warnings"] == [
-        "cdm: report not created: reports: no report data saved (drawing empty?)"
+        'cdm: manifest name does not match job "JOB-001", using OTHER - MDF18.acrepd',
+        'cdm: manifest content does not match job "JOB-001" '
+        "in C:/Reports/Data/OTHER - MDF18.acrepd",
     ]
 
 
-def test_process_cdm_job_report_save_false(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_process_cdm_job_report_manifest_check_failed(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     run, _ = _mock_process(
         monkeypatch,
         generate_reports=True,
         read_result={"success": True, "status": "Sukces"},
     )
-    reports = MagicMock(name="ReportsAddIn")
-    reports.CreateReportsJob.return_value.Save.return_value = False
-    drw = MagicMock(name="Drawing")
-    drw.Geometries.Count = 2
-    drw.ToolPaths.Count = 0
-    app = Application(run)
-    app._app.LicomdirPath = "C:/ALPHACAM"
-    app._app.ActiveDrawing = drw
-    app.get_reports_addin = lambda: reports  # type: ignore[method-assign]
     monkeypatch.setattr(
-        "alphacam_cli.core.application.os.path.isdir",
-        lambda path: path == "C:/ALPHACAM/LICOMDIR/Reports/Settings",
+        "alphacam_cli.core.application.acrepd._reports_data_dir",
+        lambda licomdir_path: "C:/Reports/Data",
     )
     monkeypatch.setattr(
-        "alphacam_cli.core.application.glob.glob",
-        lambda pattern: (
-            ["C:/ALPHACAM/LICOMDIR/Reports/Settings/JOB-001.acreps"]
-            if pattern.endswith("*.acreps")
-            else []
-        ),
+        "alphacam_cli.core.application.acrepd.manifest_files",
+        MagicMock(side_effect=OSError("access denied")),
     )
-    result = app.process_cdm_job("JOB-001")
+    result = Application(run).process_cdm_job("JOB-001")
     assert result["success"] is True
-    assert result["report"]["success"] is False
-    assert result["report"]["error"] == "reports: no report data saved (drawing empty?)"
+    assert result["report"] == {"success": False, "error": "access denied"}
+    assert result["warnings"] == ["cdm: report manifest check failed: access denied"]
+
+
+def test_process_cdm_job_report_no_manifest_found(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    run, _ = _mock_process(
+        monkeypatch,
+        generate_reports=True,
+        read_result={"success": True, "status": "Sukces"},
+    )
+    monkeypatch.setattr(
+        "alphacam_cli.core.application.acrepd._reports_data_dir",
+        lambda licomdir_path: "C:/Reports/Data",
+    )
+    monkeypatch.setattr(
+        "alphacam_cli.core.application.acrepd.manifest_files",
+        lambda data_dir: [],
+    )
+    monkeypatch.setattr("alphacam_cli.core.application.time.sleep", lambda seconds: None)
+    result = Application(run).process_cdm_job("JOB-001")
+    assert result["success"] is True
+    assert result["report"] == {
+        "success": False,
+        "error": "no .acrepd manifest found after processing",
+    }
     assert result["warnings"] == [
-        "cdm: report not created: reports: no report data saved (drawing empty?)"
+        "cdm: report manifest not found after processing in C:/Reports/Data"
     ]
-    reports.CreateReports.assert_not_called()
+
+
+def test_process_cdm_job_report_stale_manifest_excluded(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    run, _ = _mock_process(
+        monkeypatch,
+        generate_reports=True,
+        read_result={"success": True, "status": "Sukces"},
+    )
+    monkeypatch.setattr(
+        "alphacam_cli.core.application.acrepd._reports_data_dir",
+        lambda licomdir_path: "C:/Reports/Data",
+    )
+    monkeypatch.setattr(
+        "alphacam_cli.core.application.acrepd.manifest_files",
+        lambda data_dir: [
+            {
+                "path": "C:/Reports/Data/JOB-001 - MDF18.acrepd",
+                "job_name": "JOB-001",
+                "material": "MDF18",
+                "size": 1234,
+                "mtime": time.time() - 100,
+            }
+        ],
+    )
+    monkeypatch.setattr("alphacam_cli.core.application.time.sleep", lambda seconds: None)
+    result = Application(run).process_cdm_job("JOB-001")
+    assert result["success"] is True
+    assert result["report"] == {
+        "success": False,
+        "error": "no .acrepd manifest found after processing",
+    }
+    assert result["warnings"] == [
+        "cdm: report manifest not found after processing in C:/Reports/Data"
+    ]
+
+
+def test_process_cdm_job_report_picks_newest_fresh_manifest(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    run, _ = _mock_process(
+        monkeypatch,
+        generate_reports=True,
+        read_result={"success": True, "status": "Sukces"},
+    )
+    monkeypatch.setattr(
+        "alphacam_cli.core.application.acrepd._reports_data_dir",
+        lambda licomdir_path: "C:/Reports/Data",
+    )
+    now = time.time()
+    monkeypatch.setattr(
+        "alphacam_cli.core.application.acrepd.manifest_files",
+        lambda data_dir: [
+            {
+                "path": "C:/Reports/Data/JOB-001 - MDF18.acrepd",
+                "job_name": "JOB-001",
+                "material": "MDF18",
+                "size": 100,
+                "mtime": now + 10,
+            },
+            {
+                "path": "C:/Reports/Data/JOB-001 - Dab.acrepd",
+                "job_name": "JOB-001",
+                "material": "Dab",
+                "size": 200,
+                "mtime": now + 60,
+            },
+        ],
+    )
+    monkeypatch.setattr(
+        "alphacam_cli.core.application.acrepd.parse_manifest",
+        lambda path: {"job": {"job_name": "JOB-001"}},
+    )
+    result = Application(run).process_cdm_job("JOB-001")
+    assert result["success"] is True
+    assert result["report"] == {
+        "success": True,
+        "manifest_file": "JOB-001 - Dab.acrepd",
+        "manifest_path": "C:/Reports/Data/JOB-001 - Dab.acrepd",
+        "manifest_size": 200,
+    }
+    assert "warnings" not in result
+
+
+def test_process_cdm_job_report_fallback_matching_content_succeeds_with_warning(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    run, _ = _mock_process(
+        monkeypatch,
+        generate_reports=True,
+        read_result={"success": True, "status": "Sukces"},
+    )
+    monkeypatch.setattr(
+        "alphacam_cli.core.application.acrepd._reports_data_dir",
+        lambda licomdir_path: "C:/Reports/Data",
+    )
+    monkeypatch.setattr(
+        "alphacam_cli.core.application.acrepd.manifest_files",
+        lambda data_dir: [
+            {
+                "path": "C:/Reports/Data/JOB 001.acrepd",
+                "job_name": "JOB 001",
+                "material": None,
+                "size": 555,
+                "mtime": time.time() + 60,
+            }
+        ],
+    )
+    monkeypatch.setattr(
+        "alphacam_cli.core.application.acrepd.parse_manifest",
+        lambda path: {"job": {"job_name": "JOB-001"}},
+    )
+    result = Application(run).process_cdm_job("JOB-001")
+    assert result["success"] is True
+    assert result["report"] == {
+        "success": True,
+        "manifest_file": "JOB 001.acrepd",
+        "manifest_path": "C:/Reports/Data/JOB 001.acrepd",
+        "manifest_size": 555,
+    }
+    assert result["warnings"] == [
+        'cdm: manifest name does not match job "JOB-001", using JOB 001.acrepd'
+    ]
+
+
+def test_process_cdm_job_report_manifest_appears_after_poll_retry(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    run, _ = _mock_process(
+        monkeypatch,
+        generate_reports=True,
+        read_result={"success": True, "status": "Sukces"},
+    )
+    monkeypatch.setattr(
+        "alphacam_cli.core.application.acrepd._reports_data_dir",
+        lambda licomdir_path: "C:/Reports/Data",
+    )
+    manifest = {
+        "path": "C:/Reports/Data/JOB-001 - MDF18.acrepd",
+        "job_name": "JOB-001",
+        "material": "MDF18",
+        "size": 1234,
+        "mtime": time.time() + 60,
+    }
+    manifest_files = MagicMock(side_effect=[[], [manifest]])
+    monkeypatch.setattr(
+        "alphacam_cli.core.application.acrepd.manifest_files",
+        manifest_files,
+    )
+    monkeypatch.setattr(
+        "alphacam_cli.core.application.acrepd.parse_manifest",
+        lambda path: {"job": {"job_name": "JOB-001"}},
+    )
+    sleep = MagicMock()
+    monkeypatch.setattr("alphacam_cli.core.application.time.sleep", sleep)
+    result = Application(run).process_cdm_job("JOB-001")
+    assert result["success"] is True
+    assert result["report"]["success"] is True
+    assert manifest_files.call_count == 2
+    sleep.assert_called_once_with(0.5)
+
+
+def test_process_cdm_job_report_manifest_parse_retries_then_succeeds(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    run, _ = _mock_process(
+        monkeypatch,
+        generate_reports=True,
+        read_result={"success": True, "status": "Sukces"},
+    )
+    monkeypatch.setattr(
+        "alphacam_cli.core.application.acrepd._reports_data_dir",
+        lambda licomdir_path: "C:/Reports/Data",
+    )
+    manifest = {
+        "path": "C:/Reports/Data/JOB-001 - MDF18.acrepd",
+        "job_name": "JOB-001",
+        "material": "MDF18",
+        "size": 1234,
+        "mtime": time.time() + 60,
+    }
+    monkeypatch.setattr(
+        "alphacam_cli.core.application.acrepd.manifest_files",
+        lambda data_dir: [manifest],
+    )
+    parse_manifest = MagicMock(
+        side_effect=[
+            RuntimeError("invalid XML"),
+            RuntimeError("invalid XML"),
+            {"job": {"job_name": "JOB-001"}},
+        ]
+    )
+    monkeypatch.setattr(
+        "alphacam_cli.core.application.acrepd.parse_manifest",
+        parse_manifest,
+    )
+    sleep = MagicMock()
+    monkeypatch.setattr("alphacam_cli.core.application.time.sleep", sleep)
+    result = Application(run).process_cdm_job("JOB-001")
+    assert result["success"] is True
+    assert result["report"]["success"] is True
+    assert parse_manifest.call_count == 3
+    assert sleep.call_count == 2
+
+
+def test_process_cdm_job_report_manifest_parse_fails_after_retries(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    run, _ = _mock_process(
+        monkeypatch,
+        generate_reports=True,
+        read_result={"success": True, "status": "Sukces"},
+    )
+    monkeypatch.setattr(
+        "alphacam_cli.core.application.acrepd._reports_data_dir",
+        lambda licomdir_path: "C:/Reports/Data",
+    )
+    monkeypatch.setattr(
+        "alphacam_cli.core.application.acrepd.manifest_files",
+        lambda data_dir: [
+            {
+                "path": "C:/Reports/Data/JOB-001 - MDF18.acrepd",
+                "job_name": "JOB-001",
+                "material": "MDF18",
+                "size": 1234,
+                "mtime": time.time() + 60,
+            }
+        ],
+    )
+    monkeypatch.setattr(
+        "alphacam_cli.core.application.acrepd.parse_manifest",
+        MagicMock(side_effect=RuntimeError("invalid XML")),
+    )
+    sleep = MagicMock()
+    monkeypatch.setattr("alphacam_cli.core.application.time.sleep", sleep)
+    result = Application(run).process_cdm_job("JOB-001")
+    assert result["success"] is True
+    assert result["report"] == {"success": False, "error": "invalid XML"}
+    assert result["warnings"] == ["cdm: report manifest check failed: invalid XML"]
+    assert sleep.call_count == 2
+
+
+def test_process_cdm_job_report_mixed_candidates_content_mismatch_no_retry(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    run, _ = _mock_process(
+        monkeypatch,
+        generate_reports=True,
+        read_result={"success": True, "status": "Sukces"},
+    )
+    monkeypatch.setattr(
+        "alphacam_cli.core.application.acrepd._reports_data_dir",
+        lambda licomdir_path: "C:/Reports/Data",
+    )
+    now = time.time()
+    monkeypatch.setattr(
+        "alphacam_cli.core.application.acrepd.manifest_files",
+        lambda data_dir: [
+            {
+                "path": "C:/Reports/Data/JOB-001 - MDF18.acrepd",
+                "job_name": "JOB-001",
+                "material": "MDF18",
+                "size": 100,
+                "mtime": now + 60,
+            },
+            {
+                "path": "C:/Reports/Data/JOB-001 - Dab.acrepd",
+                "job_name": "JOB-001",
+                "material": "Dab",
+                "size": 200,
+                "mtime": now + 10,
+            },
+        ],
+    )
+    parse_manifest = MagicMock(
+        side_effect=[
+            RuntimeError("invalid XML"),
+            {"job": {"job_name": "OTHER"}},
+        ]
+    )
+    monkeypatch.setattr(
+        "alphacam_cli.core.application.acrepd.parse_manifest",
+        parse_manifest,
+    )
+    sleep = MagicMock()
+    monkeypatch.setattr("alphacam_cli.core.application.time.sleep", sleep)
+    result = Application(run).process_cdm_job("JOB-001")
+    assert result["success"] is True
+    assert result["report"] == {
+        "success": False,
+        "error": "manifest content does not match job",
+    }
+    assert result["warnings"] == [
+        'cdm: manifest content does not match job "JOB-001" in C:/Reports/Data/JOB-001 - Dab.acrepd'
+    ]
+    assert parse_manifest.call_count == 2
+    sleep.assert_not_called()
+
+
+def test_process_cdm_job_report_named_content_mismatch_uses_other_fresh(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    run, _ = _mock_process(
+        monkeypatch,
+        generate_reports=True,
+        read_result={"success": True, "status": "Sukces"},
+    )
+    monkeypatch.setattr(
+        "alphacam_cli.core.application.acrepd._reports_data_dir",
+        lambda licomdir_path: "C:/Reports/Data",
+    )
+    now = time.time()
+    monkeypatch.setattr(
+        "alphacam_cli.core.application.acrepd.manifest_files",
+        lambda data_dir: [
+            {
+                "path": "C:/Reports/Data/JOB-001 - MDF18.acrepd",
+                "job_name": "JOB-001",
+                "material": "MDF18",
+                "size": 100,
+                "mtime": now + 60,
+            },
+            {
+                "path": "C:/Reports/Data/OTHER - MDF18.acrepd",
+                "job_name": "OTHER",
+                "material": "MDF18",
+                "size": 200,
+                "mtime": now + 10,
+            },
+        ],
+    )
+    monkeypatch.setattr(
+        "alphacam_cli.core.application.acrepd.parse_manifest",
+        lambda path: {
+            "job": {"job_name": "JOB-001" if path.endswith("OTHER - MDF18.acrepd") else "OTHER"}
+        },
+    )
+    result = Application(run).process_cdm_job("JOB-001")
+    assert result["success"] is True
+    assert result["report"] == {
+        "success": True,
+        "manifest_file": "OTHER - MDF18.acrepd",
+        "manifest_path": "C:/Reports/Data/OTHER - MDF18.acrepd",
+        "manifest_size": 200,
+    }
+    assert result["warnings"] == [
+        'cdm: manifest name does not match job "JOB-001", using OTHER - MDF18.acrepd'
+    ]
