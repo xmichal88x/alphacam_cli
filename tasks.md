@@ -1196,3 +1196,25 @@ Raport: `docs/raporty/2026-08-13-session0-opcjaA.md` (sekcja WDROŻENIE).
 - vdb5_*.ps1: twarde ścieżki instalacji (maszynowe, świadome).
 - comm/manager.py: _RPC_E_CHANGED_MODE cicha kontynuacja; result_sent guard (low).
 - `get_automation_manager_addin` (core) martwe API (już w TASKS.md).
+## 2026-08-16 SESSION — BŁĄD 0x800ADF09 + AUTO-RECOVERY GATEWAYA
+
+### Objaw
+`alphacam cdm process` → `APC.ApcHost.7: Unknown VBA error; error code = 0x800ADF09` (cross-process COM call App.Run).
+
+### Root cause
+Zawieszone poprzednie wywołanie makra HeadlessProcess — log `C:\temp\ama_macro_log.txt` kończy się na `got` bez `r` (makro nie wróciło). Host VBA w procesie AlphaCAM zostaje martwy; kolejny App.Run rzuca 0x800ADF09. Wykrywane PRE-FLIGHT: `headless.macro_invocation_state()` (stan `stale` = ostatnia sekwencja niekompletna + log starszy niż 300s).
+
+### Mechanizm auto-recovery (wdrożony)
+1. Pre-flight check w `process_cdm_job` (core/application.py) — state=stale → RuntimeError z markerem STALE_MACRO (Run NIE startuje).
+2. Handler RPC (gateway/server.py) łapie marker → zwraca `{"success": False, "status": "stale_macro", "auto_restart": True}` + `threading.Timer(3.0, os._exit, args=(1,))` (daemon; odpowiedź RPC zdąży wyjść).
+3. NSSM skonfigurowany `AppExit Default Restart` → po os._exit(1) usługa sama wstaje (~5s) z nowym procesem Acam.
+4. CLI (`cdm process`) pokazuje "gateway auto-restarting (~60s), retry" i exit code 2.
+
+### WAŻNE: recovery NSSM
+- Usługa AlphaCAMGateway działa pod NSSM (PathName nssm.exe) — `sc failure` NIE działa; restart ustawia się przez `nssm set AlphaCAMGateway AppExit Default Restart` (było `Exit` — po awarii usługa zostawała martwa!).
+- Skrypt: `scripts/scm_service_recovery.ps1` (wykrywa NSSM vs SCM). Na maszynie wykonany 2026-08-16.
+- Watchdog STA (`os._exit(1)`) działa tylko dzięki temu — bez AppExit Restart watchdog zabija usługę na stałe.
+
+### Diagnostyka / ręczny reset
+- Sprawdź log makra: `Get-Content C:\temp\ama_macro_log.txt -Tail 10` — ostatni wpis `got` bez `r` = zawieszenie.
+- Reset: `taskkill /F /IM Acam.exe` → `sc stop AlphaCAMGateway` → `sc start AlphaCAMGateway` → ~50s.

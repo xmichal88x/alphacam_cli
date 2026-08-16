@@ -114,8 +114,29 @@ def process(
         kwargs["output_root"] = output_root
     with alphacam_context(visible=get_visible()) as raw:
         ac = resolve_app(raw)
-        result = ac.process_cdm_job(**kwargs)
+        try:
+            result = ac.process_cdm_job(**kwargs)
+        except RuntimeError as exc:
+            if "STALE_MACRO" in str(exc):
+                console.print("[red]CDM processing blocked: previous macro invocation hung[/red]")
+                console.print(f"[red]Detail:[/red] {exc}")
+                console.print(
+                    "[yellow]The AlphaCAM VBA host is hung — restart AlphaCAM "
+                    "before retrying.[/yellow]"
+                )
+                raise typer.Exit(code=2) from exc
+            raise
         if not result.get("success"):
+            if result.get("status") == "stale_macro":
+                console.print("[red]CDM processing blocked: previous macro invocation hung[/red]")
+                detail = result.get("detail")
+                if detail:
+                    console.print(f"[red]Detail:[/red] {detail}")
+                console.print(
+                    "[yellow]The gateway is auto-restarting (~60s). "
+                    "Retry the command afterwards.[/yellow]"
+                )
+                raise typer.Exit(code=2)
             job_display = result.get("job_name") or job_name
             console.print(f"[red]CDM job processing failed: {job_display}[/red]")
             status = result.get("status")

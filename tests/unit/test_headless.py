@@ -164,3 +164,133 @@ def test_read_job_result_invalid_job_name(tmp_path: pathlib.Path, job_name: str)
     assert result["success"] is False
     assert result["status"] == "missing"
     assert result["detail"] == f"invalid job name: {job_name}"
+
+
+def test_macro_invocation_state_missing(tmp_path: pathlib.Path) -> None:
+    result = headless.macro_invocation_state(str(tmp_path / "f.log"))
+    assert result == {"state": "missing", "last_pn": None, "last_line": "", "mtime": None}
+
+
+def test_macro_invocation_state_ok(tmp_path: pathlib.Path) -> None:
+    log_path = tmp_path / "f.log"
+    log_path.write_text("09:52:49 PN=Prod E2E 01\n09:52:51 got\n09:53:26 r\n", encoding="utf-8")
+    result = headless.macro_invocation_state(str(log_path))
+    assert result["state"] == "ok"
+    assert result["last_pn"] == "Prod E2E 01"
+    assert isinstance(result["mtime"], float)
+
+
+def test_macro_invocation_state_stale_after_got(tmp_path: pathlib.Path) -> None:
+    log_path = tmp_path / "f.log"
+    log_path.write_text("PN=X\ngot\n", encoding="utf-8")
+    now = time.time()
+    os.utime(log_path, (now - 600, now - 600))
+    result = headless.macro_invocation_state(str(log_path), now=now)
+    assert result["state"] == "stale"
+    assert result["last_pn"] == "X"
+
+
+def test_macro_invocation_state_running_after_got(tmp_path: pathlib.Path) -> None:
+    log_path = tmp_path / "f.log"
+    log_path.write_text("PN=X\ngot\n", encoding="utf-8")
+    now = time.time()
+    os.utime(log_path, (now - 10, now - 10))
+    result = headless.macro_invocation_state(str(log_path), now=now)
+    assert result["state"] == "running"
+    assert result["last_pn"] == "X"
+
+
+def test_macro_invocation_state_stale_before_got(tmp_path: pathlib.Path) -> None:
+    log_path = tmp_path / "f.log"
+    log_path.write_text("PN=X\n", encoding="utf-8")
+    now = time.time()
+    os.utime(log_path, (now - 600, now - 600))
+    result = headless.macro_invocation_state(str(log_path), now=now)
+    assert result["state"] == "stale"
+    assert result["last_pn"] == "X"
+
+
+def test_macro_invocation_state_ok_after_many_sequences(tmp_path: pathlib.Path) -> None:
+    log_path = tmp_path / "f.log"
+    log_path.write_text("PN=Old\ngot\nr\nPN=New\ngot\nr\n", encoding="utf-8")
+    result = headless.macro_invocation_state(str(log_path))
+    assert result["state"] == "ok"
+    assert result["last_pn"] == "New"
+
+
+def test_macro_invocation_state_stale_last_incomplete(tmp_path: pathlib.Path) -> None:
+    log_path = tmp_path / "f.log"
+    log_path.write_text("PN=Old\ngot\nr\nPN=New\ngot\n", encoding="utf-8")
+    now = time.time()
+    os.utime(log_path, (now - 600, now - 600))
+    result = headless.macro_invocation_state(str(log_path), now=now)
+    assert result["state"] == "stale"
+    assert result["last_pn"] == "New"
+
+
+def test_macro_invocation_state_unreadable(
+    tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    log_path = tmp_path / "f.log"
+    log_path.write_text("PN=X\n", encoding="utf-8")
+
+    def boom(*args: Any, **kwargs: Any) -> Any:
+        raise PermissionError("open failed")  # noqa: TRY003
+
+    monkeypatch.setattr("builtins.open", boom)
+    result = headless.macro_invocation_state(str(log_path))
+    assert result["state"] == "unreadable"
+    assert result["last_pn"] is None
+
+
+def test_macro_invocation_state_last_pn(tmp_path: pathlib.Path) -> None:
+    log_path = tmp_path / "f.log"
+    log_path.write_text("23:59:22 PN=RAP E2E 012\n23:59:25 got\n", encoding="utf-8")
+    result = headless.macro_invocation_state(str(log_path))
+    assert result["last_pn"] == "RAP E2E 012"
+    assert result["last_line"] == "23:59:25 got"
+
+
+def test_macro_invocation_state_ignores_padding_lines(tmp_path: pathlib.Path) -> None:
+    log_path = tmp_path / "f.log"
+    log_path.write_text("\nPN=X\n\ngot\nsome noise\nr\n\n", encoding="utf-8")
+    result = headless.macro_invocation_state(str(log_path))
+    assert result["state"] == "ok"
+    assert result["last_pn"] == "X"
+    assert result["last_line"] == "r"
+
+
+def test_macro_invocation_state_empty_log_no_stale(tmp_path: pathlib.Path) -> None:
+    log_path = tmp_path / "f.log"
+    log_path.write_text("", encoding="utf-8")
+    now = time.time()
+    os.utime(log_path, (now - 600, now - 600))
+    result = headless.macro_invocation_state(str(log_path), now=now)
+    assert result["state"] == "missing"
+    assert result["last_pn"] is None
+    assert isinstance(result["mtime"], float)
+
+
+def test_macro_invocation_state_no_pn_no_stale(tmp_path: pathlib.Path) -> None:
+    log_path = tmp_path / "f.log"
+    log_path.write_text("some noise\njunk\n", encoding="utf-8")
+    now = time.time()
+    os.utime(log_path, (now - 600, now - 600))
+    result = headless.macro_invocation_state(str(log_path), now=now)
+    assert result["state"] == "missing"
+    assert result["last_pn"] is None
+    assert result["last_line"] == "junk"
+    assert isinstance(result["mtime"], float)
+
+
+def test_macro_invocation_state_noise_with_pn_counts_as_stale(
+    tmp_path: pathlib.Path,
+) -> None:
+    log_path = tmp_path / "f.log"
+    log_path.write_text("noise PN= junk\n", encoding="utf-8")
+    now = time.time()
+    os.utime(log_path, (now - 600, now - 600))
+    result = headless.macro_invocation_state(str(log_path), now=now)
+    assert result["state"] == "stale"
+    assert result["last_pn"] == "junk"
+    assert result["last_line"] == "noise PN= junk"

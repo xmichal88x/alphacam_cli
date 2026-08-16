@@ -825,6 +825,12 @@ class Application:
         manifest's embedded job name is verified against ``job_name`` before
         success is reported. Report failures never invalidate a successful
         process run, and reports are never generated for a failed process.
+
+        Before running the macro, a pre-flight check inspects the macro log
+        via ``headless.macro_invocation_state``; when the previous macro
+        invocation is ``stale`` (hung VBA host) the call fails with
+        ``RuntimeError`` containing the ``STALE_MACRO`` marker so the gateway
+        can be restarted before another ``App.Run`` would raise 0x800ADF09.
         """
         job_name = _validate_job_name(job_name)
         count = cdm_db.job_count(job_name)
@@ -840,6 +846,14 @@ class Application:
             output_root = root if isinstance(root, str) else None
         if not output_root:
             raise RuntimeError(f"cdm: output root not found: {job_name}")  # noqa: TRY003
+        pre = headless.macro_invocation_state()
+        if pre["state"] == "stale":
+            last_line = pre.get("last_line") or ""
+            raise RuntimeError(  # noqa: TRY003
+                "cdm: STALE_MACRO: previous headless macro invocation did not complete "
+                f"(last log line: {last_line!r}); AlphaCAM VBA host is hung — "
+                "gateway must restart before processing"
+            )
         t0 = time.monotonic()
         t0_wall = time.time()
         try:

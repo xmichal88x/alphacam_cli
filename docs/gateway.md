@@ -288,6 +288,24 @@ The gateway uses **JSON-RPC 2.0** over TCP with length-prefixed frames.
 
 ---
 
+## Troubleshooting: 0x800ADF09 / zawieszony host VBA
+
+Objaw: `cdm process` kończy się `APC.ApcHost.7: Unknown VBA error; error code = 0x800ADF09`.
+
+Przyczyna: poprzednie wywołanie makra `ApplyMachiningAfterNesting.Events.HeadlessProcess` nie wróciło (host VBA w procesie Acam zawisł) — log `C:\temp\ama_macro_log.txt` kończy się na `got` bez `r`.
+
+Reakcja (od 2026-08-16): procesowanie ma pre-flight check (`macro_invocation_state`); przy wykryciu stanu `stale` gateway zwraca `status=stale_macro`, `auto_restart=True`, sam się restartuje przez NSSM (`AppExit Default Restart`) i klient dostaje komunikat z retry (~60s).
+
+Ręczna diagnostyka/reset:
+1. `Get-Content C:\temp\ama_macro_log.txt -Tail 10` (szukaj `got` bez `r` na końcu)
+2. `taskkill /F /IM Acam.exe`
+3. `sc stop AlphaCAMGateway` → `sc start AlphaCAMGateway`
+4. Poczekaj ~50s na start (port 8721 LISTENING)
+
+Wymaganie: usługa pod NSSM z `AppExit Default Restart` (skrypt `scripts/scm_service_recovery.ps1`); bez tego watchdog STA (`os._exit(1)`) zostawia usługę martwą.
+
+---
+
 ## Security Notes
 
 - The gateway has **no authentication** — it relies on Tailscale's encrypted mesh for security

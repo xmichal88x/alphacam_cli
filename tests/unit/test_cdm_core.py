@@ -2088,6 +2088,7 @@ def _mock_process(
     count: int | None = 1,
     read_result: dict[str, object] | None = None,
     generate_reports: bool | None = False,
+    macro_state: dict[str, object] | None = None,
 ) -> tuple[MagicMock, MagicMock]:
     monkeypatch.setattr("alphacam_cli.core.cdm_db.job_count", MagicMock(return_value=count))
     monkeypatch.setattr(
@@ -2099,6 +2100,10 @@ def _mock_process(
     monkeypatch.setattr(
         "alphacam_cli.core.application.headless.read_job_result",
         read,
+    )
+    monkeypatch.setattr(
+        "alphacam_cli.core.application.headless.macro_invocation_state",
+        MagicMock(return_value=macro_state or {"state": "ok", "last_line": ""}),
     )
     return run, read
 
@@ -2213,6 +2218,69 @@ def test_process_cdm_job_invalid_name_aborts_before_macro(
         Application(run).process_cdm_job("X/Y")
     job_count.assert_not_called()
     run.Run.assert_not_called()
+
+
+def test_process_cdm_job_stale_macro_blocks(monkeypatch: pytest.MonkeyPatch) -> None:
+    run, read = _mock_process(
+        monkeypatch,
+        read_result={"success": True, "status": "Sukces"},
+        macro_state={"state": "stale", "last_line": "PN=JOB-001"},
+    )
+    with pytest.raises(RuntimeError, match="STALE_MACRO") as exc_info:
+        Application(run).process_cdm_job("JOB-001")
+    assert "gateway must restart before processing" in str(exc_info.value)
+    assert "JOB-001" in str(exc_info.value)
+    run.Run.assert_not_called()
+    read.assert_not_called()
+
+
+def test_process_cdm_job_macro_state_ok(monkeypatch: pytest.MonkeyPatch) -> None:
+    run, read = _mock_process(
+        monkeypatch,
+        read_result={"success": True, "status": "Sukces"},
+        macro_state={"state": "ok", "last_line": "r"},
+    )
+    result = Application(run).process_cdm_job("JOB-001")
+    assert result["success"] is True
+    assert "STALE_MACRO" not in str(result)
+    run.Run.assert_called_once_with("ApplyMachiningAfterNesting.Events.HeadlessProcess", "JOB-001")
+    read.assert_called_once()
+
+
+def test_process_cdm_job_macro_state_missing(monkeypatch: pytest.MonkeyPatch) -> None:
+    run, read = _mock_process(
+        monkeypatch,
+        read_result={"success": True, "status": "Sukces"},
+        macro_state={"state": "missing", "last_line": ""},
+    )
+    result = Application(run).process_cdm_job("JOB-001")
+    assert result["success"] is True
+    run.Run.assert_called_once()
+    read.assert_called_once()
+
+
+def test_process_cdm_job_macro_state_running(monkeypatch: pytest.MonkeyPatch) -> None:
+    run, read = _mock_process(
+        monkeypatch,
+        read_result={"success": True, "status": "Sukces"},
+        macro_state={"state": "running", "last_line": "PN=JOB-001"},
+    )
+    result = Application(run).process_cdm_job("JOB-001")
+    assert result["success"] is True
+    run.Run.assert_called_once()
+    read.assert_called_once()
+
+
+def test_process_cdm_job_macro_state_unreadable(monkeypatch: pytest.MonkeyPatch) -> None:
+    run, read = _mock_process(
+        monkeypatch,
+        read_result={"success": True, "status": "Sukces"},
+        macro_state={"state": "unreadable", "last_line": ""},
+    )
+    result = Application(run).process_cdm_job("JOB-001")
+    assert result["success"] is True
+    run.Run.assert_called_once()
+    read.assert_called_once()
 
 
 # --- report generation (GenerateReports flag) inside process_cdm_job ---

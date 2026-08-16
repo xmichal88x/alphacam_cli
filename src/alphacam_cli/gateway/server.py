@@ -440,6 +440,8 @@ class GatewayServer:
             raise COMError(str(e)) from e
 
     def _handler_process_cdm_job(self, params: dict[str, Any]) -> dict[str, Any]:
+        """Process a CDM job; on a STALE_MACRO error returns a restart notice
+        and schedules a delayed os._exit so NSSM restarts the service."""
         job_name = str(params.get("job_name") or "").strip() or None
         if not job_name:
             raise COMError("cdm: job_name is required")
@@ -468,6 +470,23 @@ class GatewayServer:
         try:
             return com_app.process_cdm_job(**call_kwargs)  # type: ignore[no-any-return]
         except Exception as e:
+            if "STALE_MACRO" in str(e):
+                self._logger.warning(
+                    "STALE_MACRO for cdm job %s — hung VBA host, scheduling "
+                    "service exit in 3s so NSSM can restart it",
+                    job_name,
+                )
+                restart_timer = threading.Timer(3.0, os._exit, args=(1,))
+                restart_timer.daemon = True
+                restart_timer.start()
+                return {
+                    "success": False,
+                    "status": "stale_macro",
+                    "job_name": job_name,
+                    "detail": "previous macro invocation hung — gateway auto-restarting, "
+                    "retry in ~60s",
+                    "auto_restart": True,
+                }
             raise COMError(str(e)) from e
         finally:
             watchdog.cancel()

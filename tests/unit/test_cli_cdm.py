@@ -2798,6 +2798,45 @@ def test_cdm_process_command_not_found() -> None:
     assert "job not found" in result.stderr
 
 
+def test_cdm_process_command_local_runtime_error_stale_macro_exit2() -> None:
+    from tests.unit.test_cli import _mock_com
+
+    with (
+        _mock_com(),
+        patch(
+            "alphacam_cli.core.application.Application.process_cdm_job",
+            side_effect=RuntimeError(
+                "cdm: STALE_MACRO: previous headless macro invocation did not complete "
+                "(last log line: 'PN=X'); AlphaCAM VBA host is hung — gateway must restart "
+                "before processing"
+            ),
+        ) as mock_process,
+    ):
+        result = runner.invoke(app, ["cdm", "process", "JOB-001"])
+    assert result.exit_code == 2
+    assert "previous macro invocation hung" in result.stderr
+    assert "restart AlphaCAM" in result.stderr
+    assert "CDM job processing failed" not in result.stderr
+    mock_process.assert_called_once_with(job_name="JOB-001")
+
+
+def test_cdm_process_command_local_runtime_error_other_still_propagates() -> None:
+    from tests.unit.test_cli import _mock_com
+
+    with (
+        _mock_com(),
+        patch(
+            "alphacam_cli.core.application.Application.process_cdm_job",
+            side_effect=RuntimeError("cdm: job not found: NOPE"),
+        ) as mock_process,
+    ):
+        result = runner.invoke(app, ["cdm", "process", "NOPE"])
+    assert result.exit_code != 2
+    assert "restart AlphaCAM" not in result.stderr
+    assert "previous macro invocation hung" not in result.stderr
+    mock_process.assert_called_once_with(job_name="NOPE")
+
+
 def test_cdm_process_command_report_ok() -> None:
     from tests.unit.test_cli import _mock_com
 
@@ -2892,3 +2931,68 @@ def test_cdm_process_command_warnings() -> None:
     assert "nesting warning: sheet waste high" in result.stderr
     assert "press not found: P1" in result.stderr
     mock_process.assert_called_once_with(job_name="JOB-001")
+
+
+def test_cdm_process_command_stale_macro_exit2() -> None:
+    from tests.unit.test_cli import _mock_com
+
+    with (
+        _mock_com(),
+        patch(
+            "alphacam_cli.core.application.Application.process_cdm_job",
+            return_value={
+                "success": False,
+                "status": "stale_macro",
+                "job_name": "JOB-001",
+                "detail": "previous macro invocation hung - gateway auto-restarting, retry in ~60s",
+                "auto_restart": True,
+            },
+        ) as mock_process,
+    ):
+        result = runner.invoke(app, ["cdm", "process", "JOB-001"])
+    assert result.exit_code == 2
+    assert "previous macro invocation hung" in result.stderr
+    assert "auto-restarting" in result.stderr
+    assert "Retry" in result.stderr
+    assert "CDM job processing failed" not in result.stderr
+    mock_process.assert_called_once_with(job_name="JOB-001")
+
+
+def test_cdm_process_command_stale_macro_without_detail() -> None:
+    from tests.unit.test_cli import _mock_com
+
+    with (
+        _mock_com(),
+        patch(
+            "alphacam_cli.core.application.Application.process_cdm_job",
+            return_value={"success": False, "status": "stale_macro", "job_name": "JOB-001"},
+        ) as mock_process,
+    ):
+        result = runner.invoke(app, ["cdm", "process", "JOB-001"])
+    assert result.exit_code == 2
+    assert "previous macro invocation hung" in result.stderr
+    assert "Detail:" not in result.stderr
+    mock_process.assert_called_once_with(job_name="JOB-001")
+
+
+def test_cdm_process_command_plain_failure_still_exit1() -> None:
+    from tests.unit.test_cli import _mock_com
+
+    with (
+        _mock_com(),
+        patch(
+            "alphacam_cli.core.application.Application.process_cdm_job",
+            return_value={
+                "success": False,
+                "status": "failed",
+                "job_name": "JOB-001",
+                "detail": "x",
+            },
+        ),
+    ):
+        result = runner.invoke(app, ["cdm", "process", "JOB-001"])
+    assert result.exit_code == 1
+    assert "CDM job processing failed: JOB-001" in result.stderr
+    assert "Status: failed" in result.stderr
+    assert "Detail:" in result.stderr
+    assert "auto-restarting" not in result.stderr

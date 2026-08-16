@@ -366,3 +366,21 @@ Zmiana zachowania: brak aktywnego rysunku/geometrii → RuntimeError (wcześniej
 - [x] **sheet_count_light** na evencie "end" (odporność multi-wersja); manifest_list serwer-side (bug --remote FileNotFoundError).
 - [x] Weryfikacja: ruff/mypy 0, **1093 passed**, build OK, E2E job "Zamowienie 198" (NC per arkusz, by_token, validate, nc_config) — log w tasks.md.
 - [ ] PF1: watchdog process default 330s (zrobione w kodzie; usługa bez restytu — sanity na maszynie wykonane).
+
+---
+
+## FIXLOOP 2026-08-16 — auto-recovery 0x800ADF09 (backlog po review, 4 iteracje, 0 issues)
+
+**Zamknięte w pętli (naprawione):** M1 (stale na logu bez PN= → trwała blokada; fix: seen_pn wymagane do stale, brak PN= → missing), M3 (CLI local COM nie łapał RuntimeError STALE_MACRO → traceback; fix: try/except + exit 2), N1 (mylący komunikat "gateway auto-restarting" w trybie local; fix: "restart AlphaCAM before retrying"), N3 (duplikat testu), N5 (test "PN=" substring w szumie), N6 (fraza "(or the gateway service)" bezprzedmiotowa — usunięta).
+
+### Backlog (Low, nie blokuje, do ewentualnej poprawy)
+- [ ] **N2** — cdm.py: duplikacja bloków komunikatów stale_macro (except RuntimeError + gałąź dict) → wydzielić helper `_print_stale_macro_blocked(detail)`
+- [ ] **N4** — test_cli_cdm.py `test_cdm_process_command_local_runtime_error_other_still_propagates`: asercja `exit_code != 2` słabsza niż `== 1`
+- [ ] **P1 (złożone)** — application.py pre-flight blokuje tylko `state == "stale"`; `"running"` (inny klient przetwarza) przechodzi do App.Run → ryzyko współbieżnego makra → 0x800ADF09. Wymaga decyzji (blokować running / timeout)
+- [ ] **P2 (znane)** — parsowanie `"PN="` jako substring w dowolnej linii (szum z "PN=" → seen_pn → możliwy fałszywy stale). Dokumentowane testem noise_with_pn_counts_as_stale; zawężenie wzorca = decyzja
+- [ ] **M2 (poza zakresem)** — handler: os._exit po 3s niezsynchronizowany z wysłaniem odpowiedzi RPC (przy zdalnym kliencie z dużym RTT response może nie dotrzeć); opcjonalnie 5-10s lub event wysyłki
+- [ ] **M4 (poza zakresem)** — 0x800ADF09 bez markera STALE_MACRO nie wyzwala auto-restartu (np. log w stanie missing/ok, host VBA martwy z innego powodu) — rozpoznawanie 0x800ADF09 w treści błędu jako dodatkowego sygnału restartu
+- [ ] **M5 (do udokumentowania)** — restart gatewaya (NSSM) nie restartuje Acam.exe; E2E sugeruje że COM launch tworzy nowy Acam — potwierdzić i udokumentować warunek
+- [ ] **Low** — application.py/server.py: marker stringowy "STALE_MACRO" zamiast dedykowanego wyjątku `StaleMacroError(RuntimeError)`
+- [ ] **Low** — headless.py: dopasowanie po ostatnim słowie linii (`split()[-1]`) — linia kończąca się samotnym "r"/"got" ustawia completed; rozważyć wzorzec `^\d{2}:\d{2}:\d{2} (got|r)$`
+- [ ] **Low** — scm_service_recovery.ps1: walidacja `$appExit` z nssm get (Restart w treści) + `$ErrorActionPreference="Stop"` + guard admina

@@ -2151,6 +2151,108 @@ def test_process_cdm_job_handler_watchdog_cancelled_on_error(server_app: MagicMo
     watchdog.cancel.assert_called_once()
 
 
+class _FakeTimer:
+    instances: list[_FakeTimer] = []
+
+    def __init__(
+        self,
+        interval: float,
+        function: Any,
+        args: Any = None,
+        kwargs: Any = None,
+    ) -> None:
+        self.interval = interval
+        self.function = function
+        self.args = args or ()
+        self.kwargs = kwargs or {}
+        self.daemon = False
+        self.started = False
+        _FakeTimer.instances.append(self)
+
+    def start(self) -> None:
+        self.started = True
+
+    def cancel(self) -> None:
+        pass
+
+
+def test_process_cdm_job_handler_stale_macro_returns_restart_response(
+    server_app: MagicMock, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import alphacam_cli.gateway.server as server_module
+
+    _FakeTimer.instances = []
+    monkeypatch.setattr(server_module.threading, "Timer", _FakeTimer)
+    server_app.process_cdm_job.side_effect = RuntimeError(
+        "cdm: STALE_MACRO: previous headless macro invocation did not complete "
+        "(last log line: 'RUN'); AlphaCAM VBA host is hung"
+    )
+    gw = GatewayServer()
+    watchdog = MagicMock()
+    gw._watchdog_arm = MagicMock(return_value=watchdog)
+
+    result = gw._handler_process_cdm_job({"job_name": "JOB-001"})
+
+    assert result == {
+        "success": False,
+        "status": "stale_macro",
+        "job_name": "JOB-001",
+        "detail": "previous macro invocation hung — gateway auto-restarting, retry in ~60s",
+        "auto_restart": True,
+    }
+    server_app.process_cdm_job.assert_called_once_with(job_name="JOB-001")
+    assert len(_FakeTimer.instances) == 1
+    timer = _FakeTimer.instances[0]
+    assert timer.interval == 3.0
+    assert timer.function is os._exit
+    assert timer.args == (1,)
+    assert timer.daemon is True
+    assert timer.started is True
+    watchdog.cancel.assert_called_once()
+
+
+def test_process_cdm_job_handler_plain_error_no_restart(
+    server_app: MagicMock, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import alphacam_cli.gateway.server as server_module
+
+    _FakeTimer.instances = []
+    monkeypatch.setattr(server_module.threading, "Timer", _FakeTimer)
+    server_app.process_cdm_job.side_effect = RuntimeError("cdm: job not found: NOPE")
+    gw = GatewayServer()
+    watchdog = MagicMock()
+    gw._watchdog_arm = MagicMock(return_value=watchdog)
+
+    with pytest.raises(COMError, match=r"^cdm: job not found: NOPE$"):
+        gw._handler_process_cdm_job({"job_name": "NOPE"})
+
+    assert _FakeTimer.instances == []
+    watchdog.cancel.assert_called_once()
+
+
+def test_process_cdm_job_handler_success_no_restart(
+    server_app: MagicMock, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import alphacam_cli.gateway.server as server_module
+
+    _FakeTimer.instances = []
+    monkeypatch.setattr(server_module.threading, "Timer", _FakeTimer)
+    server_app.process_cdm_job.return_value = {
+        "success": True,
+        "job_name": "JOB-001",
+        "processed": True,
+    }
+    gw = GatewayServer()
+    watchdog = MagicMock()
+    gw._watchdog_arm = MagicMock(return_value=watchdog)
+
+    result = gw._handler_process_cdm_job({"job_name": "JOB-001"})
+
+    assert result == {"success": True, "job_name": "JOB-001", "processed": True}
+    assert _FakeTimer.instances == []
+    watchdog.cancel.assert_called_once()
+
+
 def _patch_sta_call_queue(gw: GatewayServer, monkeypatch: pytest.MonkeyPatch) -> None:
     """Execute queued calls synchronously so _com_call needs no real STA thread."""
 
