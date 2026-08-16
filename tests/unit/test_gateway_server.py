@@ -1202,6 +1202,69 @@ def test_create_cdm_job_handler_com_failure(server_app: MagicMock) -> None:
         gw._handler_create_cdm_job({"job_name": "JOB-001", "config": "Fronty"})
 
 
+def test_cdm_order_details_handler_valid(
+    server_app: MagicMock, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(
+        "alphacam_cli.core.cdm_db.order_details",
+        lambda job: [{"style_name": "Typ Frontu 1"}],
+    )
+    gw = GatewayServer()
+    result = gw._handler_cdm_order_details({"job_name": "JOB-001"})
+    assert result == {"order_details": [{"style_name": "Typ Frontu 1"}], "job_name": "JOB-001"}
+
+
+def test_cdm_order_details_handler_strips_job_name(
+    server_app: MagicMock, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    captured: dict[str, object] = {}
+
+    def fake_order_details(job: str | None) -> list[dict[str, Any]]:
+        captured["job"] = job
+        return []
+
+    monkeypatch.setattr("alphacam_cli.core.cdm_db.order_details", fake_order_details)
+    gw = GatewayServer()
+    result = gw._handler_cdm_order_details({"job_name": "  JOB-001  "})
+    assert result == {"order_details": [], "job_name": "JOB-001"}
+    assert captured["job"] == "JOB-001"
+
+
+def test_cdm_order_details_handler_all_jobs(
+    server_app: MagicMock, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr("alphacam_cli.core.cdm_db.order_details", lambda job: [])
+    gw = GatewayServer()
+    result = gw._handler_cdm_order_details({})
+    assert result == {"order_details": [], "job_name": None}
+
+
+def test_cdm_order_details_handler_blank_job_name(server_app: MagicMock) -> None:
+    gw = GatewayServer()
+    with pytest.raises(COMError, match=r"^cdm: job_name is required$"):
+        gw._handler_cdm_order_details({"job_name": ""})
+    with pytest.raises(COMError, match=r"^cdm: job_name is required$"):
+        gw._handler_cdm_order_details({"job_name": "   "})
+
+
+def test_cdm_order_details_handler_non_string_job_name(server_app: MagicMock) -> None:
+    gw = GatewayServer()
+    with pytest.raises(COMError, match=r"^cdm: job_name must be a string$"):
+        gw._handler_cdm_order_details({"job_name": {"a": 1}})
+
+
+def test_cdm_order_details_handler_forbidden_job_name(server_app: MagicMock) -> None:
+    gw = GatewayServer()
+    with pytest.raises(COMError, match=r"invalid job name: 'A/B' \(forbidden characters: /\)"):
+        gw._handler_cdm_order_details({"job_name": "A/B"})
+
+
+def test_cdm_order_details_handler_overlong_job_name(server_app: MagicMock) -> None:
+    gw = GatewayServer()
+    with pytest.raises(COMError, match=r"max 60 characters"):
+        gw._handler_cdm_order_details({"job_name": "J" * 61})
+
+
 def test_cdm_types_handler_delegates(server_app: MagicMock) -> None:
     payload = {
         "types": [{"id": 1, "name": "Typ Frontu 1"}, {"id": 2, "name": "L_B_10mm"}],
@@ -1896,8 +1959,15 @@ def test_manifest_read_handler_token_qty_negative(server_app: MagicMock) -> None
 
 def test_manifest_read_handler_token_qty_bool(server_app: MagicMock) -> None:
     gw = GatewayServer()
-    with pytest.raises(COMError, match=r"manifest: token_qty values must be non-negative integers"):
+    with pytest.raises(COMError, match=r"manifest: token_qty values must be integers"):
         gw._handler_manifest_read({"job_name": "Fronty", "token_qty": {"ABC": True}})
+    server_app.manifest_read.assert_not_called()
+
+
+def test_manifest_read_handler_token_qty_float_rejected(server_app: MagicMock) -> None:
+    gw = GatewayServer()
+    with pytest.raises(COMError, match=r"manifest: token_qty values must be integers"):
+        gw._handler_manifest_read({"job_name": "Fronty", "token_qty": {"ABC": 2.9}})
     server_app.manifest_read.assert_not_called()
 
 

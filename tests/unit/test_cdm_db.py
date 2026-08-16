@@ -571,12 +571,7 @@ def test_job_nc_config_nulls(monkeypatch: pytest.MonkeyPatch) -> None:
         "use_name_identifiers: \n"
     )
     _mock_run(monkeypatch, stdout=stdout)
-    assert cdm_db.job_nc_config("order") == {
-        "nc_output": None,
-        "replace_space_with_underscore": None,
-        "split_nested_sheet_drawings": None,
-        "use_name_identifiers": None,
-    }
+    assert cdm_db.job_nc_config("order") is None
 
 
 def test_job_nc_config_missing_lines(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -601,25 +596,33 @@ def test_job_nc_config_subprocess_failure(monkeypatch: pytest.MonkeyPatch) -> No
 
 def test_job_config_missing_lines(monkeypatch: pytest.MonkeyPatch) -> None:
     _mock_run(monkeypatch, stdout="not a config\n")
-    assert cdm_db.job_config("order") == {
-        "output_root": None,
-        "nc_output": None,
-        "generate_reports": None,
-        "replace_space_with_underscore": None,
-        "split_nested_sheet_drawings": None,
-        "use_name_identifiers": None,
-    }
+    assert cdm_db.job_config("order") is None
+
+
+def test_job_config_no_config_row_returns_none(monkeypatch: pytest.MonkeyPatch) -> None:
+    _mock_run(
+        monkeypatch,
+        stdout=(
+            "output: \n"
+            "nc_output: \n"
+            "generate_reports: \n"
+            "replace_space_with_underscore: \n"
+            "split_nested_sheet_drawings: \n"
+            "use_name_identifiers: \n"
+        ),
+    )
+    assert cdm_db.job_config("order") is None
 
 
 def test_job_config_line_breaks_not_eaten(monkeypatch: pytest.MonkeyPatch) -> None:
-    _mock_run(monkeypatch, stdout="output:\ngenerate_reports:\n")
+    _mock_run(monkeypatch, stdout="output:\ngenerate_reports:\nuse_name_identifiers: 1\n")
     assert cdm_db.job_config("order") == {
         "output_root": None,
         "nc_output": None,
         "generate_reports": False,
         "replace_space_with_underscore": None,
         "split_nested_sheet_drawings": None,
-        "use_name_identifiers": None,
+        "use_name_identifiers": True,
     }
 
 

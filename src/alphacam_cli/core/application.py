@@ -27,7 +27,6 @@ _ADDINS_INTERFACE_TYPELIB = "{D216BAAC-A717-4793-92D3-1AE37AE3AC2E}"
 _ADDINS_TYPELIB = "{A87DD4DB-67C9-4F1B-BC79-A71EE8C7D1E5}"
 _ADDINS_INTERFACE_CLSID = "{39BFE38A-D3E4-43EA-89D0-584C776B97A9}"
 
-_MANIFEST_FRESH_TOLERANCE = 0.0
 _MANIFEST_POLL_ATTEMPTS = 3
 _MANIFEST_POLL_INTERVAL = 0.5
 
@@ -893,10 +892,8 @@ class Application:
                     manifests = [
                         m
                         for m in acrepd.manifest_files(data_dir)
-                        if m.get("mtime") is not None
-                        and float(m["mtime"]) >= t0_wall - _MANIFEST_FRESH_TOLERANCE
+                        if m.get("mtime") is not None and float(m["mtime"]) >= t0_wall
                     ]
-                    fallback_used = False
                     named = sorted(
                         [
                             m
@@ -925,6 +922,8 @@ class Application:
                             continue
                         parsed_ok = True
                         if _manifest_job_matches(parsed, job_name):
+                            if named:
+                                fallback_used = False
                             manifest = m
                             break
                         last_mismatch = m
@@ -1481,7 +1480,15 @@ class Application:
         return result
 
     def delete_cdm_job(self, job_name: str) -> dict[str, Any]:
-        """Delete a CDM job from the database (headless, no dialogs)."""
+        """Delete a CDM job from the database (headless, no dialogs).
+
+        The job is located via the Automation Manager COM lookup; when the
+        lookup misses, the database (``job_count``) decides: no row means the
+        job does not exist, a row means the job exists but the COM lookup
+        failed (e.g. created by another process) — the lookup is retried once
+        before reporting an Automation Manager cache issue.
+        """
+        job_name = _validate_job_name(job_name)
         am = self.get_cdm_automation_manager()
         job: Any = None
         try:
@@ -1489,7 +1496,23 @@ class Application:
         except Exception as e:
             raise RuntimeError(f"cdm: delete job failed: {e}") from e  # noqa: TRY003
         if job is None:
-            raise RuntimeError(f"cdm: job not found: {job_name}")  # noqa: TRY003
+            count = cdm_db.job_count(job_name)
+            if count is None:
+                raise RuntimeError(  # noqa: TRY003
+                    f"cdm: job existence check failed: {job_name}"
+                )
+            if count > 0:
+                try:
+                    job = cdm_db.find_cdm_job(am, job_name)
+                except Exception as e:
+                    raise RuntimeError(f"cdm: delete job failed: {e}") from e  # noqa: TRY003
+            if job is None:
+                if count > 0:
+                    raise RuntimeError(  # noqa: TRY003
+                        "cdm: job not found via Automation Manager but exists in "
+                        f"database (AM cache issue): {job_name}"
+                    )
+                raise RuntimeError(f"cdm: job not found: {job_name}")  # noqa: TRY003
         if not hasattr(job, "DeleteFromDB"):
             raise RuntimeError("cdm: DeleteFromDB unavailable on job")  # noqa: TRY003
         try:
@@ -1771,6 +1794,7 @@ def _enrich_manifest_nc(
         if isinstance(sheet, dict)
         and isinstance(sheet.get("name"), str)
         and not sheet.get("nc_path")
+        and not sheet.get("nc_filename")
     ]
     if "nc_matched_by_order" in result:
         if order_removed:

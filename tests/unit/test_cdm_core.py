@@ -2672,6 +2672,118 @@ def test_process_cdm_job_report_manifest_appears_after_poll_retry(
     sleep.assert_called_once_with(0.5)
 
 
+def test_process_cdm_job_report_fallback_early_then_named_content_mismatch_warns(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    run, _ = _mock_process(
+        monkeypatch,
+        generate_reports=True,
+        read_result={"success": True, "status": "Sukces"},
+    )
+    monkeypatch.setattr(
+        "alphacam_cli.core.application.acrepd._reports_data_dir",
+        lambda licomdir_path: "C:/Reports/Data",
+    )
+    fallback_manifest = {
+        "path": "C:/Reports/Data/OTHER.acrepd",
+        "job_name": "OTHER",
+        "material": None,
+        "size": 100,
+        "mtime": time.time() + 60,
+    }
+    named_manifest = {
+        "path": "C:/Reports/Data/JOB-001 - MDF18.acrepd",
+        "job_name": "JOB-001",
+        "material": "MDF18",
+        "size": 200,
+        "mtime": time.time() + 60,
+    }
+    manifest_files = MagicMock(side_effect=[[fallback_manifest], [named_manifest]])
+    monkeypatch.setattr(
+        "alphacam_cli.core.application.acrepd.manifest_files",
+        manifest_files,
+    )
+    monkeypatch.setattr(
+        "alphacam_cli.core.application.acrepd.parse_manifest",
+        MagicMock(
+            side_effect=[
+                RuntimeError("invalid XML"),
+                {"job": {"job_name": "OTHER"}},
+            ]
+        ),
+    )
+    sleep = MagicMock()
+    monkeypatch.setattr("alphacam_cli.core.application.time.sleep", sleep)
+    result = Application(run).process_cdm_job("JOB-001")
+    assert result["success"] is True
+    assert result["report"] == {
+        "success": False,
+        "error": "manifest content does not match job",
+    }
+    assert result["warnings"] == [
+        'cdm: manifest name does not match job "JOB-001", using JOB-001 - MDF18.acrepd',
+        'cdm: manifest content does not match job "JOB-001" in '
+        "C:/Reports/Data/JOB-001 - MDF18.acrepd",
+    ]
+    assert manifest_files.call_count == 2
+    sleep.assert_called_once_with(0.5)
+
+
+def test_process_cdm_job_report_fallback_early_then_named_content_match_no_warning(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    run, _ = _mock_process(
+        monkeypatch,
+        generate_reports=True,
+        read_result={"success": True, "status": "Sukces"},
+    )
+    monkeypatch.setattr(
+        "alphacam_cli.core.application.acrepd._reports_data_dir",
+        lambda licomdir_path: "C:/Reports/Data",
+    )
+    fallback_manifest = {
+        "path": "C:/Reports/Data/OTHER.acrepd",
+        "job_name": "OTHER",
+        "material": None,
+        "size": 100,
+        "mtime": time.time() + 60,
+    }
+    named_manifest = {
+        "path": "C:/Reports/Data/JOB-001 - MDF18.acrepd",
+        "job_name": "JOB-001",
+        "material": "MDF18",
+        "size": 200,
+        "mtime": time.time() + 60,
+    }
+    manifest_files = MagicMock(side_effect=[[fallback_manifest], [named_manifest]])
+    monkeypatch.setattr(
+        "alphacam_cli.core.application.acrepd.manifest_files",
+        manifest_files,
+    )
+    monkeypatch.setattr(
+        "alphacam_cli.core.application.acrepd.parse_manifest",
+        MagicMock(
+            side_effect=[
+                RuntimeError("invalid XML"),
+                {"job": {"job_name": "JOB-001"}},
+            ]
+        ),
+    )
+    sleep = MagicMock()
+    monkeypatch.setattr("alphacam_cli.core.application.time.sleep", sleep)
+    result = Application(run).process_cdm_job("JOB-001")
+    assert result["success"] is True
+    assert result["report"] == {
+        "success": True,
+        "manifest_file": "JOB-001 - MDF18.acrepd",
+        "manifest_path": "C:/Reports/Data/JOB-001 - MDF18.acrepd",
+        "manifest_size": 200,
+    }
+    assert "warnings" not in result
+    assert manifest_files.call_count == 2
+    sleep.assert_called_once_with(0.5)
+
+
 def test_process_cdm_job_report_manifest_parse_retries_then_succeeds(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -2858,3 +2970,111 @@ def test_process_cdm_job_report_named_content_mismatch_uses_other_fresh(
     assert result["warnings"] == [
         'cdm: manifest name does not match job "JOB-001", using OTHER - MDF18.acrepd'
     ]
+
+
+# --- delete_cdm_job ---
+
+
+def test_delete_cdm_job_found_deletes(monkeypatch: pytest.MonkeyPatch) -> None:
+    am = MagicMock()
+    job = MagicMock(name="CDMJob")
+    monkeypatch.setattr(
+        "alphacam_cli.core.application.cdm_db.find_cdm_job", MagicMock(return_value=job)
+    )
+    result = _app_with_am(am).delete_cdm_job("JOB-001")
+
+    assert result == {"success": True, "job_name": "JOB-001"}
+    job.DeleteFromDB.assert_called_once_with()
+
+
+def test_delete_cdm_job_com_miss_db_hit_retries_and_deletes(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    am = MagicMock()
+    job = MagicMock(name="CDMJob")
+    find = MagicMock(side_effect=[None, job])
+    job_count = MagicMock(return_value=1)
+    monkeypatch.setattr("alphacam_cli.core.application.cdm_db.find_cdm_job", find)
+    monkeypatch.setattr("alphacam_cli.core.application.cdm_db.job_count", job_count)
+
+    result = _app_with_am(am).delete_cdm_job("JOB-001")
+
+    assert result == {"success": True, "job_name": "JOB-001"}
+    assert find.call_count == 2
+    job_count.assert_called_once_with("JOB-001")
+    job.DeleteFromDB.assert_called_once_with()
+
+
+def test_delete_cdm_job_com_miss_db_hit_still_missing_raises_cache_issue(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    am = MagicMock()
+    find = MagicMock(return_value=None)
+    monkeypatch.setattr("alphacam_cli.core.application.cdm_db.find_cdm_job", find)
+    monkeypatch.setattr("alphacam_cli.core.application.cdm_db.job_count", MagicMock(return_value=1))
+
+    with pytest.raises(
+        RuntimeError,
+        match=r"cdm: job not found via Automation Manager but exists in database "
+        r"\(AM cache issue\): JOB-001",
+    ):
+        _app_with_am(am).delete_cdm_job("JOB-001")
+    assert find.call_count == 2
+
+
+def test_delete_cdm_job_com_miss_db_empty_raises_not_found(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    am = MagicMock()
+    monkeypatch.setattr(
+        "alphacam_cli.core.application.cdm_db.find_cdm_job", MagicMock(return_value=None)
+    )
+    monkeypatch.setattr("alphacam_cli.core.application.cdm_db.job_count", MagicMock(return_value=0))
+
+    with pytest.raises(RuntimeError, match=r"cdm: job not found: JOB-001"):
+        _app_with_am(am).delete_cdm_job("JOB-001")
+
+
+def test_delete_cdm_job_com_miss_db_read_failure_raises(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    am = MagicMock()
+    monkeypatch.setattr(
+        "alphacam_cli.core.application.cdm_db.find_cdm_job", MagicMock(return_value=None)
+    )
+    monkeypatch.setattr(
+        "alphacam_cli.core.application.cdm_db.job_count", MagicMock(return_value=None)
+    )
+
+    with pytest.raises(RuntimeError, match=r"cdm: job existence check failed: JOB-001"):
+        _app_with_am(am).delete_cdm_job("JOB-001")
+
+
+def test_delete_cdm_job_delete_failure(monkeypatch: pytest.MonkeyPatch) -> None:
+    am = MagicMock()
+    job = MagicMock(name="CDMJob")
+    job.DeleteFromDB.side_effect = RuntimeError("locked")
+    monkeypatch.setattr(
+        "alphacam_cli.core.application.cdm_db.find_cdm_job", MagicMock(return_value=job)
+    )
+
+    with pytest.raises(RuntimeError, match=r"cdm: delete job failed: locked"):
+        _app_with_am(am).delete_cdm_job("JOB-001")
+
+
+def test_delete_cdm_job_without_delete_method(monkeypatch: pytest.MonkeyPatch) -> None:
+    am = MagicMock()
+    job = object()
+    monkeypatch.setattr(
+        "alphacam_cli.core.application.cdm_db.find_cdm_job", MagicMock(return_value=job)
+    )
+
+    with pytest.raises(RuntimeError, match=r"cdm: DeleteFromDB unavailable on job"):
+        _app_with_am(am).delete_cdm_job("JOB-001")
+
+
+def test_delete_cdm_job_invalid_name_aborts_before_lookup() -> None:
+    am = MagicMock()
+    with pytest.raises(RuntimeError, match=r"invalid job name: 'A/B' \(forbidden characters: /\)"):
+        _app_with_am(am).delete_cdm_job("A/B")
+    am.AutomationManager.assert_not_called()

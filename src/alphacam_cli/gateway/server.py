@@ -613,7 +613,17 @@ class GatewayServer:
         return {"settings": out}
 
     def _handler_cdm_order_details(self, params: dict[str, Any]) -> dict[str, Any]:
-        job_name = str(params.get("job_name")) if params.get("job_name") is not None else None
+        job_name = params.get("job_name")
+        if job_name is not None and not isinstance(job_name, str):
+            raise COMError("cdm: job_name must be a string")
+        if job_name is not None:
+            job_name = job_name.strip()
+            if not job_name:
+                raise COMError("cdm: job_name is required")
+            try:
+                job_name = _validate_job_name(job_name)
+            except RuntimeError as exc:
+                raise COMError(str(exc)) from None
         try:
             return {"order_details": cdm_db.order_details(job_name), "job_name": job_name}
         except Exception as e:
@@ -682,11 +692,13 @@ class GatewayServer:
                 raise COMError("manifest: token_qty must be a dict")
             coerced: dict[str, int] = {}
             for key, value in token_qty.items():
+                if isinstance(value, bool) or isinstance(value, float):
+                    raise COMError("manifest: token_qty values must be integers")
                 try:
                     coerced_value = int(value)
                 except (TypeError, ValueError):
                     raise COMError("manifest: token_qty values must be integers") from None
-                if isinstance(value, bool) or coerced_value < 0:
+                if coerced_value < 0:
                     raise COMError("manifest: token_qty values must be non-negative integers")
                 coerced[str(key)] = coerced_value
             token_qty = coerced

@@ -501,6 +501,10 @@ def job_config(job_name: str, licomdir: str | None = None) -> dict[str, object] 
     stdout = _job_config_read(job_name)
     if stdout is None:
         return None
+    if not any(
+        match.group(1).strip() for match in re.finditer(r"(?m)^[a-z_]+:[ \t]*(.*)$", stdout)
+    ):
+        return None
     output_root: str | None = None
     match = re.search(r"(?m)^output:[ \t]*(.*)$", stdout)
     if match is not None:

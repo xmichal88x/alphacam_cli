@@ -16,7 +16,7 @@ from alphacam_cli.cli.common import (
     resolve_app,
 )
 from alphacam_cli.com.manager import alphacam_context
-from alphacam_cli.core.application import _validate_due_date
+from alphacam_cli.core.application import _validate_due_date, _validate_job_name
 
 app = typer.Typer(help="Cabinet Door Manufacturing (CDM Automation Manager add-in)")
 
@@ -445,6 +445,7 @@ def _parse_token_qtys(raw_items: list[str]) -> dict[str, int]:
     result: dict[str, int] = {}
     for raw in raw_items:
         token, sep, qty = raw.partition("=")
+        token = token.strip()
         if not sep or not token:
             console.print(f'[red]Error:[/red] invalid --token-qty "{raw}" (expected token=qty)')
             raise typer.Exit(code=2)
@@ -811,6 +812,12 @@ def order_details_list(
 ) -> None:
     """List CDM order details (all jobs when no job name given)."""
     require_platform()
+    if job_name is not None:
+        try:
+            job_name = _validate_job_name(job_name)
+        except RuntimeError as exc:
+            console.print(f"[red]Error:[/red] {exc}")
+            raise typer.Exit(code=2) from None
     with alphacam_context(visible=get_visible()) as raw:
         ac = resolve_app(raw)
         result = ac.cdm_order_details(job_name=job_name)

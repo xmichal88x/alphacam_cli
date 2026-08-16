@@ -4,7 +4,7 @@ import glob
 import logging
 import os
 import re
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
 from typing import Any
 from xml.etree import ElementTree as ET
 from xml.etree.ElementTree import ParseError
@@ -679,47 +679,106 @@ def _manifest_token(part: dict[str, Any]) -> str | None:
     return None
 
 
-def _part_qty(part: dict[str, Any]) -> int:
-    value = part.get("quantity_on_sheet")
-    if value is None:
-        return 0
-    try:
-        return int(value)
-    except (TypeError, ValueError):
-        return 0
-
-
 def _part_order_number(part: dict[str, Any]) -> str | None:
     value = part.get("csv_order_number")
-    if value is None or not str(value).strip():
-        return None
-    return str(value).strip()
+    if isinstance(value, str) and value.strip():
+        return value.strip()
+    return None
 
 
-def aggregate_by_token(manifest: dict[str, Any]) -> list[dict[str, Any]]:
-    groups: dict[str | None, list[tuple[str, dict[str, Any]]]] = {}
-    for sheet in manifest.get("sheets") or []:
+def _warn_invalid_part(part: dict[str, Any]) -> None:
+    """Warn once per part about non-string token/order data.
+
+    Blank strings are a normal macro artifact for parts without a token/order
+    and are silently treated as ``None`` (see ``_manifest_token``/``_part_order_number``);
+    only genuinely non-string values (int/float/bool) are reported.
+    """
+    token = part.get("custom_field_1")
+    if token is not None and not isinstance(token, str):
+        logger.warning("_iter_manifest_parts: nie-str token custom_field_1: %r", token)
+    order = part.get("csv_order_number")
+    if order is not None and not isinstance(order, str):
+        logger.warning("_iter_manifest_parts: nie-str csv_order_number: %r", order)
+
+
+def _iter_manifest_parts(manifest: dict[str, Any]) -> Iterator[tuple[str, dict[str, Any]]]:
+    """Yield ``(sheet_name, part)`` for every dict part across sheets and unmatched_parts.
+
+    Emits a WARNING log per non-string token/order value (up to two warnings
+    for a single part), once per traversal. ``sheet_name`` is stripped of
+    surrounding whitespace; bare ``"?"`` marks both an unnamed sheet and an
+    ``unmatched_parts`` entry.
+    """
+    if not isinstance(manifest, dict):
+        return
+    sheets = manifest.get("sheets")
+    if not isinstance(sheets, list):
+        sheets = []
+    for sheet in sheets:
         if not isinstance(sheet, dict):
             continue
         name = sheet.get("name")
-        sheet_name = name if isinstance(name, str) and name else "?"
-        for part in sheet.get("parts") or []:
+        sheet_name = name.strip() if isinstance(name, str) and name.strip() else "?"
+        parts = sheet.get("parts")
+        if not isinstance(parts, list):
+            continue
+        for part in parts:
             if isinstance(part, dict):
-                groups.setdefault(_manifest_token(part), []).append((sheet_name, part))
-    for part in manifest.get("unmatched_parts") or []:
+                _warn_invalid_part(part)
+                yield sheet_name, part
+    unmatched_parts = manifest.get("unmatched_parts")
+    if not isinstance(unmatched_parts, list):
+        unmatched_parts = []
+    for part in unmatched_parts:
         if isinstance(part, dict):
-            groups.setdefault(_manifest_token(part), []).append(("?", part))
+            _warn_invalid_part(part)
+            yield "?", part
+
+
+def aggregate_by_token(manifest: dict[str, Any]) -> list[dict[str, Any]]:
+    """Group parts by token; each AC_05_PARTS entry counts as ONE piece.
+
+    The macro splits the job quantity into individual part records, so every
+    entry in `sheets[].parts` (and `unmatched_parts`) represents exactly one
+    physical part. `total_qty` is the number of entries per token, and the
+    per-sheet `qty` is the number of entries (pieces) on that sheet.
+
+    `quantity_on_sheet` is informational only — how many pieces of the same
+    PartID sit on a sheet — and is NOT summed (a part repeated 5x with
+    quantity_on_sheet=5 is 5 pieces, not 25).
+
+    Arkusze o tej samej nazwie lacza sie w jeden wpis ``sheets`` (qty to suma);
+    traceability per arkusz wymaga unikalnych nazw arkuszy.
+    """
+    groups: dict[str | None, list[tuple[str, dict[str, Any]]]] = {}
+    for sheet_name, part in _iter_manifest_parts(manifest):
+        groups.setdefault(_manifest_token(part), []).append((sheet_name, part))
+    seen_tokens: dict[str, list[str]] = {}
+    for token in groups:
+        if isinstance(token, str):
+            seen_tokens.setdefault(token.casefold(), []).append(token)
+    for variants in seen_tokens.values():
+        if len(variants) > 1:
+            logger.warning("tokeny rozniace sie tylko case: %r", sorted(variants))
     result: list[dict[str, Any]] = []
     for token, items in groups.items():
         sheet_qtys: dict[str, int] = {}
         total_qty = 0
         order_number: str | None = None
         for sheet_name, part in items:
-            qty = _part_qty(part)
-            total_qty += qty
-            sheet_qtys[sheet_name] = sheet_qtys.get(sheet_name, 0) + qty
+            total_qty += 1
+            sheet_qtys[sheet_name] = sheet_qtys.get(sheet_name, 0) + 1
+            part_order_number = _part_order_number(part)
             if order_number is None:
-                order_number = _part_order_number(part)
+                order_number = part_order_number
+            elif part_order_number is not None and part_order_number != order_number:
+                logger.warning(
+                    "aggregate_by_token: token %r ma rozne csv_order_number"
+                    " (%r vs %r) — uzyto pierwszego niepustego",
+                    token,
+                    order_number,
+                    part_order_number,
+                )
         result.append(
             {
                 "token": token,
@@ -744,36 +803,58 @@ def validate_manifest(
     manifest: dict[str, Any],
     expected_qty: dict[str, int] | None = None,
 ) -> dict[str, Any]:
-    """Validate manifest consistency; return {"valid", "warnings", "errors"}."""
+    """Validate manifest consistency; return {"valid", "warnings", "errors"}.
+
+    Iterates ``_iter_manifest_parts`` exactly once, so the per-part WARNING
+    logs (non-string token/order) are emitted once per call. The returned
+    "warnings" cover parts missing identifiers: missing both ``csv_order_number``
+    and ``custom_field_1``, and parts with an order number but no token.
+    Parts with non-string identifiers are excluded from those counters — the
+    per-part "nie-str" warning already reports them.
+    """
+    if not isinstance(manifest, dict):
+        return {
+            "valid": False,
+            "warnings": [],
+            "errors": [f"manifest must be a dict, got {type(manifest).__name__}"],
+        }
+    if not isinstance(expected_qty, dict):
+        expected_qty = {}
     errors: list[str] = []
     warnings: list[str] = []
 
     token_qtys: dict[str, int] = {}
-    for group in aggregate_by_token(manifest):
-        token = group.get("token")
+    part_count = 0
+    missing_both = 0
+    missing_token = 0
+    for _, part in _iter_manifest_parts(manifest):
+        part_count += 1
+        token = _manifest_token(part)
+        order = _part_order_number(part)
         if isinstance(token, str):
-            token_qtys[token] = int(group.get("total_qty", 0))
+            token_qtys[token] = token_qtys.get(token, 0) + 1
+        raw_token = part.get("custom_field_1")
+        if token is None and (raw_token is None or isinstance(raw_token, str)):
+            if order is None:
+                missing_both += 1
+            else:
+                missing_token += 1
     for token, expected in (expected_qty or {}).items():
         got = token_qtys.get(token, 0)
         if got != expected:
             errors.append(f'token "{token}": expected {expected}, got {got}')
 
-    part_count = sum(len(sheet.get("parts") or []) for sheet in manifest.get("sheets") or []) + len(
-        manifest.get("unmatched_parts") or []
-    )
     total_parts = manifest.get("total_parts")
-    if isinstance(total_parts, int) and part_count != total_parts:
+    if type(total_parts) is not int:
+        errors.append(f"total_parts mismatch: invalid value {total_parts!r}")
+    elif part_count != total_parts:
         errors.append(f"total_parts mismatch: expected {total_parts}, got {part_count}")
 
-    missing = 0
-    for sheet in manifest.get("sheets") or []:
-        for part in sheet.get("parts") or []:
-            if _part_order_number(part) is None and _manifest_token(part) is None:
-                missing += 1
-    for part in manifest.get("unmatched_parts") or []:
-        if _part_order_number(part) is None and _manifest_token(part) is None:
-            missing += 1
-    if missing:
-        warnings.append(f"{missing} parts without csv_order_number and custom_field_1")
+    if missing_both:
+        plural = "s" if missing_both != 1 else ""
+        warnings.append(f"{missing_both} part{plural} without csv_order_number and custom_field_1")
+    if missing_token:
+        plural = "s" if missing_token != 1 else ""
+        warnings.append(f"{missing_token} part{plural} without custom_field_1")
 
     return {"valid": not errors, "warnings": warnings, "errors": errors}

@@ -939,6 +939,22 @@ def test_cdm_order_details_list_command() -> None:
     mock_details.assert_called_once_with(job_name="JOB-001")
 
 
+def test_cdm_order_details_list_invalid_job_name() -> None:
+    from tests.unit.test_cli import _mock_com
+
+    with (
+        _mock_com(),
+        patch(
+            "alphacam_cli.core.application.Application.cdm_order_details",
+            return_value={"order_details": [], "job_name": "A/B"},
+        ) as mock_details,
+    ):
+        result = runner.invoke(app, ["cdm", "order-details", "list", "A/B"])
+    assert result.exit_code == 2
+    assert "invalid job name" in result.stderr
+    mock_details.assert_not_called()
+
+
 def test_cdm_order_details_list_json() -> None:
     from tests.unit.test_cli import _mock_com
 
@@ -2434,6 +2450,60 @@ def test_cdm_manifest_read_token_qty_parsed() -> None:
         validate=True,
         token_qty={"ABC": 4, "DEF": 2},
     )
+
+
+def test_cdm_manifest_read_token_qty_whitespace_stripped() -> None:
+    from tests.unit.test_cli import _mock_com
+
+    data = copy.deepcopy(_MANIFEST_READ_DATA)
+    data["validation"] = {"valid": True, "warnings": [], "errors": []}
+    with (
+        _mock_com(),
+        patch(
+            "alphacam_cli.core.application.Application.manifest_read",
+            return_value=data,
+        ) as mock_manifest_read,
+    ):
+        result = runner.invoke(
+            app,
+            [
+                "cdm",
+                "manifest",
+                "JOB",
+                "--validate",
+                "--token-qty",
+                " ABC=5",
+                "--token-qty",
+                "DEF = 2",
+            ],
+        )
+    assert result.exit_code == 0
+    mock_manifest_read.assert_called_once_with(
+        job_name="JOB",
+        material=None,
+        data_dir=None,
+        nc_root=None,
+        by_token=False,
+        fill_threshold=None,
+        validate=True,
+        token_qty={"ABC": 5, "DEF": 2},
+    )
+
+
+def test_cdm_manifest_read_token_qty_blank_token() -> None:
+    from tests.unit.test_cli import _mock_com
+
+    with (
+        _mock_com(),
+        patch(
+            "alphacam_cli.core.application.Application.manifest_read",
+            return_value=_MANIFEST_READ_DATA,
+        ) as mock_manifest_read,
+    ):
+        result = runner.invoke(app, ["cdm", "manifest", "JOB", "--validate", "--token-qty", " =5"])
+    assert result.exit_code == 2
+    assert 'invalid --token-qty " =5" (expected token=qty)' in result.stderr
+    mock_manifest_read.assert_not_called()
 
 
 def test_cdm_manifest_read_token_qty_requires_validate() -> None:

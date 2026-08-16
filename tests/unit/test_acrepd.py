@@ -1147,15 +1147,15 @@ def _token_manifest(
     }
 
 
-def test_aggregate_by_token_groups_and_sums() -> None:
+def test_aggregate_by_token_groups_and_counts_entries() -> None:
     manifest = _token_manifest(
         [
             (
                 "Arkusz A1",
                 [
-                    _token_part("p1", 4, "ABC", "Z-001"),
+                    _token_part("p1", 5, "ABC", "Z-001"),
                     _token_part("p2", 2, "DEF"),
-                    _token_part("p3", 3, "ABC"),
+                    _token_part("p3", 5, "ABC"),
                 ],
             ),
             ("Arkusz A2", [_token_part("p4", 1, "DEF", "Z-002")]),
@@ -1166,18 +1166,32 @@ def test_aggregate_by_token_groups_and_sums() -> None:
     result = acrepd.aggregate_by_token(manifest)
 
     assert [g["token"] for g in result] == ["ABC", "DEF"]
-    assert result[0]["total_qty"] == 12
+    assert result[0]["total_qty"] == 3
     assert result[0]["sheets"] == [
-        {"sheet": "Arkusz A1", "qty": 7},
-        {"sheet": "?", "qty": 5},
+        {"sheet": "Arkusz A1", "qty": 2},
+        {"sheet": "?", "qty": 1},
     ]
     assert result[0]["csv_order_number"] == "Z-001"
-    assert result[1]["total_qty"] == 3
+    assert result[1]["total_qty"] == 2
     assert result[1]["sheets"] == [
-        {"sheet": "Arkusz A1", "qty": 2},
+        {"sheet": "Arkusz A1", "qty": 1},
         {"sheet": "Arkusz A2", "qty": 1},
     ]
     assert result[1]["csv_order_number"] == "Z-002"
+
+
+def test_aggregate_by_token_merges_sheets_with_same_name() -> None:
+    manifest = _token_manifest(
+        [
+            ("Arkusz A1", [_token_part("p1", 1, "ABC")]),
+            ("Arkusz A1", [_token_part("p2", 1, "ABC")]),
+        ]
+    )
+
+    result = acrepd.aggregate_by_token(manifest)
+
+    assert result[0]["sheets"] == [{"sheet": "Arkusz A1", "qty": 2}]
+    assert result[0]["total_qty"] == 2
 
 
 def test_aggregate_by_token_no_token_group_last() -> None:
@@ -1192,16 +1206,16 @@ def test_aggregate_by_token_no_token_group_last() -> None:
     result = acrepd.aggregate_by_token(manifest)
 
     assert [g["token"] for g in result] == ["XYZ", None]
-    assert result[1]["total_qty"] == 9
+    assert result[1]["total_qty"] == 3
     assert result[1]["sheets"] == [
-        {"sheet": "Arkusz A1", "qty": 2},
-        {"sheet": "Arkusz A2", "qty": 3},
-        {"sheet": "?", "qty": 4},
+        {"sheet": "Arkusz A1", "qty": 1},
+        {"sheet": "Arkusz A2", "qty": 1},
+        {"sheet": "?", "qty": 1},
     ]
     assert result[1]["csv_order_number"] is None
 
 
-def test_aggregate_by_token_none_qty_as_zero() -> None:
+def test_aggregate_by_token_ignores_quantity_on_sheet() -> None:
     manifest = _token_manifest(
         [
             ("Arkusz A1", [_token_part("p1", None, "ABC"), _token_part("p2", 2, "ABC")]),
@@ -1211,10 +1225,10 @@ def test_aggregate_by_token_none_qty_as_zero() -> None:
 
     result = acrepd.aggregate_by_token(manifest)
 
-    assert result[0]["total_qty"] == 2
+    assert result[0]["total_qty"] == 3
     assert result[0]["sheets"] == [
         {"sheet": "Arkusz A1", "qty": 2},
-        {"sheet": "Arkusz A2", "qty": 0},
+        {"sheet": "Arkusz A2", "qty": 1},
     ]
 
 
@@ -1229,6 +1243,36 @@ def test_aggregate_by_token_first_nonempty_order_number() -> None:
     result = acrepd.aggregate_by_token(manifest)
 
     assert result[0]["csv_order_number"] == "Z-999"
+
+
+def test_aggregate_by_token_mixed_order_numbers_warns(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    mixed = _token_manifest(
+        [
+            (
+                "Arkusz A1",
+                [_token_part("p1", 1, "ABC", "Z-001"), _token_part("p2", 1, "ABC", "Z-002")],
+            ),
+        ]
+    )
+    same = _token_manifest(
+        [
+            (
+                "Arkusz A1",
+                [_token_part("p3", 1, "DEF", "Z-010"), _token_part("p4", 1, "DEF", "Z-010")],
+            ),
+        ]
+    )
+
+    with caplog.at_level("WARNING", logger="alphacam_cli.core.acrepd"):
+        mixed_result = acrepd.aggregate_by_token(mixed)
+        same_result = acrepd.aggregate_by_token(same)
+
+    assert mixed_result[0]["csv_order_number"] == "Z-001"
+    assert "token 'ABC' ma rozne csv_order_number" in caplog.text
+    assert same_result[0]["csv_order_number"] == "Z-010"
+    assert "token 'DEF' ma rozne csv_order_number" not in caplog.text
 
 
 def test_aggregate_by_token_sort_case_insensitive() -> None:
@@ -1256,11 +1300,133 @@ def test_aggregate_by_token_case_sensitive_grouping() -> None:
 
     assert [g["token"] for g in result] == ["ABC", "abc"]
     assert result[0]["total_qty"] == 1
-    assert result[1]["total_qty"] == 2
+    assert result[1]["total_qty"] == 1
+
+
+def test_aggregate_by_token_case_folded_duplicates_warn(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    manifest = _token_manifest(
+        [
+            ("Arkusz A1", [_token_part("p1", 1, "ABC"), _token_part("p2", 1, "abc")]),
+        ]
+    )
+
+    with caplog.at_level("WARNING", logger="alphacam_cli.core.acrepd"):
+        result = acrepd.aggregate_by_token(manifest)
+
+    assert [g["token"] for g in result] == ["ABC", "abc"]
+    assert "tokeny rozniace sie tylko case: ['ABC', 'abc']" in caplog.text
+
+
+def test_aggregate_by_token_case_folded_triple_warns_once(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    manifest = _token_manifest(
+        [
+            ("Arkusz A1", [_token_part("p1", 1, "ABC"), _token_part("p2", 1, "abc")]),
+            ("Arkusz A2", [_token_part("p3", 1, "Abc")]),
+        ]
+    )
+
+    with caplog.at_level("WARNING", logger="alphacam_cli.core.acrepd"):
+        result = acrepd.aggregate_by_token(manifest)
+
+    assert [g["token"] for g in result] == ["ABC", "Abc", "abc"]
+    assert caplog.text.count("tokeny rozniace sie tylko case") == 1
+    assert "['ABC', 'Abc', 'abc']" in caplog.text
+
+
+def test_aggregate_by_token_distinct_casefold_no_warning(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    manifest = _token_manifest(
+        [
+            ("Arkusz A1", [_token_part("p1", 1, "DEF"), _token_part("p2", 1, "XYZ")]),
+        ]
+    )
+
+    with caplog.at_level("WARNING", logger="alphacam_cli.core.acrepd"):
+        acrepd.aggregate_by_token(manifest)
+
+    assert "tokeny rozniace sie tylko case" not in caplog.text
+
+
+def test_aggregate_by_token_non_str_token_and_order_warn(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    manifest = _token_manifest([("Arkusz A1", [_token_part("p1", 1, 42, 43)])])
+
+    with caplog.at_level("WARNING", logger="alphacam_cli.core.acrepd"):
+        result = acrepd.aggregate_by_token(manifest)
+
+    assert [g["token"] for g in result] == [None]
+    assert caplog.text.count("nie-str token custom_field_1") == 1
+    assert caplog.text.count("nie-str csv_order_number") == 1
 
 
 def test_aggregate_by_token_empty_manifest() -> None:
     assert acrepd.aggregate_by_token({"sheets": [], "unmatched_parts": []}) == []
+
+
+def test_aggregate_by_token_non_dict_manifest_no_crash() -> None:
+    assert acrepd.aggregate_by_token(None) == []
+    assert acrepd.aggregate_by_token("x") == []
+
+
+@pytest.mark.parametrize("value", [None, True, 42, 3.14, "abc"])
+def test_aggregate_by_token_non_list_sheets_no_crash(value: Any) -> None:
+    assert acrepd.aggregate_by_token({"sheets": value, "unmatched_parts": []}) == []
+
+
+@pytest.mark.parametrize("value", [None, True, 42, 3.14, "abc"])
+def test_aggregate_by_token_non_list_unmatched_parts_no_crash(value: Any) -> None:
+    assert acrepd.aggregate_by_token({"sheets": [], "unmatched_parts": value}) == []
+
+
+def test_aggregate_by_token_non_dict_parts_skipped_no_crash() -> None:
+    manifest = {
+        "sheets": [{"name": "Arkusz A1", "parts": ["not-a-dict", None, 3]}],
+        "unmatched_parts": [],
+    }
+
+    result = acrepd.aggregate_by_token(manifest)
+
+    assert result == []
+
+
+@pytest.mark.parametrize("value", [None, True, 42, 3.14, "abc"])
+def test_aggregate_by_token_parts_non_list_no_crash(value: Any) -> None:
+    manifest = {"sheets": [{"name": "Arkusz A1", "parts": value}], "unmatched_parts": []}
+
+    assert acrepd.aggregate_by_token(manifest) == []
+
+
+@pytest.mark.parametrize("name", [None, 42])
+def test_aggregate_by_token_non_str_or_none_sheet_name_question_mark(name: Any) -> None:
+    manifest = _token_manifest([("Arkusz A1", [_token_part("p1", 1, "ABC")])])
+    manifest["sheets"][0]["name"] = name
+
+    result = acrepd.aggregate_by_token(manifest)
+
+    assert result[0]["sheets"] == [{"sheet": "?", "qty": 1}]
+
+
+def test_aggregate_by_token_non_dict_parts_skipped_valid_dicts_kept() -> None:
+    manifest = {
+        "sheets": [
+            {
+                "name": "Arkusz A1",
+                "parts": ["not-a-dict", _token_part("p1", 1, "ABC"), None, 3],
+            }
+        ],
+        "unmatched_parts": [],
+    }
+
+    result = acrepd.aggregate_by_token(manifest)
+
+    assert [g["token"] for g in result] == ["ABC"]
+    assert result[0]["total_qty"] == 1
 
 
 def _validation_manifest(
@@ -1270,7 +1436,9 @@ def _validation_manifest(
 ) -> dict[str, Any]:
     manifest = _token_manifest(sheets, unmatched)
     manifest["total_parts"] = (
-        total_parts if total_parts is not None else sum(len(parts) for _, parts in sheets)
+        total_parts
+        if total_parts is not None
+        else sum(len(parts) for _, parts in sheets) + len(unmatched or [])
     )
     return manifest
 
@@ -1283,7 +1451,7 @@ def test_validate_manifest_ok() -> None:
         ]
     )
 
-    result = acrepd.validate_manifest(manifest, {"ABC": 7, "DEF": 2})
+    result = acrepd.validate_manifest(manifest, {"ABC": 2, "DEF": 1})
 
     assert result == {"valid": True, "warnings": [], "errors": []}
 
@@ -1299,7 +1467,7 @@ def test_validate_manifest_token_qty_mismatch_error() -> None:
     result = acrepd.validate_manifest(manifest, {"ABC": 8})
 
     assert result["valid"] is False
-    assert result["errors"] == ['token "ABC": expected 8, got 7']
+    assert result["errors"] == ['token "ABC": expected 8, got 2']
 
 
 def test_validate_manifest_missing_token_error() -> None:
@@ -1321,6 +1489,27 @@ def test_validate_manifest_total_parts_mismatch_error() -> None:
 
     assert result["valid"] is False
     assert result["errors"] == ["total_parts mismatch: expected 5, got 2"]
+
+
+def test_validate_manifest_default_total_parts_counts_unmatched() -> None:
+    manifest = _validation_manifest(
+        [("Arkusz A1", [_token_part("p1", 1, "ABC", "Z-001")])],
+        unmatched=[_token_part("p2", 1, "DEF", "Z-002")],
+    )
+
+    result = acrepd.validate_manifest(manifest)
+
+    assert result == {"valid": True, "warnings": [], "errors": []}
+
+
+def test_validate_manifest_total_parts_invalid_value_error() -> None:
+    manifest = _validation_manifest([("Arkusz A1", [_token_part("p1", 4, "ABC")])])
+    manifest["total_parts"] = "abc"
+
+    result = acrepd.validate_manifest(manifest)
+
+    assert result["valid"] is False
+    assert result["errors"] == ["total_parts mismatch: invalid value 'abc'"]
 
 
 def test_validate_manifest_parts_without_order_and_token_warning() -> None:
@@ -1346,11 +1535,98 @@ def test_validate_manifest_valid_true_with_warnings() -> None:
         ]
     )
 
-    result = acrepd.validate_manifest(manifest, {"ABC": 4, "DEF": 1})
+    result = acrepd.validate_manifest(manifest, {"ABC": 1, "DEF": 1})
 
     assert result["valid"] is True
-    assert result["warnings"] == ["1 parts without csv_order_number and custom_field_1"]
+    assert result["warnings"] == ["1 part without csv_order_number and custom_field_1"]
     assert result["errors"] == []
+
+
+def test_validate_manifest_unmatched_parts_not_list_no_crash() -> None:
+    manifest = {"sheets": [], "unmatched_parts": "x", "total_parts": 0}
+
+    result = acrepd.validate_manifest(manifest)
+
+    assert result == {"valid": True, "warnings": [], "errors": []}
+
+
+def test_validate_manifest_non_dict_manifest_no_crash() -> None:
+    assert acrepd.validate_manifest("x") == {
+        "valid": False,
+        "warnings": [],
+        "errors": ["manifest must be a dict, got str"],
+    }
+    assert acrepd.validate_manifest(None) == {
+        "valid": False,
+        "warnings": [],
+        "errors": ["manifest must be a dict, got NoneType"],
+    }
+
+
+def test_validate_manifest_expected_qty_non_dict_treated_as_empty() -> None:
+    manifest = _validation_manifest([("Arkusz A1", [_token_part("p1", 4, "ABC", "Z-001")])])
+
+    result = acrepd.validate_manifest(manifest, ["a"])
+
+    assert result == {"valid": True, "warnings": [], "errors": []}
+
+
+@pytest.mark.parametrize("value", [None, "abc", 42, ("a", "b")])
+def test_validate_manifest_expected_qty_non_dict_no_crash(value: Any) -> None:
+    manifest = _validation_manifest([("Arkusz A1", [_token_part("p1", 4, "ABC", "Z-001")])])
+
+    result = acrepd.validate_manifest(manifest, value)
+
+    assert result == {"valid": True, "warnings": [], "errors": []}
+
+
+@pytest.mark.parametrize("value", [None, True, 42, 3.14, "abc"])
+def test_validate_manifest_non_list_sheets_no_crash(value: Any) -> None:
+    manifest = {"sheets": value, "unmatched_parts": value, "total_parts": 0}
+
+    result = acrepd.validate_manifest(manifest)
+
+    assert result == {"valid": True, "warnings": [], "errors": []}
+
+
+def test_validate_manifest_parts_non_list_no_crash() -> None:
+    manifest = {
+        "sheets": [{"name": "Arkusz A1", "parts": 42}],
+        "unmatched_parts": [],
+        "total_parts": 0,
+    }
+
+    result = acrepd.validate_manifest(manifest)
+
+    assert result == {"valid": True, "warnings": [], "errors": []}
+
+
+@pytest.mark.parametrize("value", [True, False])
+def test_validate_manifest_total_parts_bool_invalid_value_error(value: bool) -> None:
+    manifest = _validation_manifest([("Arkusz A1", [_token_part("p1", 4, "ABC")])])
+    manifest["total_parts"] = value
+
+    result = acrepd.validate_manifest(manifest)
+
+    assert result["valid"] is False
+    assert result["errors"] == [f"total_parts mismatch: invalid value {value!r}"]
+
+
+def test_validate_manifest_non_dict_sheet_parts_no_crash() -> None:
+    manifest = {
+        "sheets": [
+            {"name": "Arkusz A1", "parts": [{"part_id": "p1"}, "not-a-dict", None, 3]},
+            "not-a-sheet",
+        ],
+        "unmatched_parts": [{"part_id": "u1"}, "nope"],
+        "total_parts": 3,
+    }
+
+    result = acrepd.validate_manifest(manifest)
+
+    assert result["valid"] is False
+    assert result["errors"] == ["total_parts mismatch: expected 3, got 2"]
+    assert result["warnings"] == ["2 parts without csv_order_number and custom_field_1"]
 
 
 def test_validate_manifest_valid_false_with_errors() -> None:
@@ -1364,7 +1640,197 @@ def test_validate_manifest_valid_false_with_errors() -> None:
     result = acrepd.validate_manifest(manifest, {"ABC": 5, "DEF": 1})
 
     assert result["valid"] is False
-    assert result["errors"] == ['token "ABC": expected 5, got 4']
+    assert result["errors"] == ['token "ABC": expected 5, got 1']
+    assert result["warnings"] == []
+
+
+def test_validate_manifest_real_pattern_counts_entries() -> None:
+    token = "p_1786811948650_18zu25vk"
+    manifest = _validation_manifest(
+        [
+            (
+                "Arkusz A1",
+                [
+                    _token_part("p1", 5, token, "Z-001"),
+                    _token_part("p2", 5, token, "Z-001"),
+                    _token_part("p3", 5, token, "Z-001"),
+                    _token_part("p4", 5, token, "Z-001"),
+                ],
+            ),
+            ("Arkusz A2", [_token_part("p5", 1, token, "Z-001")]),
+        ]
+    )
+
+    result = acrepd.validate_manifest(manifest, {token: 5})
+
+    assert result == {"valid": True, "warnings": [], "errors": []}
+
+
+def test_aggregate_by_token_strips_sheet_name_whitespace() -> None:
+    manifest = _token_manifest([("  Arkusz A1  ", [_token_part("p1", 1, "ABC")])])
+
+    result = acrepd.aggregate_by_token(manifest)
+
+    assert result[0]["sheets"] == [{"sheet": "Arkusz A1", "qty": 1}]
+
+
+def test_validate_manifest_blank_token_no_non_str_warning(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    manifest = _validation_manifest(
+        [
+            ("Arkusz A1", [_token_part("p1", 1, ""), _token_part("p2", 1, "   ", "Z-001")]),
+        ]
+    )
+
+    with caplog.at_level("WARNING", logger="alphacam_cli.core.acrepd"):
+        result = acrepd.validate_manifest(manifest)
+
+    assert result["valid"] is True
+    assert result["warnings"] == [
+        "1 part without csv_order_number and custom_field_1",
+        "1 part without custom_field_1",
+    ]
+    assert "nie-str" not in caplog.text
+
+
+def test_validate_manifest_non_str_token_warns_once(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    manifest = _validation_manifest(
+        [
+            ("Arkusz A1", [_token_part("p1", 1, 42, "Z-001"), _token_part("p2", 1, "ABC")]),
+            ("Arkusz A2", [_token_part("p3", 1, "DEF", "Z-003")]),
+        ]
+    )
+
+    with caplog.at_level("WARNING", logger="alphacam_cli.core.acrepd"):
+        result = acrepd.validate_manifest(manifest)
+
+    assert result["valid"] is True
+    assert result["warnings"] == []
+    assert caplog.text.count("nie-str token custom_field_1") == 1
+
+
+def test_validate_manifest_non_str_order_warns_once(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    manifest = _validation_manifest(
+        [
+            ("Arkusz A1", [_token_part("p1", 1, "ABC", 42), _token_part("p2", 1, "ABC", "Z-002")]),
+        ]
+    )
+
+    with caplog.at_level("WARNING", logger="alphacam_cli.core.acrepd"):
+        result = acrepd.validate_manifest(manifest)
+
+    assert result["valid"] is True
+    assert caplog.text.count("nie-str csv_order_number") == 1
+
+
+def test_validate_manifest_non_str_token_and_order_warn_each_once(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    manifest = _validation_manifest(
+        [
+            ("Arkusz A1", [_token_part("p1", 1, 42, 43), _token_part("p2", 1, "ABC", "Z-002")]),
+        ]
+    )
+
+    with caplog.at_level("WARNING", logger="alphacam_cli.core.acrepd"):
+        result = acrepd.validate_manifest(manifest)
+
+    assert result["valid"] is True
+    assert result["warnings"] == []
+    assert caplog.text.count("nie-str token custom_field_1") == 1
+    assert caplog.text.count("nie-str csv_order_number") == 1
+
+
+def test_validate_manifest_non_str_token_unmatched_warns_once(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    manifest = {
+        "sheets": [],
+        "unmatched_parts": [{"name": "u1", "quantity_on_sheet": 1, "custom_field_1": 42}],
+        "total_parts": 1,
+    }
+
+    with caplog.at_level("WARNING", logger="alphacam_cli.core.acrepd"):
+        result = acrepd.validate_manifest(manifest)
+
+    assert result["valid"] is True
+    assert caplog.text.count("nie-str token custom_field_1") == 1
+
+
+def test_validate_manifest_non_str_order_unmatched_warns_once(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    manifest = {
+        "sheets": [],
+        "unmatched_parts": [{"name": "u1", "quantity_on_sheet": 1, "csv_order_number": 42}],
+        "total_parts": 1,
+    }
+
+    with caplog.at_level("WARNING", logger="alphacam_cli.core.acrepd"):
+        result = acrepd.validate_manifest(manifest)
+
+    assert result["valid"] is True
+    assert caplog.text.count("nie-str csv_order_number") == 1
+
+
+def test_validate_manifest_part_with_order_but_no_token_warning() -> None:
+    manifest = _validation_manifest(
+        [
+            (
+                "Arkusz A1",
+                [_token_part("p1", 1, None, "Z-001"), _token_part("p2", 1, "ABC", "Z-002")],
+            ),
+        ]
+    )
+
+    result = acrepd.validate_manifest(manifest)
+
+    assert result["valid"] is True
+    assert result["warnings"] == ["1 part without custom_field_1"]
+
+
+def test_validate_manifest_part_no_token_and_no_order_existing_warning() -> None:
+    manifest = _validation_manifest(
+        [
+            ("Arkusz A1", [_token_part("p1", 1, None, "Z-001"), _token_part("p2", 1)]),
+        ]
+    )
+
+    result = acrepd.validate_manifest(manifest)
+
+    assert result["valid"] is True
+    assert result["warnings"] == [
+        "1 part without csv_order_number and custom_field_1",
+        "1 part without custom_field_1",
+    ]
+
+
+def test_validate_manifest_part_with_token_no_order_no_missing_warning() -> None:
+    manifest = _validation_manifest(
+        [
+            ("Arkusz A1", [_token_part("p1", 1, "ABC")]),
+        ]
+    )
+
+    result = acrepd.validate_manifest(manifest)
+
+    assert result == {"valid": True, "warnings": [], "errors": []}
+
+
+@pytest.mark.parametrize("value", [None, 3.14])
+def test_validate_manifest_total_parts_none_or_float_invalid_value_error(value: Any) -> None:
+    manifest = _validation_manifest([("Arkusz A1", [_token_part("p1", 4, "ABC")])])
+    manifest["total_parts"] = value
+
+    result = acrepd.validate_manifest(manifest)
+
+    assert result["valid"] is False
+    assert result["errors"] == [f"total_parts mismatch: invalid value {value!r}"]
     assert result["warnings"] == []
 
 
@@ -1379,7 +1845,34 @@ def test_aggregate_by_token_strips_token_whitespace() -> None:
     result = acrepd.aggregate_by_token(manifest)
 
     assert [g["token"] for g in result] == ["ABC"]
+    assert result[0]["total_qty"] == 2
+
+
+def test_aggregate_by_token_real_pattern_counts_entries_not_qty() -> None:
+    token = "p_1786811948650_18zu25vk"
+    manifest = _token_manifest(
+        [
+            (
+                "Arkusz A1",
+                [
+                    _token_part("p1", 5, token, "Z-001"),
+                    _token_part("p2", 5, token, "Z-001"),
+                    _token_part("p3", 5, token, "Z-001"),
+                    _token_part("p4", 5, token, "Z-001"),
+                ],
+            ),
+            ("Arkusz A2", [_token_part("p5", 1, token, "Z-001")]),
+        ]
+    )
+
+    result = acrepd.aggregate_by_token(manifest)
+
+    assert result[0]["token"] == token
     assert result[0]["total_qty"] == 5
+    assert result[0]["sheets"] == [
+        {"sheet": "Arkusz A1", "qty": 4},
+        {"sheet": "Arkusz A2", "qty": 1},
+    ]
 
 
 def test_fill_class_full_partial_empty() -> None:

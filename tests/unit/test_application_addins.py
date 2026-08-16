@@ -864,6 +864,7 @@ def test_manifest_read_nc_report_name_without_file_warns(
     assert sheet["nc_path"] is None
     assert sheet["nc_source"] is None
     assert "report nc file not found on disk" in caplog.text
+    assert result["manifest"]["nc_missing"] == []
     assert result["manifest"]["nc_unmatched"] == [
         str(job_dir / "Cos.nc"),
         str(job_dir / "Inny.nc"),
@@ -1238,7 +1239,7 @@ def test_manifest_read_nc_scan_failure_no_report_warnings(
     assert "nc discovery failed" in caplog.text
     assert "not found on disk" not in caplog.text
     assert result["manifest"]["nc_unmatched"] == []
-    assert result["manifest"]["nc_missing"] == ["Arkusz A1"]
+    assert result["manifest"]["nc_missing"] == []
 
 
 def test_manifest_read_nc_no_root_report_name_no_warnings(
@@ -1297,7 +1298,7 @@ def test_manifest_read_nc_shared_report_name_without_file(
     assert [s["nc_path"] for s in sheets] == [None, None]
     assert [s["nc_source"] for s in sheets] == [None, None]
     assert result["manifest"]["nc_unmatched"] == []
-    assert result["manifest"]["nc_missing"] == ["Arkusz A1", "Arkusz A2"]
+    assert result["manifest"]["nc_missing"] == []
 
 
 def test_manifest_read_nc_shared_report_name_with_file(
@@ -1477,3 +1478,177 @@ def test_manifest_read_nc_report_wins_removes_positional_index(
 
     assert result["manifest"]["sheets"][0]["nc_source"] == "report"
     assert result["manifest"]["nc_matched_by_order"] == [1]
+
+
+def _token_cdm_part(name: str, token: str, order: str | None = None) -> dict[str, Any]:
+    part = _empty_cdm_part(name)
+    part["custom_field_1"] = token
+    if order is not None:
+        part["csv_order_number"] = order
+    return part
+
+
+def _manifest_with_tokens(
+    sheets: list[tuple[str, list[dict[str, Any]]]],
+    unmatched: list[dict[str, Any]] | None = None,
+) -> dict[str, Any]:
+    parts = [part for _, sheet_parts in sheets for part in sheet_parts]
+    unmatched = unmatched or []
+    return {
+        "job_name": "CusPO 002",
+        "material": "MDF_18",
+        "sheets": [
+            {
+                "id": i + 1,
+                "name": name,
+                "parts": parts,
+            }
+            for i, (name, parts) in enumerate(sheets)
+        ],
+        "total_parts": len(parts) + len(unmatched),
+        "unmatched_parts": unmatched,
+        "path": "x.acrepd",
+    }
+
+
+def _manifest_read_env(monkeypatch: pytest.MonkeyPatch, manifest: dict[str, Any]) -> None:
+    _mock_manifest_read(monkeypatch, manifest, [])
+    monkeypatch.setattr("alphacam_cli.core.application.cdm_db.custom_field_names", lambda: {})
+    _mock_manifest_nc(monkeypatch, None)
+
+
+def test_manifest_read_by_token_aggregates_entries(monkeypatch: pytest.MonkeyPatch) -> None:
+    manifest = _manifest_with_tokens(
+        [
+            (
+                "Arkusz A1",
+                [
+                    _token_cdm_part("CusPO 002_Typ 1_1", "ABC", "Z-001"),
+                    _token_cdm_part("CusPO 002_Typ 2_1", "DEF"),
+                    _token_cdm_part("CusPO 002_Typ 1_2", "ABC", "Z-001"),
+                ],
+            ),
+            ("Arkusz A2", [_token_cdm_part("CusPO 002_Typ 2_2", "DEF", "Z-002")]),
+        ],
+        [_token_cdm_part("CusPO 002_Typ 1_3", "ABC")],
+    )
+    _manifest_read_env(monkeypatch, manifest)
+
+    ac = Application(MagicMock())
+    result = ac.manifest_read("CusPO 002", by_token=True)
+
+    by_token = result["by_token"]
+    assert [g["token"] for g in by_token] == ["ABC", "DEF"]
+    assert by_token[0]["total_qty"] == 3
+    assert by_token[0]["sheets"] == [
+        {"sheet": "Arkusz A1", "qty": 2},
+        {"sheet": "?", "qty": 1},
+    ]
+    assert by_token[0]["csv_order_number"] == "Z-001"
+    assert by_token[1]["total_qty"] == 2
+    assert by_token[1]["sheets"] == [
+        {"sheet": "Arkusz A1", "qty": 1},
+        {"sheet": "Arkusz A2", "qty": 1},
+    ]
+    assert by_token[1]["csv_order_number"] == "Z-002"
+
+
+def test_manifest_read_validate_with_token_qty(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    manifest = _manifest_with_tokens(
+        [
+            (
+                "Arkusz A1",
+                [
+                    _token_cdm_part("CusPO 002_Typ 1_1", "ABC", "Z-001"),
+                    _token_cdm_part("CusPO 002_Typ 1_2", "ABC", "Z-001"),
+                ],
+            ),
+        ],
+        [_token_cdm_part("CusPO 002_Typ 2_1", "DEF")],
+    )
+    _manifest_read_env(monkeypatch, manifest)
+
+    ac = Application(MagicMock())
+    result = ac.manifest_read(
+        "CusPO 002",
+        by_token=True,
+        validate=True,
+        token_qty={"ABC": 2, "DEF": 1},
+    )
+
+    assert result["validation"]["valid"] is True
+    assert result["validation"]["errors"] == []
+    assert result["validation"]["warnings"] == []
+
+
+def test_manifest_read_validate_detects_token_qty_mismatch(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    manifest = _manifest_with_tokens(
+        [
+            (
+                "Arkusz A1",
+                [
+                    _token_cdm_part("CusPO 002_Typ 1_1", "ABC", "Z-001"),
+                    _token_cdm_part("CusPO 002_Typ 1_2", "ABC", "Z-001"),
+                ],
+            ),
+        ]
+    )
+    _manifest_read_env(monkeypatch, manifest)
+
+    ac = Application(MagicMock())
+    result = ac.manifest_read(
+        "CusPO 002",
+        validate=True,
+        token_qty={"ABC": 8},
+    )
+
+    assert result["validation"]["valid"] is False
+    assert any(
+        'token "ABC": expected 8, got 2' in error for error in result["validation"]["errors"]
+    )
+
+
+def test_manifest_read_fill_class_applied_to_sheets(monkeypatch: pytest.MonkeyPatch) -> None:
+    manifest = _manifest_with_tokens(
+        [
+            (
+                "Arkusz A1",
+                [
+                    _token_cdm_part("CusPO 002_Typ 1_1", "ABC", "Z-001"),
+                    _token_cdm_part("CusPO 002_Typ 1_2", "ABC", "Z-001"),
+                ],
+            ),
+        ]
+    )
+    manifest["sheets"][0]["utilization"] = 85
+    _manifest_read_env(monkeypatch, manifest)
+
+    ac = Application(MagicMock())
+    result = ac.manifest_read("CusPO 002", fill_threshold=70)
+
+    assert result["manifest"]["sheets"][0]["fill_class"] == "full"
+    assert result["manifest"]["sheets"][0]["utilization"] == 85
+
+
+def test_manifest_read_fill_class_partial_below_threshold(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    manifest = _manifest_with_tokens(
+        [
+            (
+                "Arkusz A1",
+                [_token_cdm_part("CusPO 002_Typ 1_1", "ABC", "Z-001")],
+            ),
+        ]
+    )
+    manifest["sheets"][0]["utilization"] = 40
+    _manifest_read_env(monkeypatch, manifest)
+
+    ac = Application(MagicMock())
+    result = ac.manifest_read("CusPO 002", fill_threshold=70)
+
+    assert result["manifest"]["sheets"][0]["fill_class"] == "partial"
