@@ -909,11 +909,12 @@ alphacam cdm delete "Job 2026-01"
 
 #### `order-details`
 
-List CDM order details from the database (by job name; without argument — all jobs). Fields: style, quantity, size, material, customer/order/item, comment, custom fields, rotation, nesting priority, drilling, small nest part, active flag.
+List CDM order details from the database (by job name; without argument — all jobs). Fields: style, quantity, size, material, customer/order/item, comment, custom fields, rotation, nesting priority, drilling, small nest part, active flag. `--json` prints the raw result (`{"order_details": [...], "job_name": ...}`) for programmatic verification (e.g. nesting queue pre-checks: token, quantity).
 
 ```bash
 alphacam cdm order-details list "Zamowienie X"
 alphacam cdm order-details list          # wszystkie joby
+alphacam cdm order-details list "Zamowienie X" --json
 ```
 
 #### `doorpaths`

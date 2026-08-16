@@ -786,12 +786,16 @@ order_details_app = typer.Typer(help="CDM order details")
 @handle_com_errors
 def order_details_list(
     job_name: str | None = typer.Argument(None, help="CDM job name (default: all jobs)"),
+    json_out: bool = typer.Option(False, "--json", help="Output raw JSON"),
 ) -> None:
     """List CDM order details (all jobs when no job name given)."""
     require_platform()
     with alphacam_context(visible=get_visible()) as raw:
         ac = resolve_app(raw)
         result = ac.cdm_order_details(job_name=job_name)
+        if json_out:
+            console.print_json(data=result)
+            return
         rows = result.get("order_details", [])
         if not rows:
             if job_name:

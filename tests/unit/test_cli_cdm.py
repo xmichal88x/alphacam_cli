@@ -939,6 +939,61 @@ def test_cdm_order_details_list_command() -> None:
     mock_details.assert_called_once_with(job_name="JOB-001")
 
 
+def test_cdm_order_details_list_json() -> None:
+    from tests.unit.test_cli import _mock_com
+
+    payload = {
+        "order_details": [
+            {
+                "style_name": "Typ Frontu 1",
+                "quantity": 2,
+                "width": 500.0,
+                "length": 300.0,
+                "material_id": 3,
+                "csv_customer_name": "Klient A",
+                "csv_order_number": "Z-001",
+                "csv_item_number": "I-1",
+                "production_comment": "uwaga",
+                "custom_fields": {"1": "x", "2": "y"},
+                "rotation_method": 1,
+                "nesting_priority": 2,
+                "has_drilling": True,
+                "small_nest_part": False,
+                "active_in_process": True,
+            }
+        ],
+        "job_name": "JOB-001",
+    }
+    with (
+        _mock_com(),
+        patch(
+            "alphacam_cli.core.application.Application.cdm_order_details",
+            return_value=payload,
+        ) as mock_details,
+    ):
+        result = runner.invoke(app, ["cdm", "order-details", "list", "JOB-001", "--json"])
+    assert result.exit_code == 0
+    data = json.loads(result.stderr)
+    assert data == payload
+    mock_details.assert_called_once_with(job_name="JOB-001")
+
+
+def test_cdm_order_details_list_json_empty() -> None:
+    from tests.unit.test_cli import _mock_com
+
+    with (
+        _mock_com(),
+        patch(
+            "alphacam_cli.core.application.Application.cdm_order_details",
+            return_value={"order_details": [], "job_name": "JOB-001"},
+        ),
+    ):
+        result = runner.invoke(app, ["cdm", "order-details", "list", "JOB-001", "--json"])
+    assert result.exit_code == 0
+    data = json.loads(result.stderr)
+    assert data == {"order_details": [], "job_name": "JOB-001"}
+
+
 def test_cdm_order_details_list_empty() -> None:
     from tests.unit.test_cli import _mock_com
 
