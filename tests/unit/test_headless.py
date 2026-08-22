@@ -294,3 +294,32 @@ def test_macro_invocation_state_noise_with_pn_counts_as_stale(
     assert result["state"] == "stale"
     assert result["last_pn"] == "junk"
     assert result["last_line"] == "noise PN= junk"
+
+
+def test_clear_macro_log_removes_existing(tmp_path: pathlib.Path) -> None:
+    log_path = tmp_path / "ama_macro_log.txt"
+    log_path.write_text("PN=Prod E2E 01\n", encoding="utf-8")
+    assert headless.clear_macro_log(str(log_path)) is True
+    assert not log_path.exists()
+
+
+def test_clear_macro_log_missing_returns_true(tmp_path: pathlib.Path) -> None:
+    assert headless.clear_macro_log(str(tmp_path / "nope.txt")) is True
+
+
+def test_clear_macro_log_oserror_returns_false(
+    tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    log_path = tmp_path / "ama_macro_log.txt"
+    log_path.write_text("PN=Prod E2E 01\n", encoding="utf-8")
+
+    def boom(path: str) -> None:
+        raise PermissionError("locked")  # noqa: TRY003
+
+    monkeypatch.setattr(headless.os, "remove", boom)
+    assert headless.clear_macro_log(str(log_path)) is False
+
+
+def test_clear_macro_log_default_path() -> None:
+    assert headless._MACRO_LOG_DEFAULT == r"C:\temp\ama_macro_log.txt"
+    assert headless.clear_macro_log.__defaults__ == (headless._MACRO_LOG_DEFAULT,)

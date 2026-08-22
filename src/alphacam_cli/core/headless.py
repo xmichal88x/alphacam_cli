@@ -80,7 +80,7 @@ def clear_macro_log(log_path: str = _MACRO_LOG_DEFAULT) -> bool:
         return True
     except OSError as e:
         logging.getLogger("alphacam.gateway").warning(
-            "nie udalo sie usunac logu makra %s: %s", log_path, e
+            "failed to remove macro log %s: %s", log_path, e
         )
         return False
     return True

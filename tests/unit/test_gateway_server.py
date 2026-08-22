@@ -2253,6 +2253,7 @@ def test_process_cdm_job_handler_stale_macro_returns_restart_response(
 
     _FakeTimer.instances = []
     monkeypatch.setattr(server_module.threading, "Timer", _FakeTimer)
+    monkeypatch.setattr(server_module.headless, "clear_macro_log", MagicMock())
     server_app.process_cdm_job.side_effect = RuntimeError(
         "cdm: STALE_MACRO: previous headless macro invocation did not complete "
         "(last log line: 'RUN'); AlphaCAM VBA host is hung"
@@ -2271,6 +2272,47 @@ def test_process_cdm_job_handler_stale_macro_returns_restart_response(
         "auto_restart": True,
     }
     server_app.process_cdm_job.assert_called_once_with(job_name="JOB-001")
+    assert len(_FakeTimer.instances) == 1
+    timer = _FakeTimer.instances[0]
+    assert timer.interval == 3.0
+    assert timer.function is os._exit
+    assert timer.args == (1,)
+    assert timer.daemon is True
+    assert timer.started is True
+    watchdog.cancel.assert_called_once()
+
+
+def test_process_cdm_job_handler_stale_macro_clears_log(
+    server_app: MagicMock, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import alphacam_cli.gateway.server as server_module
+
+    _FakeTimer.instances = []
+    monkeypatch.setattr(server_module.threading, "Timer", _FakeTimer)
+    clear_calls: list[tuple[tuple[Any, ...], dict[str, Any]]] = []
+    monkeypatch.setattr(
+        server_module.headless,
+        "clear_macro_log",
+        lambda *args, **kwargs: clear_calls.append((args, kwargs)),
+    )
+    server_app.process_cdm_job.side_effect = RuntimeError(
+        "cdm: STALE_MACRO: previous headless macro invocation did not complete "
+        "(last log line: 'RUN'); AlphaCAM VBA host is hung"
+    )
+    gw = GatewayServer()
+    watchdog = MagicMock()
+    gw._watchdog_arm = MagicMock(return_value=watchdog)
+
+    result = gw._handler_process_cdm_job({"job_name": "JOB-001"})
+
+    assert result == {
+        "success": False,
+        "status": "stale_macro",
+        "job_name": "JOB-001",
+        "detail": "previous macro invocation hung — gateway auto-restarting, retry in ~60s",
+        "auto_restart": True,
+    }
+    assert clear_calls == [((), {})]
     assert len(_FakeTimer.instances) == 1
     timer = _FakeTimer.instances[0]
     assert timer.interval == 3.0
@@ -2401,3 +2443,26 @@ def test_com_call_alive_sta_thread_waits_for_slow_result(
     monkeypatch.setattr(gw._call_queue, "put", delayed_put)
     result = gw._com_call(lambda: 42, timeout=0.02)
     assert result == 42
+
+
+def test_gateway_start_clears_macro_log(monkeypatch: pytest.MonkeyPatch) -> None:
+    import alphacam_cli.gateway.server as server_module
+
+    clear_calls: list[tuple[tuple[Any, ...], dict[str, Any]]] = []
+    monkeypatch.setattr(
+        server_module.headless,
+        "clear_macro_log",
+        lambda *args, **kwargs: clear_calls.append((args, kwargs)),
+    )
+    gw = GatewayServer()
+    monkeypatch.setattr(gw, "_sta_loop", MagicMock())
+    fake_socket = MagicMock()
+    fake_socket.accept.side_effect = OSError
+    monkeypatch.setattr(server_module.socket, "socket", lambda *a, **k: fake_socket)
+
+    gw.start()
+
+    assert clear_calls == [((), {})]
+    gw._sta_loop.assert_called_once()
+    fake_socket.bind.assert_called_once_with((gw._host, gw._port))
+    fake_socket.accept.assert_called_once()
