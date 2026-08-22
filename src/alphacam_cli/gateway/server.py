@@ -14,7 +14,7 @@ import time
 from collections.abc import Callable
 from typing import Any, cast
 
-from alphacam_cli.core import cdm_db
+from alphacam_cli.core import cdm_db, headless
 from alphacam_cli.core.application import _validate_due_date, _validate_job_name
 from alphacam_cli.gateway.protocol import (
     COM_ERROR,
@@ -143,6 +143,8 @@ class GatewayServer:
         self._logger.info("Starting AlphaCAM gateway server...")
         self._running.set()
         self._sta_loop()
+        headless.clear_macro_log()
+        self._logger.info("startup: cleared macro log (stale protection)")
         self._server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self._server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         self._server.bind((self._host, self._port))
@@ -476,6 +478,8 @@ class GatewayServer:
                     "service exit in 3s so NSSM can restart it",
                     job_name,
                 )
+                headless.clear_macro_log()
+                self._logger.warning("STALE_MACRO: cleared macro log before restart")
                 restart_timer = threading.Timer(3.0, os._exit, args=(1,))
                 restart_timer.daemon = True
                 restart_timer.start()

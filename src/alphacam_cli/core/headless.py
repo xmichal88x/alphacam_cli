@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import os
 import time
 from typing import Any
@@ -63,6 +64,26 @@ def macro_invocation_state(
         clock = time.time() if now is None else now
         state = "running" if clock - mtime <= stale_after_s else "stale"
     return {"state": state, "last_pn": last_pn, "last_line": last_line, "mtime": mtime}
+
+
+def clear_macro_log(log_path: str = _MACRO_LOG_DEFAULT) -> bool:
+    """Delete the macro log file so STALE_MACRO does not repeat after restart.
+
+    Best-effort: a missing file counts as success (already clean); errors
+    (e.g. a file locked by a hung VBA host) are logged as warnings and return
+    False — never raised. Called on STALE_MACRO detection (before os._exit)
+    and at gateway startup after the COM connection is established.
+    """
+    try:
+        os.remove(log_path)
+    except FileNotFoundError:
+        return True
+    except OSError as e:
+        logging.getLogger("alphacam.gateway").warning(
+            "nie udalo sie usunac logu makra %s: %s", log_path, e
+        )
+        return False
+    return True
 
 
 def _job_log_candidates(job_name: str, output_root: str) -> list[str]:
