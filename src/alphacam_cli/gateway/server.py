@@ -693,6 +693,43 @@ class GatewayServer:
         except Exception as e:
             raise COMError(f"cdm: read lookups failed: {e}") from e
 
+    def _handler_cdm_stock_list(self, params: dict[str, Any]) -> dict[str, Any]:
+        material = str(params.get("material")) if params.get("material") else None
+        try:
+            return _app.stock_list(material)
+        except Exception as e:
+            raise COMError(f"stock: list failed: {e}") from e
+
+    def _handler_cdm_stock_set(self, params: dict[str, Any]) -> dict[str, Any]:
+        try:
+            return _app.stock_set(
+                str(params["sheet_name"]),
+                params.get("qty"),
+                params.get("delta"),
+            )
+        except Exception as e:
+            raise COMError(f"stock: set failed: {e}") from e
+
+    def _handler_cdm_stock_add(self, params: dict[str, Any]) -> dict[str, Any]:
+        try:
+            return _app.stock_add(
+                str(params["material_name"]),
+                float(params["thickness"]),
+                float(params["width"]),
+                float(params["height"]),
+                int(params["quantity"]),
+                str(params["name"]) if params.get("name") else None,
+                int(params.get("grain", 0)),
+            )
+        except Exception as e:
+            raise COMError(f"stock: add failed: {e}") from e
+
+    def _handler_cdm_stock_delete(self, params: dict[str, Any]) -> dict[str, Any]:
+        try:
+            return _app.stock_delete(str(params["sheet_name"]))
+        except Exception as e:
+            raise COMError(f"stock: delete failed: {e}") from e
+
     def _handler_manifest_list(self, params: dict[str, Any]) -> dict[str, Any]:
         from alphacam_cli.gateway.server import _app as com_app
 

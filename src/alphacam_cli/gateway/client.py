@@ -417,6 +417,47 @@ class RemoteSession:
     def cdm_materials(self) -> dict[str, Any]:
         return self._call("cdm_materials")  # type: ignore[no-any-return]
 
+    def cdm_stock_list(self, material: str | None = None) -> dict[str, Any]:
+        params: dict[str, Any] = {}
+        if material is not None:
+            params["material"] = material
+        return self._call("cdm_stock_list", params)  # type: ignore[no-any-return]
+
+    def cdm_stock_set(
+        self, sheet_name: str, qty: int | None = None, delta: int | None = None
+    ) -> dict[str, Any]:
+        params: dict[str, Any] = {"sheet_name": sheet_name}
+        if qty is not None:
+            params["qty"] = qty
+        if delta is not None:
+            params["delta"] = delta
+        return self._call("cdm_stock_set", params)  # type: ignore[no-any-return]
+
+    def cdm_stock_add(
+        self,
+        material_name: str,
+        thickness: float,
+        width: float,
+        height: float,
+        quantity: int,
+        name: str | None = None,
+        grain: int = 0,
+    ) -> dict[str, Any]:
+        params: dict[str, Any] = {
+            "material_name": material_name,
+            "thickness": thickness,
+            "width": width,
+            "height": height,
+            "quantity": quantity,
+            "grain": grain,
+        }
+        if name is not None:
+            params["name"] = name
+        return self._call("cdm_stock_add", params)  # type: ignore[no-any-return]
+
+    def cdm_stock_delete(self, sheet_name: str) -> dict[str, Any]:
+        return self._call("cdm_stock_delete", {"sheet_name": sheet_name})  # type: ignore[no-any-return]
+
     def cdm_configs(self, show: str | None = None) -> dict[str, Any]:
         params: dict[str, Any] = {}
         if show is not None:

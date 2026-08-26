@@ -353,6 +353,37 @@ class RemoteApplication:
     def cdm_materials(self) -> dict[str, Any]:
         return self._session.cdm_materials()  # type: ignore[no-any-return]
 
+    def stock_list(self, material: str | None = None) -> dict[str, Any]:
+        return self._session.cdm_stock_list(material=material)  # type: ignore[no-any-return]
+
+    def stock_set(
+        self, sheet_name: str, qty: int | None = None, delta: int | None = None
+    ) -> dict[str, Any]:
+        return self._session.cdm_stock_set(sheet_name, qty=qty, delta=delta)  # type: ignore[no-any-return]
+
+    def stock_add(
+        self,
+        material_name: str,
+        thickness: float,
+        width: float,
+        height: float,
+        quantity: int,
+        name: str | None = None,
+        grain: int = 0,
+    ) -> dict[str, Any]:
+        return self._session.cdm_stock_add(  # type: ignore[no-any-return]
+            material_name=material_name,
+            thickness=thickness,
+            width=width,
+            height=height,
+            quantity=quantity,
+            name=name,
+            grain=grain,
+        )
+
+    def stock_delete(self, sheet_name: str) -> dict[str, Any]:
+        return self._session.cdm_stock_delete(sheet_name)  # type: ignore[no-any-return]
+
     def cdm_configs(self, show: str | None = None) -> dict[str, Any]:
         return self._session.cdm_configs(show=show)  # type: ignore[no-any-return]
 
