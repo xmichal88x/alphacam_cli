@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import contextlib
 import glob
 import logging
 import os
@@ -399,6 +400,8 @@ def parse_manifest(path: str) -> dict[str, Any]:
             part[key] = _num(part[key], cast)
         parts.append(part)
     _attach_part_cdm(parts, part_cdm_rows)
+    for part in parts:
+        _apply_design_aliases(part)
 
     unmatched_parts: list[dict[str, Any]] = []
     for part in parts:
@@ -684,6 +687,15 @@ def _part_order_number(part: dict[str, Any]) -> str | None:
     if isinstance(value, str) and value.strip():
         return value.strip()
     return None
+
+
+def _apply_design_aliases(part: dict[str, Any]) -> None:
+    """Set design_width/design_height from custom_field_1/2 when numeric."""
+    for src, dst in (("custom_field_1", "design_width"), ("custom_field_2", "design_height")):
+        value = part.get(src)
+        if isinstance(value, str) and value.strip():
+            with contextlib.suppress(ValueError):
+                part[dst] = float(value)
 
 
 def _warn_invalid_part(part: dict[str, Any]) -> None:

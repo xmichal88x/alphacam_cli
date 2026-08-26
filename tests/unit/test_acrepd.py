@@ -1906,3 +1906,104 @@ def test_fill_class_invalid_threshold_falls_back_to_default() -> None:
     assert acrepd.fill_class(85, threshold=-1) == "full"
     assert acrepd.fill_class(69, threshold=150) == "partial"
     assert acrepd.fill_class(69, threshold=None) == "partial"
+
+
+
+def test_apply_design_aliases_numeric_cf1_sets_design_width() -> None:
+    part: dict[str, object] = {"custom_field_1": "800.0", "custom_field_2": "2000"}
+    acrepd._apply_design_aliases(part)
+    assert part["design_width"] == 800.0
+    assert part["design_height"] == 2000.0
+
+
+def test_apply_design_aliases_non_numeric_cf1_no_alias() -> None:
+    part: dict[str, object] = {"custom_field_1": "ABC123", "custom_field_2": "xyz"}
+    acrepd._apply_design_aliases(part)
+    assert "design_width" not in part
+    assert "design_height" not in part
+
+
+def test_apply_design_aliases_missing_cf_no_alias() -> None:
+    part: dict[str, object] = {"custom_field_1": None, "custom_field_2": None}
+    acrepd._apply_design_aliases(part)
+    assert "design_width" not in part
+    assert "design_height" not in part
+
+
+def test_apply_design_aliases_empty_string_no_alias() -> None:
+    part: dict[str, object] = {"custom_field_1": "  ", "custom_field_2": ""}
+    acrepd._apply_design_aliases(part)
+    assert "design_width" not in part
+    assert "design_height" not in part
+
+
+def test_apply_design_aliases_integer_string() -> None:
+    part: dict[str, object] = {"custom_field_1": "500", "custom_field_2": "1200"}
+    acrepd._apply_design_aliases(part)
+    assert part["design_width"] == 500.0
+    assert part["design_height"] == 1200.0
+
+
+def test_apply_design_aliases_mixed_numeric_and_token() -> None:
+    part: dict[str, object] = {"custom_field_1": "800.5", "custom_field_2": "TOKENXYZ"}
+    acrepd._apply_design_aliases(part)
+    assert part["design_width"] == 800.5
+    assert "design_height" not in part
+
+
+def test_apply_design_aliases_numeric_cf1_sets_design_width() -> None:
+    part: dict[str, object] = {"custom_field_1": "800.0", "custom_field_2": "2000"}
+    acrepd._apply_design_aliases(part)
+    assert part["design_width"] == 800.0
+    assert part["design_height"] == 2000.0
+
+
+def test_apply_design_aliases_non_numeric_cf1_no_alias() -> None:
+    part: dict[str, object] = {"custom_field_1": "ABC123", "custom_field_2": "xyz"}
+    acrepd._apply_design_aliases(part)
+    assert "design_width" not in part
+    assert "design_height" not in part
+
+
+def test_apply_design_aliases_missing_cf_no_alias() -> None:
+    part: dict[str, object] = {"custom_field_1": None, "custom_field_2": None}
+    acrepd._apply_design_aliases(part)
+    assert "design_width" not in part
+    assert "design_height" not in part
+
+
+def test_apply_design_aliases_empty_string_no_alias() -> None:
+    part: dict[str, object] = {"custom_field_1": "  ", "custom_field_2": ""}
+    acrepd._apply_design_aliases(part)
+    assert "design_width" not in part
+    assert "design_height" not in part
+
+
+def test_apply_design_aliases_integer_string() -> None:
+    part: dict[str, object] = {"custom_field_1": "500", "custom_field_2": "1200"}
+    acrepd._apply_design_aliases(part)
+    assert part["design_width"] == 500.0
+    assert part["design_height"] == 1200.0
+
+
+def test_apply_design_aliases_mixed_numeric_and_token() -> None:
+    part: dict[str, object] = {"custom_field_1": "800.5", "custom_field_2": "TOKENXYZ"}
+    acrepd._apply_design_aliases(part)
+    assert part["design_width"] == 800.5
+    assert "design_height" not in part
+
+
+def test_parse_manifest_design_aliases_from_cdm(tmp_path: pathlib.Path) -> None:
+    xml = _FULL_MANIFEST_XML.replace(
+        "<CDMPartCustom1>CF1</CDMPartCustom1>",
+        "<CDMPartCustom1>800.0</CDMPartCustom1>",
+    ).replace(
+        "<CDMPartCustom2>CF2</CDMPartCustom2>",
+        "<CDMPartCustom2>2000</CDMPartCustom2>",
+    )
+    path = tmp_path / "TestJob - MDF_18.acrepd"
+    path.write_text(xml, encoding="utf-8")
+    manifest = acrepd.parse_manifest(str(path))
+    part = manifest["sheets"][0]["parts"][0]
+    assert part["design_width"] == 800.0
+    assert part["design_height"] == 2000.0
