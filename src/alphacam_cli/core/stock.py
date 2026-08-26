@@ -1,0 +1,268 @@
+from __future__ import annotations
+
+from typing import Any
+
+_NESTING_TYPELIB = "{6702E3DF-142C-4627-8EA2-4C47EBC78441}"
+
+_GRAIN_LABELS = {0: "none", 1: "x", 2: "y"}
+_UNIT_LABELS = {0: "mm", 1: "cm", 2: "m", 3: "inches"}
+
+SHEET_WRITABLE = frozenset(
+    {
+        "name",
+        "width",
+        "height",
+        "quantity",
+        "reserved",
+        "grain_direction",
+        "cost",
+        "length_units",
+        "inherit_cost",
+        "user_id",
+        "gui_position",
+    }
+)
+SHEET_READONLY = frozenset(
+    {
+        "id",
+        "is_offcut",
+        "thickness",
+        "thickness_id",
+        "zones_count",
+        "material_name",
+    }
+)
+THICKNESS_WRITABLE = frozenset(
+    {
+        "thickness",
+        "thickness_units",
+        "area_units",
+        "weight_units",
+        "cost_per_area",
+        "cost_per_weight",
+        "cost_is_by_weight",
+        "weight_per_area",
+        "gui_position",
+    }
+)
+THICKNESS_READONLY = frozenset(
+    {
+        "id",
+        "whole_sheets_count",
+        "offcuts_count",
+        "sheets_count",
+    }
+)
+MATERIAL_WRITABLE = frozenset({"name", "gui_position"})
+MATERIAL_READONLY = frozenset({"id", "sheets_count", "whole_sheets_count", "offcuts_count"})
+
+OPERATIONS = {
+    "stock_list": "read all materials/sheets/thicknesses from database",
+    "stock_set": (
+        "change sheet quantity (absolute or delta);"
+        " writable: name, width, height, quantity, reserved,"
+        " grain_direction, cost"
+    ),
+    "stock_add": "add new sheet to database (via thickness.NewSheet + WholeSheets.Add + Store)",
+    "stock_delete": "delete sheet from database (via sheet.Delete)",
+}
+
+
+def _ensure_nesting_typelib() -> None:
+    from win32com.client import gencache  # type: ignore[import-untyped]
+
+    gencache.EnsureModule(_NESTING_TYPELIB, 0, 1, 3)
+
+
+def _read_sheet(s: Any) -> dict[str, Any]:
+    try:
+        thick_obj = s.Thickness
+        thickness_val = float(thick_obj.Thickness)
+        thickness_id = int(thick_obj.Id)
+    except Exception:
+        thickness_val = 0.0
+        thickness_id = 0
+    try:
+        zones_count = int(s.Zones.Count)
+    except Exception:
+        zones_count = 0
+    grain = int(s.GrainDirection)
+    return {
+        "id": int(s.Id),
+        "name": str(s.Name),
+        "width": float(s.Width),
+        "height": float(s.Height),
+        "quantity": int(s.Quantity),
+        "reserved": int(s.NumReserved),
+        "is_offcut": bool(s.IsOffcut),
+        "thickness": thickness_val,
+        "thickness_id": thickness_id,
+        "grain_direction": grain,
+        "grain_label": _GRAIN_LABELS.get(grain, "unknown"),
+        "cost": float(s.Cost),
+        "length_units": int(s.LengthUnits),
+        "inherit_cost": bool(s.InheritCost),
+        "user_id": str(s.UserID),
+        "gui_position": int(s.GUIPosition),
+        "zones_count": zones_count,
+    }
+
+
+def _read_thickness(t: Any) -> dict[str, Any]:
+    return {
+        "id": int(t.Id),
+        "thickness": float(t.Thickness),
+        "thickness_units": int(t.ThicknessUnits),
+        "thickness_units_label": _UNIT_LABELS.get(int(t.ThicknessUnits), "unknown"),
+        "area_units": int(t.AreaUnits),
+        "weight_units": int(t.WeightUnits),
+        "cost_per_area": float(t.CostPerArea),
+        "cost_per_weight": float(t.CostPerWeight),
+        "cost_is_by_weight": bool(t.CostIsByWeight),
+        "weight_per_area": float(t.WeightPerArea),
+        "whole_sheets_count": int(t.WholeSheets.Count),
+        "offcuts_count": int(t.Offcuts.Count),
+        "sheets_count": int(t.Sheets.Count),
+    }
+
+
+def stock_list(app: Any, material_filter: str | None = None) -> dict[str, Any]:
+    _ensure_nesting_typelib()
+    db = app.Nesting.SheetDatabase
+    materials_out = []
+    for i in range(1, db.Materials.Count + 1):
+        mat = db.Materials.Item(i)
+        if material_filter and mat.Name != material_filter:
+            continue
+        sheets = []
+        for j in range(1, mat.WholeSheets.Count + 1):
+            sheets.append(_read_sheet(mat.WholeSheets.Item(j)))
+        offcuts = []
+        for j in range(1, mat.Offcuts.Count + 1):
+            offcuts.append(_read_sheet(mat.Offcuts.Item(j)))
+        thicknesses = []
+        for j in range(1, mat.Thicknesses.Count + 1):
+            thicknesses.append(_read_thickness(mat.Thicknesses.Item(j)))
+        materials_out.append(
+            {
+                "id": int(mat.Id),
+                "name": str(mat.Name),
+                "gui_position": int(mat.GUIPosition),
+                "sheets_count": int(mat.WholeSheets.Count + mat.Offcuts.Count),
+                "whole_sheets_count": int(mat.WholeSheets.Count),
+                "offcuts_count": int(mat.Offcuts.Count),
+                "thicknesses": thicknesses,
+                "sheets": sheets,
+                "offcuts": offcuts,
+            }
+        )
+    return {
+        "success": True,
+        "materials": materials_out,
+        "operations": OPERATIONS,
+        "writable_fields": {
+            "sheet": sorted(SHEET_WRITABLE),
+            "thickness": sorted(THICKNESS_WRITABLE),
+            "material": sorted(MATERIAL_WRITABLE),
+        },
+    }
+
+
+def stock_set(
+    app: Any,
+    sheet_name: str,
+    qty: int | None = None,
+    delta: int | None = None,
+) -> dict[str, Any]:
+    _ensure_nesting_typelib()
+    db = app.Nesting.SheetDatabase
+    for i in range(1, db.Materials.Count + 1):
+        mat = db.Materials.Item(i)
+        for coll in (mat.WholeSheets, mat.Offcuts):
+            for j in range(1, coll.Count + 1):
+                s = coll.Item(j)
+                if str(s.Name) == sheet_name:
+                    old_qty = int(s.Quantity)
+                    if qty is not None:
+                        s.Quantity = int(qty)
+                    elif delta is not None:
+                        s.Quantity = old_qty + int(delta)
+                    else:
+                        return {"success": False, "error": "either qty or delta required"}
+                    s.Save()
+                    return {
+                        "success": True,
+                        "sheet_id": int(s.Id),
+                        "material": str(mat.Name),
+                        "old_qty": old_qty,
+                        "new_qty": int(s.Quantity),
+                        "name": sheet_name,
+                    }
+    return {"success": False, "error": f"sheet not found: {sheet_name}"}
+
+
+def stock_add(
+    app: Any,
+    material_name: str,
+    thickness: float,
+    width: float,
+    height: float,
+    quantity: int,
+    name: str | None = None,
+    grain: int = 0,
+) -> dict[str, Any]:
+    _ensure_nesting_typelib()
+    if width <= 0 or height <= 0:
+        return {"success": False, "error": "width and height must be positive"}
+    if quantity <= 0:
+        return {"success": False, "error": "quantity must be positive"}
+    db = app.Nesting.SheetDatabase
+    for i in range(1, db.Materials.Count + 1):
+        mat = db.Materials.Item(i)
+        if str(mat.Name) != material_name:
+            continue
+        thick = None
+        for j in range(1, mat.Thicknesses.Count + 1):
+            t = mat.Thicknesses.Item(j)
+            if abs(float(t.Thickness) - thickness) < 0.1:
+                thick = t
+                break
+        if thick is None:
+            return {
+                "success": False,
+                "error": f"thickness {thickness}mm not found in {material_name}",
+            }
+        new_sheet = thick.NewSheet()
+        if name:
+            new_sheet.Name = name
+        new_sheet.Width = float(width)
+        new_sheet.Height = float(height)
+        new_sheet.Quantity = int(quantity)
+        new_sheet.GrainDirection = int(grain)
+        mat.WholeSheets.Add(new_sheet)
+        new_sheet.Store()
+        return {
+            "success": True,
+            "sheet_id": int(new_sheet.Id),
+            "name": str(new_sheet.Name),
+            "material": material_name,
+            "thickness": thickness,
+            "width": float(width),
+            "height": float(height),
+            "quantity": int(quantity),
+        }
+    return {"success": False, "error": f"material not found: {material_name}"}
+
+
+def stock_delete(app: Any, sheet_name: str) -> dict[str, Any]:
+    _ensure_nesting_typelib()
+    db = app.Nesting.SheetDatabase
+    for i in range(1, db.Materials.Count + 1):
+        mat = db.Materials.Item(i)
+        for coll in (mat.WholeSheets, mat.Offcuts):
+            for j in range(1, coll.Count + 1):
+                s = coll.Item(j)
+                if str(s.Name) == sheet_name:
+                    s.Delete()
+                    return {"success": True, "deleted": sheet_name, "material": str(mat.Name)}
+    return {"success": False, "error": f"sheet not found: {sheet_name}"}
