@@ -562,6 +562,8 @@ def _print_manifest(
         t.add_column("Y", justify="right")
         t.add_column("Rot", justify="right")
         t.add_column("WxL", justify="right")
+        t.add_column("DesignW", justify="right")
+        t.add_column("DesignH", justify="right")
         t.add_column("Klient")
         t.add_column("Zamówienie")
         t.add_column("Handle")
@@ -586,6 +588,8 @@ def _print_manifest(
                 str(part.get("y", "") or ""),
                 str(part.get("rotation", "") or ""),
                 f"{str(part.get('width', '') or '')}x{str(part.get('length', '') or '')}",
+                _trunc(part.get("design_width"), 8),
+                _trunc(part.get("design_height"), 8),
                 str(part.get("csv_customer_name") or ""),
                 str(part.get("csv_order_number") or ""),
                 str(part.get("handle_name", "") or ""),
@@ -974,6 +978,127 @@ def materials_list() -> None:
         console.print(t)
 
 
+stock_app = typer.Typer(help="Sheet database stock management")
+
+
+@stock_app.command("list")
+@handle_com_errors
+def stock_list_cmd(
+    material: str | None = typer.Option(None, "--material", help="Filter by material name"),
+    json_output: bool = typer.Option(False, "--json", help="Output JSON"),
+) -> None:
+    """List all sheets in the AlphaCAM sheet database."""
+    require_platform()
+    with alphacam_context(visible=get_visible()) as raw:
+        ac = resolve_app(raw)
+        result = ac.stock_list(material)
+        if json_output:
+            import json
+
+            console.print(json.dumps(result, indent=2))
+            return
+        for mat_data in result.get("materials", []):
+            t = Table(
+                title=f"{mat_data['name']} (id={mat_data['id']}) "
+                f"[{mat_data['whole_sheets_count']} whole, "
+                f"{mat_data['offcuts_count']} offcuts]"
+            )
+            t.add_column("Name", style="green")
+            t.add_column("ID", justify="right", style="dim")
+            t.add_column("Width", justify="right")
+            t.add_column("Height", justify="right")
+            t.add_column("Qty", justify="right", style="cyan")
+            t.add_column("Reserved", justify="right")
+            t.add_column("Thickness", justify="right")
+            t.add_column("Grain", justify="center")
+            t.add_column("Cost", justify="right")
+            t.add_column("Zones", justify="right")
+            for s in mat_data["sheets"]:
+                t.add_row(
+                    s["name"],
+                    str(s["id"]),
+                    str(s["width"]),
+                    str(s["height"]),
+                    str(s["quantity"]),
+                    str(s["reserved"]),
+                    str(s["thickness"]),
+                    s["grain_label"],
+                    str(s["cost"]),
+                    str(s["zones_count"]),
+                )
+            console.print(t)
+
+
+@stock_app.command("set")
+@handle_com_errors
+def stock_set_cmd(
+    sheet_name: str = typer.Argument(..., help="Sheet name"),
+    qty: int | None = typer.Option(None, "--qty", help="Absolute quantity"),
+    delta: int | None = typer.Option(None, "--delta", help="Relative change (+/-N)"),
+) -> None:
+    """Set sheet quantity (absolute or delta)."""
+    require_platform()
+    if qty is None and delta is None:
+        console.print("[red]Error:[/red] specify --qty or --delta")
+        raise typer.Exit(code=2)
+    with alphacam_context(visible=get_visible()) as raw:
+        ac = resolve_app(raw)
+        result = ac.stock_set(sheet_name, qty, delta)
+        if result.get("success"):
+            console.print(
+                f"[green]OK:[/green] {sheet_name} {result['old_qty']} -> {result['new_qty']}"
+            )
+        else:
+            console.print(f"[red]Error:[/red] {result.get('error')}")
+            raise typer.Exit(code=1)
+
+
+@stock_app.command("add")
+@handle_com_errors
+def stock_add_cmd(
+    material_name: str = typer.Argument(..., help="Material name"),
+    thickness: float = typer.Argument(..., help="Thickness in mm"),
+    width: float = typer.Argument(..., help="Width in mm"),
+    height: float = typer.Argument(..., help="Height in mm"),
+    quantity: int = typer.Argument(..., help="Quantity"),
+    name: str | None = typer.Option(None, "--name", help="Sheet name"),
+    grain: int = typer.Option(0, "--grain", help="Grain direction (0=none, 1=x, 2=y)"),
+) -> None:
+    """Add a new sheet to the database."""
+    require_platform()
+    with alphacam_context(visible=get_visible()) as raw:
+        ac = resolve_app(raw)
+        result = ac.stock_add(material_name, thickness, width, height, quantity, name, grain)
+        if result.get("success"):
+            console.print(f"[green]OK:[/green] added '{result['name']}' to {material_name}")
+        else:
+            console.print(f"[red]Error:[/red] {result.get('error')}")
+            raise typer.Exit(code=1)
+
+
+@stock_app.command("delete")
+@handle_com_errors
+def stock_delete_cmd(
+    sheet_name: str = typer.Argument(..., help="Sheet name to delete"),
+    force: bool = typer.Option(False, "--force", help="Skip confirmation"),
+) -> None:
+    """Delete a sheet from the database."""
+    require_platform()
+    if not force:
+        confirmed = typer.confirm(f"Delete sheet '{sheet_name}'?")
+        if not confirmed:
+            console.print("[yellow]Cancelled[/yellow]")
+            raise typer.Exit()
+    with alphacam_context(visible=get_visible()) as raw:
+        ac = resolve_app(raw)
+        result = ac.stock_delete(sheet_name)
+        if result.get("success"):
+            console.print(f"[green]OK:[/green] deleted '{result['deleted']}'")
+        else:
+            console.print(f"[red]Error:[/red] {result.get('error')}")
+            raise typer.Exit(code=1)
+
+
 config_app = typer.Typer(help="CDM job configurations")
 
 
@@ -1341,3 +1466,4 @@ app.add_typer(doorstyles_app, name="doorstyles")
 app.add_typer(multidrill_app, name="multidrill")
 app.add_typer(fittings_app, name="fittings")
 app.add_typer(layers_mapping_app, name="layers-mapping")
+app.add_typer(stock_app, name="stock")
