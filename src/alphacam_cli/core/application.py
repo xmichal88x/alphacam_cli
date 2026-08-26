@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import glob
 import os
+import re
 import time
 from collections.abc import Iterator
 from datetime import datetime
@@ -125,7 +126,27 @@ class Application:
 
     @property
     def version(self) -> str:
-        return str(self._app.AlphacamVersion)  # type: ignore[attr-defined]
+        """Czytelna wersja AlphaCAM.
+
+        `AlphacamVersion` bywa obiektem COM (IVersionInformation), którego
+        str() to nieczytelny repr (`<win32com.gen_py...>`). Gdy to nie string,
+        wersję wyciągamy z FullName (np. `...\\ALPHACAM 2025\\Acam.exe`) ->
+        "ALPHACAM 2025". Fallback: surowy str() obiektu.
+        """
+        raw = self._app.AlphacamVersion  # type: ignore[attr-defined]
+        if isinstance(raw, str):
+            return raw
+        try:
+            m = re.search(
+                r"ALPHACAM[ /_-]?(\d{4})",
+                str(self._app.FullName),  # type: ignore[attr-defined]
+                re.IGNORECASE,
+            )
+            if m:
+                return f"ALPHACAM {m.group(1)}"
+        except Exception:
+            pass
+        return str(raw)
 
     @property
     def full_name(self) -> str:
@@ -1621,6 +1642,8 @@ def _enrich_manifest_customer(manifest: dict[str, Any], job_name: str) -> None:
             label = names.get(n) or f"custom_field_{n}"
             named[label] = value.strip()
         part["custom_fields"] = named
+    for part in _iter_manifest_parts(manifest):
+        acrepd._apply_design_aliases(part)
 
 
 _NC_CONFIG_KEYS = (

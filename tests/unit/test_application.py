@@ -30,6 +30,49 @@ def test_application_properties(mock_com: MagicMock) -> None:
             assert ac.is_mill is False
 
 
+def test_application_version_readable_from_full_name(
+    mock_com: MagicMock,
+) -> None:
+    """AlphacamVersion jako obiekt COM (nie string) -> wersja z FullName."""
+    with mock_com:
+        mock_com.return_value.AlphacamVersion = MagicMock()
+        mock_com.return_value.FullName = (
+            r"C:\Program Files\Hexagon\ALPHACAM 2025\Acam.exe"
+        )
+        from alphacam_cli.com.manager import alphacam_context
+
+        with alphacam_context() as raw:
+            ac = Application(raw)
+            assert ac.version == "ALPHACAM 2025"
+
+
+def test_application_version_com_object_no_year_fallback(
+    mock_com: MagicMock,
+) -> None:
+    """FullName bez roku + AlphacamVersion obiekt COM -> fallback str()."""
+    with mock_com:
+        version_mock = MagicMock()
+        version_mock.__str__ = MagicMock(return_value="<com object>")
+        mock_com.return_value.AlphacamVersion = version_mock
+        mock_com.return_value.FullName = r"C:\AlphaCAM\Acam.exe"
+        from alphacam_cli.com.manager import alphacam_context
+
+        with alphacam_context() as raw:
+            ac = Application(raw)
+            assert ac.version == "<com object>"
+
+
+def test_application_version_plain_string_unchanged(mock_com: MagicMock) -> None:
+    """AlphacamVersion to zwykly string -> zwrocony bez zmian."""
+    with mock_com:
+        mock_com.return_value.AlphacamVersion = "2024.1"
+        from alphacam_cli.com.manager import alphacam_context
+
+        with alphacam_context() as raw:
+            ac = Application(raw)
+            assert ac.version == "2024.1"
+
+
 def test_application_visible_setter(mock_com: MagicMock) -> None:
     with mock_com:
         from alphacam_cli.com.manager import alphacam_context
