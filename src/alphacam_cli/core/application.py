@@ -1441,6 +1441,40 @@ class Application:
         """Read CDM lookup tables from the vdb5 database (headless-safe)."""
         return {"lookups": cdm_db.lookups()}
 
+    def stock_list(self, material: str | None = None) -> dict[str, Any]:
+        from alphacam_cli.core.stock import stock_list
+
+        return stock_list(self._app, material)
+
+    def stock_set(
+        self,
+        sheet_name: str,
+        qty: int | None = None,
+        delta: int | None = None,
+    ) -> dict[str, Any]:
+        from alphacam_cli.core.stock import stock_set
+
+        return stock_set(self._app, sheet_name, qty, delta)
+
+    def stock_add(
+        self,
+        material_name: str,
+        thickness: float,
+        width: float,
+        height: float,
+        quantity: int,
+        name: str | None = None,
+        grain: int = 0,
+    ) -> dict[str, Any]:
+        from alphacam_cli.core.stock import stock_add
+
+        return stock_add(self._app, material_name, thickness, width, height, quantity, name, grain)
+
+    def stock_delete(self, sheet_name: str) -> dict[str, Any]:
+        from alphacam_cli.core.stock import stock_delete
+
+        return stock_delete(self._app, sheet_name)
+
     def manifest_list(self, data_dir: str | None = None) -> dict[str, Any]:
         """List nesting results manifests (.acrepd) from the reports data directory."""
         data_dir = acrepd._reports_data_dir(self.licomdir_path, data_dir)
