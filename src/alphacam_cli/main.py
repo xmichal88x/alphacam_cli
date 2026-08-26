@@ -80,6 +80,7 @@ _SUBCOMMANDS: list[tuple[str, str]] = [
     ("alphacam_cli.cli.nc", "nc"),
     ("alphacam_cli.cli.batch", "batch"),
     ("alphacam_cli.cli.diagnose", "diagnose"),
+    ("alphacam_cli.cli.health", "health"),
     ("alphacam_cli.cli.nest", "nest"),
     ("alphacam_cli.cli.post", "post"),
     ("alphacam_cli.cli.reports", "reports"),

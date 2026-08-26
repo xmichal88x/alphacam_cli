@@ -349,6 +349,40 @@ class GatewayServer:
     def _handler_ping(self, params: dict[str, Any]) -> dict[str, bool]:
         return {"pong": True}
 
+    def _handler_health(self, params: dict[str, Any]) -> dict[str, Any]:
+        """True health-check: verifies the AlphaCAM COM process, not just TCP.
+
+        ping returns pong unconditionally (TCP liveness). health touches COM:
+        `_app is not None` AND a trivial call (`com_app.version`) succeeds.
+        When `_app` is stale (AlphaCAM died while gateway is alive): returns
+        failure and, if the call queue is empty (no active job), schedules
+        os._exit(1) after 3s (STALE_MACRO pattern) so NSSM restarts the service
+        and the STA loop relaunches AlphaCAM. Does NOT os._exit when work is
+        queued in _call_queue (does not kill an active macro).
+        """
+        from alphacam_cli.gateway.server import _app as com_app
+
+        if com_app is None:
+            return {"ok": False, "error": "AlphaCAM not attached"}
+        try:
+            version = str(com_app.version)
+        except Exception as e:
+            if self._call_queue.empty():
+                self._logger.warning(
+                    "HEALTH: stale AlphaCAM COM (%s) — restarting service in 3s (NSSM)",
+                    e,
+                )
+                timer = threading.Timer(3.0, os._exit, args=(1,))
+                timer.daemon = True
+                timer.start()
+                return {
+                    "ok": False,
+                    "error": f"stale AlphaCAM COM: {e}",
+                    "restart_scheduled": True,
+                }
+            return {"ok": False, "error": f"stale AlphaCAM COM: {e}", "restart_scheduled": False}
+        return {"ok": True, "version": version, "name": str(com_app.name)}
+
     def _handler_reports_create(self, params: dict[str, Any]) -> dict[str, Any]:
         from alphacam_cli.gateway.server import _app as com_app
 

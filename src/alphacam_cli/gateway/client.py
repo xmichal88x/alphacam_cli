@@ -79,6 +79,9 @@ class RemoteSession:
     def ping(self) -> dict[str, Any]:
         return self._call("ping")  # type: ignore[no-any-return]
 
+    def health(self) -> dict[str, Any]:
+        return self._call("health")  # type: ignore[no-any-return]
+
     def get_info(self) -> dict[str, Any]:
         return self._call("get_info")  # type: ignore[no-any-return]
 

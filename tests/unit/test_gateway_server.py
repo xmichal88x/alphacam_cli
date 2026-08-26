@@ -2466,3 +2466,81 @@ def test_gateway_start_clears_macro_log(monkeypatch: pytest.MonkeyPatch) -> None
     gw._sta_loop.assert_called_once()
     fake_socket.bind.assert_called_once_with((gw._host, gw._port))
     fake_socket.accept.assert_called_once()
+
+
+def test_handler_health_ok(server_app: MagicMock) -> None:
+    server_app.version = "9.0.1"
+    server_app.name = "AlphaCAM"
+    gw = GatewayServer()
+    result = gw._handler_health({})
+    assert result == {"ok": True, "version": "9.0.1", "name": "AlphaCAM"}
+
+
+def test_handler_health_not_attached(
+    server_app: MagicMock, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import alphacam_cli.gateway.server as server_module
+
+    monkeypatch.setattr(server_module, "_app", None)
+    gw = GatewayServer()
+    result = gw._handler_health({})
+    assert result == {"ok": False, "error": "AlphaCAM not attached"}
+
+
+def test_handler_health_stale_com_restart_scheduled(
+    server_app: MagicMock, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from unittest.mock import PropertyMock
+
+    import alphacam_cli.gateway.server as server_module
+
+    _FakeTimer.instances = []
+    monkeypatch.setattr(server_module.threading, "Timer", _FakeTimer)
+    mock_exit = MagicMock()
+    monkeypatch.setattr(server_module.os, "_exit", mock_exit)
+    type(server_app).version = PropertyMock(side_effect=RuntimeError("COM dead"))
+
+    gw = GatewayServer()
+    result = gw._handler_health({})
+
+    assert result == {
+        "ok": False,
+        "error": "stale AlphaCAM COM: COM dead",
+        "restart_scheduled": True,
+    }
+    assert len(_FakeTimer.instances) == 1
+    timer = _FakeTimer.instances[0]
+    assert timer.interval == 3.0
+    assert timer.function is mock_exit
+    assert timer.args == (1,)
+    assert timer.daemon is True
+    assert timer.started is True
+    timer.function(*timer.args)
+    mock_exit.assert_called_once_with(1)
+
+
+def test_handler_health_stale_com_no_restart_when_job_queued(
+    server_app: MagicMock, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from unittest.mock import PropertyMock
+
+    import alphacam_cli.gateway.server as server_module
+
+    _FakeTimer.instances = []
+    monkeypatch.setattr(server_module.threading, "Timer", _FakeTimer)
+    mock_exit = MagicMock()
+    monkeypatch.setattr(server_module.os, "_exit", mock_exit)
+    type(server_app).version = PropertyMock(side_effect=RuntimeError("COM dead"))
+
+    gw = GatewayServer()
+    gw._call_queue.put((lambda: None, MagicMock(), "active job"))
+
+    result = gw._handler_health({})
+
+    assert result == {
+        "ok": False,
+        "error": "stale AlphaCAM COM: COM dead",
+        "restart_scheduled": False,
+    }
+    assert _FakeTimer.instances == []
+    mock_exit.assert_not_called()

@@ -742,3 +742,20 @@ def test_remote_session_call_socket_timeout_wrapped() -> None:
     client._sock = sock
     with pytest.raises(RemoteConnectionError, match=r"request timed out after 30\.0s"):
         client._call("ping")
+
+
+def test_remote_session_health() -> None:
+    client = RemoteSession()
+    client._call = MagicMock(return_value={"ok": True, "version": "9.0.1"})  # type: ignore[method-assign]
+    result = client.health()
+    assert result == {"ok": True, "version": "9.0.1"}
+    client._call.assert_called_once_with("health")
+
+
+def test_remote_application_health() -> None:
+    session = MagicMock()
+    session.health.return_value = {"ok": True, "version": "9.0.1", "name": "AlphaCAM"}
+    app = RemoteApplication(session)
+    result = app.health()
+    assert result == {"ok": True, "version": "9.0.1", "name": "AlphaCAM"}
+    session.health.assert_called_once_with()
