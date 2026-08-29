@@ -49,6 +49,14 @@ _MANIFEST_ROWS = """\
     <SheetUniquePartCount>1</SheetUniquePartCount>
     <SheetQuantity>1</SheetQuantity>
   </AC_04_SHEETS>
+  <AC_SHEET_OFFCUTS>
+    <OffcutID>1</OffcutID>
+    <OffcutSheetID>1</OffcutSheetID>
+    <OffcutName>MDF18, Odcięcie 1</OffcutName>
+    <OffcutWidth>2282.76</OffcutWidth>
+    <OffcutLength>2070</OffcutLength>
+    <SheetDBOffcutID>15</SheetDBOffcutID>
+  </AC_SHEET_OFFCUTS>
   <AC_05_PARTS>
     <PartID>1</PartID>
     <PartSheetID>1</PartSheetID>
@@ -1908,7 +1916,6 @@ def test_fill_class_invalid_threshold_falls_back_to_default() -> None:
     assert acrepd.fill_class(69, threshold=None) == "partial"
 
 
-
 def test_apply_design_aliases_numeric_cf1_sets_design_width() -> None:
     part: dict[str, object] = {"custom_field_1": "800.0", "custom_field_2": "2000"}
     acrepd._apply_design_aliases(part)
@@ -2007,3 +2014,46 @@ def test_parse_manifest_design_aliases_from_cdm(tmp_path: pathlib.Path) -> None:
     part = manifest["sheets"][0]["parts"][0]
     assert part["design_width"] == 800.0
     assert part["design_height"] == 2000.0
+
+
+_OFFCUT_SECTION = (
+    "  <AC_SHEET_OFFCUTS>\n"
+    "    <OffcutID>1</OffcutID>\n"
+    "    <OffcutSheetID>1</OffcutSheetID>\n"
+    "    <OffcutName>MDF18, Odcięcie 1</OffcutName>\n"
+    "    <OffcutWidth>2282.76</OffcutWidth>\n"
+    "    <OffcutLength>2070</OffcutLength>\n"
+    "    <SheetDBOffcutID>15</SheetDBOffcutID>\n"
+    "  </AC_SHEET_OFFCUTS>\n"
+)
+
+
+def _wrap(rows: str) -> str:
+    return f'<?xml version="1.0" encoding="utf-8"?>\n<NewDataSet>\n{rows}</NewDataSet>\n'
+
+
+def test_parse_manifest_offcuts(tmp_path: pathlib.Path) -> None:
+    xml = _wrap(_MANIFEST_ROWS)
+    p = tmp_path / "test.acrepd"
+    p.write_text(xml, encoding="utf-8")
+    result = acrepd.parse_manifest(str(p))
+    assert len(result["sheets"]) == 2
+    sheet = result["sheets"][0]
+    assert "offcuts" in sheet
+    assert len(sheet["offcuts"]) == 1
+    offcut = sheet["offcuts"][0]
+    assert offcut["id"] == 1
+    assert offcut["sheet_id"] == 1
+    assert offcut["name"] == "MDF18, Odcięcie 1"
+    assert offcut["width"] == 2282.76
+    assert offcut["length"] == 2070.0
+    assert offcut["sheet_db_id"] == 15
+
+
+def test_parse_manifest_no_offcuts(tmp_path: pathlib.Path) -> None:
+    rows_no_offcuts = _MANIFEST_ROWS.replace(_OFFCUT_SECTION, "")
+    xml = _wrap(rows_no_offcuts)
+    p = tmp_path / "test.acrepd"
+    p.write_text(xml, encoding="utf-8")
+    result = acrepd.parse_manifest(str(p))
+    assert result["sheets"][0]["offcuts"] == []

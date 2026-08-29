@@ -51,6 +51,23 @@ _SHEET_CDM_FIELDS: dict[str, str] = {
 
 _SHEET_CDM_KEYS = ("cdmsheetid", "cdmsheetreportid", "sheetid")
 
+_OFFCUT_FIELDS: dict[str, str] = {
+    "offcutid": "id",
+    "offcutsheetid": "sheet_id",
+    "offcutname": "name",
+    "offcutwidth": "width",
+    "offcutlength": "length",
+    "sheetdboffcutid": "sheet_db_id",
+}
+
+_OFFCUT_NUMERIC: dict[str, Callable[..., Any]] = {
+    "id": int,
+    "sheet_id": int,
+    "width": float,
+    "length": float,
+    "sheet_db_id": int,
+}
+
 _PART_FIELDS: dict[str, str] = {
     "partid": "id",
     "partsheetid": "sheet_id",
@@ -354,6 +371,20 @@ def _attach_sheet_cdm(sheets: list[dict[str, Any]], cdm_rows: list[dict[str, str
             target.update(_mapped(cdm_rows[index], _SHEET_CDM_FIELDS))
 
 
+def _attach_sheet_offcuts(sheets: list[dict[str, Any]], offcut_rows: list[dict[str, str]]) -> None:
+    if not sheets or not offcut_rows:
+        return
+    by_id = {str(s["id"]): s for s in sheets}
+    for row in offcut_rows:
+        offcut = _mapped(row, _OFFCUT_FIELDS)
+        for key, cast in _OFFCUT_NUMERIC.items():
+            offcut[key] = _num(offcut[key], cast)
+        sheet_id = str(offcut.get("sheet_id", ""))
+        target = by_id.get(sheet_id)
+        if target is not None:
+            target.setdefault("offcuts", []).append(offcut)
+
+
 def parse_manifest(path: str) -> dict[str, Any]:
     """Parse an .acrepd nesting results manifest (VistaDB DataSet XML)."""
     size = os.path.getsize(path)
@@ -383,11 +414,14 @@ def parse_manifest(path: str) -> dict[str, Any]:
         sheet["nest_nc_filename"] = None
         sheet["press_name"] = None
         sheet["parts"] = []
+        sheet["offcuts"] = []
         for key, cast in _SHEET_NUMERIC.items():
             sheet[key] = _num(sheet[key], cast)
         sheet["utilization"] = None if sheet["scrap"] is None else max(0, 100 - int(sheet["scrap"]))
         sheets.append(sheet)
     _attach_sheet_cdm(sheets, sheet_cdm_rows)
+    offcut_rows = _rows(root, "AC_SHEET_OFFCUTS")
+    _attach_sheet_offcuts(sheets, offcut_rows)
 
     part_cdm_rows = _rows(root, "AC_PART_CDM")
     parts: list[dict[str, Any]] = []
