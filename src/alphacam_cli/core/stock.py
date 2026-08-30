@@ -266,3 +266,119 @@ def stock_delete(app: Any, sheet_name: str) -> dict[str, Any]:
                     s.Delete()
                     return {"success": True, "deleted": sheet_name, "material": str(mat.Name)}
     return {"success": False, "error": f"sheet not found: {sheet_name}"}
+
+
+def _find_sheet_by_database_id(db: Any, sheet_id: int) -> tuple[Any | None, bool, str | None]:
+    """Return the sheet, whether readback is supported, and an error if lookup failed."""
+    try:
+        find_by_id = db.FindSheetByDatabaseID
+    except Exception:
+        find_by_id = None
+
+    if callable(find_by_id):
+        try:
+            return find_by_id(sheet_id), True, None
+        except Exception as exc:
+            return None, True, f"stable-ID lookup failed for {sheet_id}: {exc}"
+
+    try:
+        for i in range(1, int(db.Materials.Count) + 1):
+            material = db.Materials.Item(i)
+            for collection in (material.WholeSheets, material.Offcuts):
+                for j in range(1, int(collection.Count) + 1):
+                    sheet = collection.Item(j)
+                    try:
+                        if int(sheet.Id) == sheet_id:
+                            return sheet, False, None
+                    except Exception as exc:
+                        return None, False, f"sheet ID read failed during lookup: {exc}"
+    except Exception as exc:
+        return None, False, f"fallback lookup failed for {sheet_id}: {exc}"
+    return None, False, None
+
+
+def stock_offcut_delete(app: Any, sheet_id: int) -> dict[str, Any]:
+    """Delete exactly one offcut selected by its stable database ID."""
+    if isinstance(sheet_id, bool) or not isinstance(sheet_id, int) or sheet_id <= 0:
+        return {
+            "success": False,
+            "status": "invalid_id",
+            "error": "sheet_id must be a positive integer",
+        }
+
+    try:
+        _ensure_nesting_typelib()
+        db = app.Nesting.SheetDatabase
+    except Exception as exc:
+        return {"success": False, "status": "com_error", "error": f"COM setup failed: {exc}"}
+
+    sheet, readback_supported, lookup_error = _find_sheet_by_database_id(db, sheet_id)
+    if lookup_error:
+        return {
+            "success": False,
+            "status": "com_error",
+            "error": lookup_error,
+            "sheet_id": sheet_id,
+        }
+    if sheet is None:
+        return {
+            "success": False,
+            "status": "not_found",
+            "error": f"offcut not found: {sheet_id}",
+            "sheet_id": sheet_id,
+        }
+
+    try:
+        actual_id = int(sheet.Id)
+        is_offcut = sheet.IsOffcut
+        if actual_id != sheet_id:
+            return {
+                "success": False,
+                "status": "com_error",
+                "error": f"stable ID mismatch: expected {sheet_id}, got {actual_id}",
+                "sheet_id": sheet_id,
+            }
+        if is_offcut is not True:
+            return {
+                "success": False,
+                "status": "wrong_type",
+                "error": f"sheet {sheet_id} is not an offcut",
+                "sheet_id": sheet_id,
+            }
+        name = str(sheet.Name)
+    except Exception as exc:
+        return {
+            "success": False,
+            "status": "com_error",
+            "error": f"offcut validation failed for {sheet_id}: {exc}",
+            "sheet_id": sheet_id,
+        }
+
+    try:
+        sheet.Delete()
+    except Exception as exc:
+        return {
+            "success": False,
+            "status": "delete_error",
+            "error": f"offcut delete failed for {sheet_id}: {exc}",
+            "sheet_id": sheet_id,
+        }
+
+    if readback_supported:
+        try:
+            if db.FindSheetByDatabaseID(sheet_id) is not None:
+                return {
+                    "success": False,
+                    "status": "readback_failure",
+                    "error": f"offcut {sheet_id} still exists after delete",
+                    "sheet_id": sheet_id,
+                }
+        except Exception as exc:
+            return {
+                "success": False,
+                "status": "readback_failure",
+                "error": f"offcut readback failed for {sheet_id}: {exc}",
+                "sheet_id": sheet_id,
+            }
+
+    return {"success": True, "status": "deleted", "sheet_id": sheet_id, "name": name}

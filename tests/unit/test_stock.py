@@ -1,8 +1,15 @@
 from __future__ import annotations
 
-from unittest.mock import MagicMock, patch
+from types import SimpleNamespace
+from unittest.mock import MagicMock, PropertyMock, patch
 
-from alphacam_cli.core.stock import stock_add, stock_delete, stock_list, stock_set
+from alphacam_cli.core.stock import (
+    stock_add,
+    stock_delete,
+    stock_list,
+    stock_offcut_delete,
+    stock_set,
+)
 
 
 @patch("alphacam_cli.core.stock._ensure_nesting_typelib")
@@ -265,3 +272,144 @@ def test_stock_delete_not_found(_mock_ensure):
     result = stock_delete(app, sheet_name="NONEXISTENT")
     assert result["success"] is False
     assert "not found" in result["error"].lower()
+
+
+@patch("alphacam_cli.core.stock._ensure_nesting_typelib")
+def test_stock_offcut_delete_by_stable_id(_mock_ensure):
+    app = MagicMock()
+    db = app.Nesting.SheetDatabase
+    sheet = MagicMock()
+    sheet.Id = 123
+    sheet.Name = "OFFCUT_A"
+    sheet.IsOffcut = True
+    db.FindSheetByDatabaseID.side_effect = [sheet, None]
+
+    result = stock_offcut_delete(app, 123)
+
+    assert result == {
+        "success": True,
+        "status": "deleted",
+        "sheet_id": 123,
+        "name": "OFFCUT_A",
+    }
+    db.FindSheetByDatabaseID.assert_any_call(123)
+    sheet.Delete.assert_called_once_with()
+
+
+@patch("alphacam_cli.core.stock._ensure_nesting_typelib")
+def test_stock_offcut_delete_uses_id_fallback_when_lookup_api_is_unavailable(_mock_ensure):
+    app = MagicMock()
+    sheet = MagicMock()
+    sheet.Id = 456
+    sheet.Name = "DUPLICATE_NAME"
+    sheet.IsOffcut = True
+    material = SimpleNamespace(
+        WholeSheets=SimpleNamespace(Count=0),
+        Offcuts=SimpleNamespace(Count=1, Item=lambda _index: sheet),
+    )
+    db = SimpleNamespace(Materials=SimpleNamespace(Count=1, Item=lambda _index: material))
+    app.Nesting.SheetDatabase = db
+
+    result = stock_offcut_delete(app, 456)
+
+    assert result["success"] is True
+    assert result["status"] == "deleted"
+    assert result["sheet_id"] == 456
+    sheet.Delete.assert_called_once_with()
+
+
+@patch("alphacam_cli.core.stock._ensure_nesting_typelib")
+def test_stock_offcut_delete_rejects_missing_or_invalid_id(_mock_ensure):
+    app = MagicMock()
+
+    for invalid_id in (None, 0, -1, "123", True):
+        result = stock_offcut_delete(app, invalid_id)
+        assert result["success"] is False
+        assert result["status"] == "invalid_id"
+
+    app.Nesting.SheetDatabase.FindSheetByDatabaseID.assert_not_called()
+
+
+@patch("alphacam_cli.core.stock._ensure_nesting_typelib")
+def test_stock_offcut_delete_not_found_does_not_delete(_mock_ensure):
+    app = MagicMock()
+    db = app.Nesting.SheetDatabase
+    db.FindSheetByDatabaseID.return_value = None
+
+    result = stock_offcut_delete(app, 404)
+
+    assert result == {
+        "success": False,
+        "status": "not_found",
+        "error": "offcut not found: 404",
+        "sheet_id": 404,
+    }
+    db.FindSheetByDatabaseID.assert_called_once_with(404)
+
+
+@patch("alphacam_cli.core.stock._ensure_nesting_typelib")
+def test_stock_offcut_delete_rejects_whole_sheet_without_delete(_mock_ensure):
+    app = MagicMock()
+    db = app.Nesting.SheetDatabase
+    sheet = MagicMock()
+    sheet.Id = 123
+    sheet.Name = "WHOLE_SHEET"
+    sheet.IsOffcut = False
+    db.FindSheetByDatabaseID.return_value = sheet
+
+    result = stock_offcut_delete(app, 123)
+
+    assert result["success"] is False
+    assert result["status"] == "wrong_type"
+    sheet.Delete.assert_not_called()
+
+
+@patch("alphacam_cli.core.stock._ensure_nesting_typelib")
+def test_stock_offcut_delete_is_fail_closed_when_type_read_fails(_mock_ensure):
+    app = MagicMock()
+    db = app.Nesting.SheetDatabase
+    sheet = MagicMock()
+    sheet.Id = 123
+    type(sheet).IsOffcut = PropertyMock(side_effect=RuntimeError("IsOffcut unavailable"))
+    db.FindSheetByDatabaseID.return_value = sheet
+
+    result = stock_offcut_delete(app, 123)
+
+    assert result["success"] is False
+    assert result["status"] == "com_error"
+    sheet.Delete.assert_not_called()
+
+
+@patch("alphacam_cli.core.stock._ensure_nesting_typelib")
+def test_stock_offcut_delete_reports_delete_com_error(_mock_ensure):
+    app = MagicMock()
+    db = app.Nesting.SheetDatabase
+    sheet = MagicMock()
+    sheet.Id = 123
+    sheet.IsOffcut = True
+    sheet.Name = "OFFCUT_A"
+    sheet.Delete.side_effect = RuntimeError("COM delete failed")
+    db.FindSheetByDatabaseID.return_value = sheet
+
+    result = stock_offcut_delete(app, 123)
+
+    assert result["success"] is False
+    assert result["status"] == "delete_error"
+    assert "COM delete failed" in result["error"]
+
+
+@patch("alphacam_cli.core.stock._ensure_nesting_typelib")
+def test_stock_offcut_delete_reports_readback_failure(_mock_ensure):
+    app = MagicMock()
+    db = app.Nesting.SheetDatabase
+    sheet = MagicMock()
+    sheet.Id = 123
+    sheet.IsOffcut = True
+    sheet.Name = "OFFCUT_A"
+    db.FindSheetByDatabaseID.side_effect = [sheet, sheet]
+
+    result = stock_offcut_delete(app, 123)
+
+    assert result["success"] is False
+    assert result["status"] == "readback_failure"
+    sheet.Delete.assert_called_once_with()
