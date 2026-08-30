@@ -313,10 +313,10 @@ def test_stock_offcut_delete_uses_id_fallback_when_lookup_api_is_unavailable(_mo
 
     result = stock_offcut_delete(app, 456)
 
-    assert result["success"] is True
-    assert result["status"] == "deleted"
+    assert result["success"] is False
+    assert result["status"] == "unsupported"
     assert result["sheet_id"] == 456
-    sheet.Delete.assert_called_once_with()
+    sheet.Delete.assert_not_called()
 
 
 @patch("alphacam_cli.core.stock._ensure_nesting_typelib")

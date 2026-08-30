@@ -397,6 +397,14 @@ def stock_offcut_delete(app: Any, sheet_id: int) -> dict[str, Any]:
             "sheet_id": sheet_id,
         }
 
+    if not readback_supported:
+        return {
+            "success": False,
+            "status": "unsupported",
+            "error": "offcut delete requires stable-ID readback support",
+            "sheet_id": sheet_id,
+        }
+
     try:
         sheet.Delete()
     except Exception as exc:
