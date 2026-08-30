@@ -458,6 +458,29 @@ class RemoteSession:
     def cdm_stock_delete(self, sheet_name: str) -> dict[str, Any]:
         return self._call("cdm_stock_delete", {"sheet_name": sheet_name})  # type: ignore[no-any-return]
 
+    def cdm_stock_offcut_create(
+        self,
+        material_name: str,
+        thickness: float,
+        width: float,
+        height: float,
+        quantity: int,
+        name: str | None = None,
+    ) -> dict[str, Any]:
+        params: dict[str, Any] = {
+            "material_name": material_name,
+            "thickness": thickness,
+            "width": width,
+            "height": height,
+            "quantity": quantity,
+        }
+        if name is not None:
+            params["name"] = name
+        return self._call("cdm_stock_offcut_create", params)  # type: ignore[no-any-return]
+
+    def cdm_stock_offcut_delete(self, sheet_id: int) -> dict[str, Any]:
+        return self._call("cdm_stock_offcut_delete", {"sheet_id": sheet_id})  # type: ignore[no-any-return]
+
     def cdm_configs(self, show: str | None = None) -> dict[str, Any]:
         params: dict[str, Any] = {}
         if show is not None:

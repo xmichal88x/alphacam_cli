@@ -57,6 +57,103 @@ def test_cdm_create_command() -> None:
     )
 
 
+def test_stock_offcut_add_json_preserves_blocked_status() -> None:
+    from tests.unit.test_cli import _mock_com
+
+    blocked = {"success": False, "status": "blocked", "reason": "no verified source"}
+    with (
+        _mock_com(),
+        patch(
+            "alphacam_cli.core.application.Application.stock_offcut_create", return_value=blocked
+        ) as create,
+    ):
+        result = runner.invoke(
+            app,
+            [
+                "cdm",
+                "stock",
+                "offcut-add",
+                "MDF",
+                "18",
+                "100",
+                "200",
+                "1",
+                "--name",
+                "offcut",
+                "--json",
+            ],
+        )
+    assert result.exit_code == 1
+    assert '"status": "blocked"' in result.stderr
+    create.assert_called_once_with("MDF", 18.0, 100.0, 200.0, 1, "offcut")
+
+
+def test_stock_offcut_delete_uses_stable_id_and_json() -> None:
+    from tests.unit.test_cli import _mock_com
+
+    deleted = {"success": True, "status": "deleted", "sheet_id": 123}
+    with (
+        _mock_com(),
+        patch(
+            "alphacam_cli.core.application.Application.stock_offcut_delete", return_value=deleted
+        ) as delete,
+    ):
+        result = runner.invoke(app, ["cdm", "stock", "offcut-delete", "123", "--force", "--json"])
+    assert result.exit_code == 0
+    assert '"sheet_id": 123' in result.stderr
+    delete.assert_called_once_with(123)
+
+
+def test_stock_offcut_delete_not_found_has_nonzero_exit() -> None:
+    from tests.unit.test_cli import _mock_com
+
+    with (
+        _mock_com(),
+        patch(
+            "alphacam_cli.core.application.Application.stock_offcut_delete",
+            return_value={
+                "success": False,
+                "status": "not_found",
+                "error": "offcut not found: 123",
+            },
+        ),
+    ):
+        result = runner.invoke(app, ["cdm", "stock", "offcut-delete", "123", "--force", "--json"])
+    assert result.exit_code == 1
+    assert '"status": "not_found"' in result.stderr
+    assert "offcut not found: 123" in result.stderr
+
+
+def test_stock_offcut_delete_wrong_type_has_nonzero_exit() -> None:
+    from tests.unit.test_cli import _mock_com
+
+    with (
+        _mock_com(),
+        patch(
+            "alphacam_cli.core.application.Application.stock_offcut_delete",
+            return_value={"success": False, "status": "wrong_type", "error": "not an offcut"},
+        ),
+    ):
+        result = runner.invoke(app, ["cdm", "stock", "offcut-delete", "123", "--force", "--json"])
+    assert result.exit_code == 1
+    assert '"status": "wrong_type"' in result.stderr
+
+
+def test_stock_offcut_delete_com_error_has_nonzero_exit() -> None:
+    from tests.unit.test_cli import _mock_com
+
+    with (
+        _mock_com(),
+        patch(
+            "alphacam_cli.core.application.Application.stock_offcut_delete",
+            side_effect=RuntimeError("COM failure"),
+        ),
+    ):
+        result = runner.invoke(app, ["cdm", "stock", "offcut-delete", "123", "--force"])
+    assert result.exit_code == 1
+    assert "COM failure" in result.stderr
+
+
 def test_cdm_create_command_config_material() -> None:
     from tests.unit.test_cli import _mock_com
 

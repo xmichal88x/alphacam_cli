@@ -6,7 +6,7 @@ import re
 import time
 from collections.abc import Iterator
 from datetime import datetime
-from typing import TYPE_CHECKING, Any, ClassVar
+from typing import TYPE_CHECKING, Any, ClassVar, cast
 
 if TYPE_CHECKING:
     import win32com.client as win32  # type: ignore[import-untyped]
@@ -1474,6 +1474,30 @@ class Application:
         from alphacam_cli.core.stock import stock_delete
 
         return stock_delete(self._app, sheet_name)
+
+    def stock_offcut_create(
+        self,
+        material_name: str,
+        thickness: float,
+        width: float,
+        height: float,
+        quantity: int,
+        name: str | None = None,
+        drawing: Any = None,
+    ) -> dict[str, Any]:
+        from alphacam_cli.core.stock import stock_offcut_create
+
+        return cast(
+            dict[str, Any],
+            stock_offcut_create(
+                self._app, material_name, thickness, width, height, quantity, name, drawing
+            ),
+        )
+
+    def stock_offcut_delete(self, sheet_id: int) -> dict[str, Any]:
+        from alphacam_cli.core.stock import stock_offcut_delete
+
+        return stock_offcut_delete(self._app, sheet_id)
 
     def manifest_list(self, data_dir: str | None = None) -> dict[str, Any]:
         """List nesting results manifests (.acrepd) from the reports data directory."""

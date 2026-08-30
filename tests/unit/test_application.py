@@ -30,15 +30,28 @@ def test_application_properties(mock_com: MagicMock) -> None:
             assert ac.is_mill is False
 
 
+def test_application_offcut_operations_delegate() -> None:
+    raw = MagicMock()
+    ac = Application(raw)
+    create_result = {"success": False, "status": "blocked"}
+    delete_result = {"success": False, "status": "not_found", "sheet_id": 123}
+    with (
+        patch("alphacam_cli.core.stock.stock_offcut_create", return_value=create_result) as create,
+        patch("alphacam_cli.core.stock.stock_offcut_delete", return_value=delete_result) as delete,
+    ):
+        assert ac.stock_offcut_create("MDF", 18, 100, 200, 1, "offcut") == create_result
+        assert ac.stock_offcut_delete(123) == delete_result
+    create.assert_called_once_with(raw, "MDF", 18, 100, 200, 1, "offcut", None)
+    delete.assert_called_once_with(raw, 123)
+
+
 def test_application_version_readable_from_full_name(
     mock_com: MagicMock,
 ) -> None:
     """AlphacamVersion jako obiekt COM (nie string) -> wersja z FullName."""
     with mock_com:
         mock_com.return_value.AlphacamVersion = MagicMock()
-        mock_com.return_value.FullName = (
-            r"C:\Program Files\Hexagon\ALPHACAM 2025\Acam.exe"
-        )
+        mock_com.return_value.FullName = r"C:\Program Files\Hexagon\ALPHACAM 2025\Acam.exe"
         from alphacam_cli.com.manager import alphacam_context
 
         with alphacam_context() as raw:

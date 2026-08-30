@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import re
 from datetime import datetime
 from typing import Any
@@ -1076,6 +1077,33 @@ def stock_add_cmd(
             raise typer.Exit(code=1)
 
 
+@stock_app.command("offcut-add")
+@handle_com_errors
+def stock_offcut_add_cmd(
+    material_name: str = typer.Argument(..., help="Material name"),
+    thickness: float = typer.Argument(..., help="Thickness in mm"),
+    width: float = typer.Argument(..., help="Width in mm"),
+    height: float = typer.Argument(..., help="Height in mm"),
+    quantity: int = typer.Argument(..., help="Quantity"),
+    name: str | None = typer.Option(None, "--name", help="Offcut name"),
+    json_output: bool = typer.Option(False, "--json", help="Output deterministic JSON"),
+) -> None:
+    """Attempt to add an offcut; blocked creation is reported, never faked as success."""
+    require_platform()
+    with alphacam_context(visible=get_visible()) as raw:
+        ac = resolve_app(raw)
+        result = ac.stock_offcut_create(material_name, thickness, width, height, quantity, name)
+    if json_output:
+        console.print(json.dumps(result, indent=2, sort_keys=True))
+    elif result.get("success"):
+        console.print(f"[green]OK:[/green] offcut added: {result.get('name', name or '-')}")
+    else:
+        detail = result.get("error") or result.get("reason") or result.get("status")
+        console.print(f"[red]Error:[/red] {detail}")
+    if not result.get("success"):
+        raise typer.Exit(code=1)
+
+
 @stock_app.command("delete")
 @handle_com_errors
 def stock_delete_cmd(
@@ -1097,6 +1125,31 @@ def stock_delete_cmd(
         else:
             console.print(f"[red]Error:[/red] {result.get('error')}")
             raise typer.Exit(code=1)
+
+
+@stock_app.command("offcut-delete")
+@handle_com_errors
+def stock_offcut_delete_cmd(
+    sheet_id: int = typer.Argument(..., help="Stable offcut database ID"),
+    force: bool = typer.Option(False, "--force", help="Skip confirmation"),
+    json_output: bool = typer.Option(False, "--json", help="Output deterministic JSON"),
+) -> None:
+    """Delete one offcut by stable database ID."""
+    require_platform()
+    if not force and not typer.confirm(f"Delete offcut with stable ID {sheet_id}?"):
+        console.print("[yellow]Cancelled[/yellow]")
+        raise typer.Exit()
+    with alphacam_context(visible=get_visible()) as raw:
+        ac = resolve_app(raw)
+        result = ac.stock_offcut_delete(sheet_id)
+    if json_output:
+        console.print(json.dumps(result, indent=2, sort_keys=True))
+    elif result.get("success"):
+        console.print(f"[green]OK:[/green] offcut deleted: {result.get('sheet_id', sheet_id)}")
+    else:
+        console.print(f"[red]Error:[/red] {result.get('error') or result.get('status')}")
+    if not result.get("success"):
+        raise typer.Exit(code=1)
 
 
 config_app = typer.Typer(help="CDM job configurations")

@@ -24,6 +24,55 @@ def test_remote_new_drawing() -> None:
     session.new_drawing.assert_called_once_with(200, 100, 5, "Hello")
 
 
+def test_remote_offcut_operations() -> None:
+    session = MagicMock()
+    session.cdm_stock_offcut_create.return_value = {"success": False, "status": "blocked"}
+    session.cdm_stock_offcut_delete.return_value = {
+        "success": True,
+        "status": "deleted",
+        "sheet_id": 123,
+    }
+    app = RemoteApplication(session)
+    assert app.stock_offcut_create("MDF", 18, 100, 200, 1, "offcut") == {
+        "success": False,
+        "status": "blocked",
+    }
+    assert app.stock_offcut_delete(123)["sheet_id"] == 123
+    session.cdm_stock_offcut_create.assert_called_once_with(
+        material_name="MDF",
+        thickness=18,
+        width=100,
+        height=200,
+        quantity=1,
+        name="offcut",
+    )
+    session.cdm_stock_offcut_delete.assert_called_once_with(123)
+
+
+def test_remote_session_offcut_methods_send_stable_id_and_parameters() -> None:
+    session = RemoteSession()
+    session._call = MagicMock(return_value={"success": False, "status": "blocked"})  # type: ignore[method-assign]
+    session.cdm_stock_offcut_create("MDF", 18, 100, 200, 1, "offcut")
+    session.cdm_stock_offcut_delete(123)
+    assert session._call.call_args_list == [
+        (  # type: ignore[attr-defined]
+            (
+                "cdm_stock_offcut_create",
+                {
+                    "material_name": "MDF",
+                    "thickness": 18,
+                    "width": 100,
+                    "height": 200,
+                    "quantity": 1,
+                    "name": "offcut",
+                },
+            ),
+            {},
+        ),
+        (("cdm_stock_offcut_delete", {"sheet_id": 123}), {}),  # type: ignore[attr-defined]
+    ]
+
+
 def test_remote_new_drawing_defaults() -> None:
     session = MagicMock()
     session.new_drawing.return_value = {"geometries_count": 0}

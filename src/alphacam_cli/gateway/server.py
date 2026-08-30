@@ -730,6 +730,32 @@ class GatewayServer:
         except Exception as e:
             raise COMError(f"stock: delete failed: {e}") from e
 
+    def _handler_cdm_stock_offcut_create(self, params: dict[str, Any]) -> dict[str, Any]:
+        required = ("material_name", "thickness", "width", "height", "quantity")
+        if any(key not in params for key in required):
+            missing = next(key for key in required if key not in params)
+            raise COMError(f"stock: offcut create requires {missing}")
+        try:
+            return _app.stock_offcut_create(
+                str(params["material_name"]),
+                float(params["thickness"]),
+                float(params["width"]),
+                float(params["height"]),
+                int(params["quantity"]),
+                str(params["name"]) if params.get("name") is not None else None,
+            )
+        except Exception as e:
+            raise COMError(f"stock: offcut create failed: {e}") from e
+
+    def _handler_cdm_stock_offcut_delete(self, params: dict[str, Any]) -> dict[str, Any]:
+        sheet_id = params.get("sheet_id")
+        if isinstance(sheet_id, bool) or not isinstance(sheet_id, int):
+            raise COMError("stock: offcut delete requires integer sheet_id")
+        try:
+            return _app.stock_offcut_delete(sheet_id)
+        except Exception as e:
+            raise COMError(f"stock: offcut delete failed: {e}") from e
+
     def _handler_manifest_list(self, params: dict[str, Any]) -> dict[str, Any]:
         from alphacam_cli.gateway.server import _app as com_app
 
@@ -767,7 +793,7 @@ class GatewayServer:
                 raise COMError("manifest: token_qty must be a dict")
             coerced: dict[str, int] = {}
             for key, value in token_qty.items():
-                if isinstance(value, bool) or isinstance(value, float):
+                if isinstance(value, (bool, float)):
                     raise COMError("manifest: token_qty values must be integers")
                 try:
                     coerced_value = int(value)

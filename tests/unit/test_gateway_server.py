@@ -57,6 +57,54 @@ def test_apply_style_handler(server_app: MagicMock) -> None:
         assert geo.selected is True
 
 
+def test_offcut_create_handler_preserves_blocked_result(server_app: MagicMock) -> None:
+    server_app.stock_offcut_create.return_value = {"success": False, "status": "blocked"}
+    result = GatewayServer()._handler_cdm_stock_offcut_create(
+        {
+            "material_name": "MDF",
+            "thickness": 18,
+            "width": 100,
+            "height": 200,
+            "quantity": 1,
+            "name": "offcut",
+        }
+    )
+    assert result == {"success": False, "status": "blocked"}
+    server_app.stock_offcut_create.assert_called_once_with("MDF", 18.0, 100.0, 200.0, 1, "offcut")
+
+
+def test_offcut_delete_handler_uses_only_stable_id(server_app: MagicMock) -> None:
+    server_app.stock_offcut_delete.return_value = {"success": False, "status": "not_found"}
+    result = GatewayServer()._handler_cdm_stock_offcut_delete({"sheet_id": 123})
+    assert result == {"success": False, "status": "not_found"}
+    server_app.stock_offcut_delete.assert_called_once_with(123)
+
+
+@pytest.mark.parametrize(
+    "result",
+    [{"success": False, "status": "not_found"}, {"success": False, "status": "wrong_type"}],
+)
+def test_offcut_delete_handler_preserves_failed_results(
+    server_app: MagicMock, result: dict[str, Any]
+) -> None:
+    server_app.stock_offcut_delete.return_value = result
+    assert GatewayServer()._handler_cdm_stock_offcut_delete({"sheet_id": 123}) == result
+
+
+def test_offcut_delete_handler_rejects_wrong_id_type(server_app: MagicMock) -> None:
+    with pytest.raises(COMError, match="integer sheet_id"):
+        GatewayServer()._handler_cdm_stock_offcut_delete({"sheet_id": "123"})
+    server_app.stock_offcut_delete.assert_not_called()
+
+
+def test_offcut_create_handler_wraps_com_error(server_app: MagicMock) -> None:
+    server_app.stock_offcut_create.side_effect = RuntimeError("COM failure")
+    with pytest.raises(COMError, match="offcut create failed: COM failure"):
+        GatewayServer()._handler_cdm_stock_offcut_create(
+            {"material_name": "MDF", "thickness": 18, "width": 100, "height": 200, "quantity": 1}
+        )
+
+
 def test_apply_style_handler_no_geometries(server_app: MagicMock) -> None:
     drw = MagicMock()
     drw.geometries_count = 0
