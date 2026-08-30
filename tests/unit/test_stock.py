@@ -7,6 +7,7 @@ from alphacam_cli.core.stock import (
     stock_add,
     stock_delete,
     stock_list,
+    stock_offcut_create,
     stock_offcut_delete,
     stock_set,
 )
@@ -413,3 +414,48 @@ def test_stock_offcut_delete_reports_readback_failure(_mock_ensure):
     assert result["success"] is False
     assert result["status"] == "readback_failure"
     sheet.Delete.assert_called_once_with()
+
+
+@patch("alphacam_cli.core.stock._ensure_nesting_typelib")
+def test_stock_offcut_create_is_blocked_without_verified_sheet_paths(_mock_ensure):
+    app = MagicMock()
+
+    result = stock_offcut_create(
+        app,
+        material_name="MDF_18",
+        thickness=18.0,
+        width=1000.0,
+        height=500.0,
+        quantity=1,
+        name="TEST_OFFCUT",
+        drawing=MagicMock(),
+    )
+
+    assert result["success"] is False
+    assert result["status"] in {"blocked", "unsupported"}
+    assert "ISheetPaths" in result["reason"]
+    app.Nesting.SheetDatabase.Materials.assert_not_called()
+    app.Nesting.SheetDatabase.FindSheetByDatabaseID.assert_not_called()
+    app.Nesting.SheetDatabase.SaveOffcutToDatabase.assert_not_called()
+
+
+@patch("alphacam_cli.core.stock._ensure_nesting_typelib")
+def test_stock_offcut_create_validates_dimensions_and_quantity_before_com(_mock_ensure):
+    app = MagicMock()
+
+    for width, height, quantity in ((0, 500.0, 1), (1000.0, -1, 1), (1000.0, 500.0, 0)):
+        result = stock_offcut_create(
+            app,
+            material_name="MDF_18",
+            thickness=18.0,
+            width=width,
+            height=height,
+            quantity=quantity,
+            name="TEST_OFFCUT",
+            drawing=MagicMock(),
+        )
+
+        assert result["success"] is False
+        assert result["status"] == "invalid_input"
+
+    app.Nesting.SheetDatabase.assert_not_called()

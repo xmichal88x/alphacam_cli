@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Literal, TypedDict
 
 _NESTING_TYPELIB = "{6702E3DF-142C-4627-8EA2-4C47EBC78441}"
 
@@ -56,6 +56,14 @@ THICKNESS_READONLY = frozenset(
 MATERIAL_WRITABLE = frozenset({"name", "gui_position"})
 MATERIAL_READONLY = frozenset({"id", "sheets_count", "whole_sheets_count", "offcuts_count"})
 
+
+class OffcutCreateResult(TypedDict, total=False):
+    success: bool
+    status: Literal["invalid_input", "blocked"]
+    error: str
+    reason: str
+
+
 OPERATIONS = {
     "stock_list": "read all materials/sheets/thicknesses from database",
     "stock_set": (
@@ -64,6 +72,7 @@ OPERATIONS = {
         " grain_direction, cost"
     ),
     "stock_add": "add new sheet to database (via thickness.NewSheet + WholeSheets.Add + Store)",
+    "stock_offcut_create": "blocked until a real ISheetPaths source is proven",
     "stock_delete": "delete sheet from database (via sheet.Delete)",
 }
 
@@ -252,6 +261,40 @@ def stock_add(
             "quantity": int(quantity),
         }
     return {"success": False, "error": f"material not found: {material_name}"}
+
+
+def stock_offcut_create(
+    app: Any,
+    material_name: str,
+    thickness: float,
+    width: float,
+    height: float,
+    quantity: int,
+    name: str | None = None,
+    drawing: Any = None,
+) -> OffcutCreateResult:
+    """Fail closed until a real COM ``ISheetPaths`` source is verified."""
+    if not isinstance(material_name, str) or not material_name.strip():
+        return {"success": False, "status": "invalid_input", "error": "material_name is required"}
+    if thickness <= 0:
+        return {"success": False, "status": "invalid_input", "error": "thickness must be positive"}
+    if width <= 0 or height <= 0:
+        return {
+            "success": False,
+            "status": "invalid_input",
+            "error": "width and height must be positive",
+        }
+    if isinstance(quantity, bool) or quantity <= 0:
+        return {"success": False, "status": "invalid_input", "error": "quantity must be positive"}
+
+    return {
+        "success": False,
+        "status": "blocked",
+        "reason": (
+            "offcut creation is blocked: no verified headless source for a real "
+            "COM ISheetPaths object"
+        ),
+    }
 
 
 def stock_delete(app: Any, sheet_name: str) -> dict[str, Any]:
