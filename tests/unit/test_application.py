@@ -41,7 +41,7 @@ def test_application_offcut_operations_delegate() -> None:
     ):
         assert ac.stock_offcut_create("MDF", 18, 100, 200, 1, "offcut") == create_result
         assert ac.stock_offcut_delete(123) == delete_result
-    create.assert_called_once_with(raw, "MDF", 18, 100, 200, 1, "offcut", None)
+    create.assert_called_once_with(raw, "MDF", 18, 100, 200, 1, "offcut", raw.ActiveDrawing)
     delete.assert_called_once_with(raw, 123)
 
 

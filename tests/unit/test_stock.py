@@ -419,6 +419,24 @@ def test_stock_offcut_delete_reports_readback_failure(_mock_ensure):
 @patch("alphacam_cli.core.stock._ensure_nesting_typelib")
 def test_stock_offcut_create_is_blocked_without_verified_sheet_paths(_mock_ensure):
     app = MagicMock()
+    drawing = MagicMock(spec=["raw_dispatch"])
+
+    db = MagicMock()
+    app.Nesting.SheetDatabase = db
+
+    material = MagicMock()
+    material.Name = "MDF_18"
+    material.Thicknesses.Count = 1
+
+    thickness = MagicMock()
+    thickness.Thickness = 18.0
+    material.Thicknesses.Item.return_value = thickness
+
+    db.Materials.Count = 1
+    db.Materials.Item.return_value = material
+
+    # ActiveDrawing lacks CreateRectangle/CreatePathCollection → blocked
+    app.ActiveDrawing = MagicMock(spec=[])
 
     result = stock_offcut_create(
         app,
@@ -428,15 +446,180 @@ def test_stock_offcut_create_is_blocked_without_verified_sheet_paths(_mock_ensur
         height=500.0,
         quantity=1,
         name="TEST_OFFCUT",
-        drawing=MagicMock(),
+        drawing=drawing,
     )
 
     assert result["success"] is False
-    assert result["status"] in {"blocked", "unsupported"}
-    assert "ISheetPaths" in result["reason"]
-    app.Nesting.SheetDatabase.Materials.assert_not_called()
-    app.Nesting.SheetDatabase.FindSheetByDatabaseID.assert_not_called()
-    app.Nesting.SheetDatabase.SaveOffcutToDatabase.assert_not_called()
+    assert result["status"] == "blocked"
+    assert "CreateRectangle" in result["reason"]
+
+
+@patch("alphacam_cli.core.stock._ensure_nesting_typelib")
+def test_stock_offcut_create_rejects_invalid_inputs_before_com_mutation(_mock_ensure):
+    app = MagicMock()
+    drawing = MagicMock()
+    app.Nesting = MagicMock()
+    app.Nesting.SheetDatabase = MagicMock()
+
+    cases = [
+        {
+            "material_name": "",
+            "thickness": 18.0,
+            "width": 1000.0,
+            "height": 500.0,
+            "quantity": 1,
+            "error": "material_name is required",
+        },
+        {
+            "material_name": "MDF_18",
+            "thickness": 0,
+            "width": 1000.0,
+            "height": 500.0,
+            "quantity": 1,
+            "error": "thickness must be positive",
+        },
+        {
+            "material_name": "MDF_18",
+            "thickness": 18.0,
+            "width": 0,
+            "height": 500.0,
+            "quantity": 1,
+            "error": "width and height must be positive",
+        },
+        {
+            "material_name": "MDF_18",
+            "thickness": 18.0,
+            "width": 1000.0,
+            "height": 500.0,
+            "quantity": True,
+            "error": "quantity must be positive",
+        },
+    ]
+
+    for case in cases:
+        result = stock_offcut_create(
+            app,
+            material_name=case["material_name"],
+            thickness=case["thickness"],
+            width=case["width"],
+            height=case["height"],
+            quantity=case["quantity"],
+            name="TEST_OFFCUT",
+            drawing=drawing,
+        )
+
+        assert result["success"] is False
+        assert result["status"] == "invalid_input"
+        assert result["error"] == case["error"]
+
+    app.Nesting.SheetDatabase.assert_not_called()
+    drawing.InsertInActiveDrawingAtPoint.assert_not_called()
+    drawing.NewOffcut.assert_not_called()
+    drawing.SaveOffcutToDatabase.assert_not_called()
+    app.NewSheet.assert_not_called()
+    assert app.Nesting.SheetDatabase.method_calls == []
+
+
+@patch("alphacam_cli.core.stock._ensure_nesting_typelib")
+def test_stock_offcut_create_keeps_fail_closed_without_newsheet_or_sqlite(_mock_ensure):
+    app = MagicMock()
+    drawing = MagicMock(spec=["raw_dispatch"])
+
+    db = MagicMock()
+    app.Nesting.SheetDatabase = db
+
+    material = MagicMock()
+    material.Name = "MDF_18"
+    material.Thicknesses.Count = 1
+
+    thickness = MagicMock()
+    thickness.Thickness = 18.0
+    material.Thicknesses.Item.return_value = thickness
+
+    db.Materials.Count = 1
+    db.Materials.Item.return_value = material
+
+    # ActiveDrawing missing → blocked
+    app.ActiveDrawing = None
+
+    result = stock_offcut_create(
+        app,
+        material_name="MDF_18",
+        thickness=18.0,
+        width=1000.0,
+        height=500.0,
+        quantity=1,
+        name="TEST_OFFCUT",
+        drawing=drawing,
+    )
+
+    assert result["success"] is False
+    assert result["status"] == "blocked"
+    assert "active drawing" in result["reason"]
+
+
+@patch("alphacam_cli.core.stock._ensure_nesting_typelib")
+def test_stock_offcut_create_success_path_can_be_verified_with_mocks_only(_mock_ensure):
+    app = MagicMock()
+    drawing = MagicMock()
+    app.Nesting = MagicMock()
+    db = MagicMock()
+    app.Nesting.SheetDatabase = db
+
+    material = MagicMock()
+    material.Name = "MDF_18"
+    material.Thicknesses.Count = 1
+
+    thickness = MagicMock()
+    thickness.Thickness = 18.0
+    material.Thicknesses.Item.return_value = thickness
+
+    offcut = MagicMock(name="Offcut")
+    offcut.Id = 321
+    offcut.Name = "TEST_OFFCUT"
+    offcut.IsOffcut = True
+    offcut.Width = 1000.0
+    offcut.Height = 500.0
+    thickness.NewOffcut.return_value = offcut
+
+    db.Materials.Count = 1
+    db.Materials.Item.return_value = material
+
+    active_drawing = MagicMock(name="ActiveDrawing")
+    active_drawing.CreateRectangle.return_value = MagicMock(name="IPathRect")
+    active_drawing.CreatePathCollection.return_value = MagicMock(name="IPaths")
+    app.ActiveDrawing = active_drawing
+
+    result = stock_offcut_create(
+        app,
+        material_name="MDF_18",
+        thickness=18.0,
+        width=1000.0,
+        height=500.0,
+        quantity=1,
+        name="TEST_OFFCUT",
+        drawing=drawing,
+    )
+
+    assert result == {
+        "success": True,
+        "status": "created",
+        "sheet_id": 321,
+        "material": "MDF_18",
+        "thickness": 18.0,
+        "name": "TEST_OFFCUT",
+        "diag": (
+            "i_drw=MagicMock | CreateRectangle OK: MagicMock | "
+            "CreatePathCollection OK: MagicMock | NewOffcut OK: id=321, "
+            "IsOffcut=True | Set fields OK: name=TEST_OFFCUT, qty=1 | Store OK | "
+            "sheet_id=321"
+        ),
+    }
+    active_drawing.CreateRectangle.assert_called_once_with(0.0, 0.0, 1000.0, 500.0)
+    active_drawing.CreatePathCollection.assert_called_once_with()
+    thickness.NewOffcut.assert_called_once_with(active_drawing.CreatePathCollection.return_value)
+    offcut.Store.assert_called_once()
+    offcut.Delete.assert_not_called()
 
 
 @patch("alphacam_cli.core.stock._ensure_nesting_typelib")

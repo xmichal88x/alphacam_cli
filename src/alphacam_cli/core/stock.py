@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import contextlib
 from typing import Any, Literal, TypedDict
 
 _NESTING_TYPELIB = "{6702E3DF-142C-4627-8EA2-4C47EBC78441}"
@@ -59,9 +60,14 @@ MATERIAL_READONLY = frozenset({"id", "sheets_count", "whole_sheets_count", "offc
 
 class OffcutCreateResult(TypedDict, total=False):
     success: bool
-    status: Literal["invalid_input", "blocked"]
+    status: Literal["invalid_input", "blocked", "unsupported", "com_error", "created", "not_found"]
     error: str
     reason: str
+    sheet_id: int
+    diag: str
+    material: str
+    thickness: float
+    name: str
 
 
 OPERATIONS = {
@@ -81,6 +87,23 @@ def _ensure_nesting_typelib() -> None:
     from win32com.client import gencache  # type: ignore[import-untyped]
 
     gencache.EnsureModule(_NESTING_TYPELIB, 0, 1, 3)
+
+
+def _get_sheet_database(app: Any) -> Any:
+    """Get the SheetDatabase from the app, with fallback to AcamNest.Nesting or Nesting CoClass."""
+    import win32com.client as win32  # type: ignore[import-untyped]
+
+    candidates: list[Any] = []
+    with contextlib.suppress(Exception):
+        candidates.append(app.Nesting.SheetDatabase)
+    for progid in ("AcamNest.Nesting", "{57250022-AD47-4205-AA0D-9F8039C315B3}"):
+        with contextlib.suppress(Exception):
+            candidates.append(win32.Dispatch(progid).SheetDatabase)
+    if candidates:
+        return candidates[0]
+    with contextlib.suppress(Exception):
+        return win32.Dispatch("{1C2252AB-0AED-4650-A92C-F5354919A8AE}")
+    raise RuntimeError("no sheet database available")  # noqa: TRY003
 
 
 def _read_sheet(s: Any) -> dict[str, Any]:
@@ -137,7 +160,7 @@ def _read_thickness(t: Any) -> dict[str, Any]:
 
 def stock_list(app: Any, material_filter: str | None = None) -> dict[str, Any]:
     _ensure_nesting_typelib()
-    db = app.Nesting.SheetDatabase
+    db = _get_sheet_database(app)
     materials_out = []
     for i in range(1, db.Materials.Count + 1):
         mat = db.Materials.Item(i)
@@ -184,7 +207,7 @@ def stock_set(
     delta: int | None = None,
 ) -> dict[str, Any]:
     _ensure_nesting_typelib()
-    db = app.Nesting.SheetDatabase
+    db = _get_sheet_database(app)
     for i in range(1, db.Materials.Count + 1):
         mat = db.Materials.Item(i)
         for coll in (mat.WholeSheets, mat.Offcuts):
@@ -225,7 +248,7 @@ def stock_add(
         return {"success": False, "error": "width and height must be positive"}
     if quantity <= 0:
         return {"success": False, "error": "quantity must be positive"}
-    db = app.Nesting.SheetDatabase
+    db = _get_sheet_database(app)
     for i in range(1, db.Materials.Count + 1):
         mat = db.Materials.Item(i)
         if str(mat.Name) != material_name:
@@ -263,6 +286,35 @@ def stock_add(
     return {"success": False, "error": f"material not found: {material_name}"}
 
 
+def _find_material_by_name(db: Any, material_name: str) -> Any | None:
+    for i in range(1, int(db.Materials.Count) + 1):
+        material = db.Materials.Item(i)
+        if str(material.Name) == material_name:
+            return material
+    return None
+
+
+def _find_thickness(material: Any, thickness: float) -> Any | None:
+    for i in range(1, int(material.Thicknesses.Count) + 1):
+        candidate = material.Thicknesses.Item(i)
+        try:
+            if abs(float(candidate.Thickness) - thickness) < 0.1:
+                return candidate
+        except Exception:
+            continue
+    return None
+
+
+def _safe_set_sheet_fields(
+    sheet: Any, *, name: str | None, width: float, height: float, quantity: int
+) -> None:
+    if name:
+        sheet.Name = name
+    sheet.Width = float(width)
+    sheet.Height = float(height)
+    sheet.Quantity = int(quantity)
+
+
 def stock_offcut_create(
     app: Any,
     material_name: str,
@@ -273,7 +325,7 @@ def stock_offcut_create(
     name: str | None = None,
     drawing: Any = None,
 ) -> OffcutCreateResult:
-    """Fail closed until a real COM ``ISheetPaths`` source is verified."""
+    """Create an offcut by inserting a temporary sheet into the active drawing to obtain IPaths."""
     if not isinstance(material_name, str) or not material_name.strip():
         return {"success": False, "status": "invalid_input", "error": "material_name is required"}
     if thickness <= 0:
@@ -287,19 +339,137 @@ def stock_offcut_create(
     if isinstance(quantity, bool) or quantity <= 0:
         return {"success": False, "status": "invalid_input", "error": "quantity must be positive"}
 
-    return {
-        "success": False,
-        "status": "blocked",
-        "reason": (
-            "offcut creation is blocked: no verified headless source for a real "
-            "COM ISheetPaths object"
-        ),
-    }
+    if drawing is None:
+        return {
+            "success": False,
+            "status": "blocked",
+            "reason": "offcut creation is blocked: no active drawing available",
+        }
+
+    try:
+        _ensure_nesting_typelib()
+        db = _get_sheet_database(app)
+    except Exception as exc:
+        return {"success": False, "status": "com_error", "error": f"COM setup failed: {exc}"}
+
+    material = _find_material_by_name(db, material_name)
+    if material is None:
+        return {
+            "success": False,
+            "status": "not_found",
+            "error": f"material not found: {material_name}",
+        }
+
+    thick = _find_thickness(material, thickness)
+    if thick is None:
+        return {
+            "success": False,
+            "status": "not_found",
+            "error": f"thickness {thickness}mm not found in {material_name}",
+        }
+
+    _diag: list[str] = []
+    try:
+        i_drw = app.ActiveDrawing
+        if i_drw is None:
+            return {
+                "success": False,
+                "status": "blocked",
+                "reason": (
+                    "offcut creation is blocked: no active drawing available for shape creation"
+                ),
+            }
+
+        _diag.append(f"i_drw={type(i_drw).__name__}")
+
+        # Step A: create rectangle geometry + path collection
+        if not hasattr(i_drw, "CreateRectangle") or not hasattr(i_drw, "CreatePathCollection"):
+            return {
+                "success": False,
+                "status": "blocked",
+                "reason": (
+                    "offcut creation is blocked: drawing lacks CreateRectangle/CreatePathCollection"
+                ),
+                "diag": " | ".join(_diag),
+            }
+
+        sheet_shape = None
+        try:
+            sheet_shape = i_drw.CreateRectangle(0.0, 0.0, float(width), float(height))
+            _diag.append(f"CreateRectangle OK: {type(sheet_shape).__name__}")
+        except Exception as exc:
+            _diag.append(f"CreateRectangle FAIL: {exc}")
+            return {
+                "success": False,
+                "status": "com_error",
+                "error": f"CreateRectangle failed: {exc}",
+                "diag": " | ".join(_diag),
+            }
+
+        paths_coll = None
+        try:
+            paths_coll = i_drw.CreatePathCollection()
+            paths_coll.Add(sheet_shape)
+            _diag.append(f"CreatePathCollection OK: {type(paths_coll).__name__}")
+        except Exception as exc:
+            _diag.append(f"CreatePathCollection FAIL: {exc}")
+            return {
+                "success": False,
+                "status": "com_error",
+                "error": f"CreatePathCollection failed: {exc}",
+                "diag": " | ".join(_diag),
+            }
+
+        # Step B: NewOffcut
+        sheet = thick.NewOffcut(paths_coll)
+        _diag.append(f"NewOffcut OK: id={sheet.Id}, IsOffcut={sheet.IsOffcut}")
+
+        if name:
+            sheet.Name = name
+        sheet.Quantity = int(quantity)
+        _diag.append(f"Set fields OK: name={name}, qty={quantity}")
+
+        # Step C: Store to persist (SaveOffcutToDatabase fails with E_FAIL; Store works)
+        try:
+            sheet.Store()
+            _diag.append("Store OK")
+        except Exception as exc:
+            _diag.append(f"Store FAIL: {exc}")
+            return {
+                "success": False,
+                "status": "com_error",
+                "error": f"Store failed: {exc}",
+                "diag": " | ".join(_diag),
+            }
+
+        try:
+            sheet_id = int(sheet.Id)
+        except Exception:
+            sheet_id = 0
+        _diag.append(f"sheet_id={sheet_id}")
+
+        return {
+            "success": True,
+            "status": "created",
+            "sheet_id": sheet_id,
+            "material": material_name,
+            "thickness": thickness,
+            "name": str(sheet.Name),
+            "diag": " | ".join(_diag),
+        }
+    except Exception as exc:
+        _diag_str = " | ".join(_diag) if "_diag" in dir() else "no diag"
+        return {
+            "success": False,
+            "status": "com_error",
+            "error": f"offcut creation failed: {exc}",
+            "diag": _diag_str,
+        }
 
 
 def stock_delete(app: Any, sheet_name: str) -> dict[str, Any]:
     _ensure_nesting_typelib()
-    db = app.Nesting.SheetDatabase
+    db = _get_sheet_database(app)
     for i in range(1, db.Materials.Count + 1):
         mat = db.Materials.Item(i)
         for coll in (mat.WholeSheets, mat.Offcuts):
@@ -351,7 +521,7 @@ def stock_offcut_delete(app: Any, sheet_id: int) -> dict[str, Any]:
 
     try:
         _ensure_nesting_typelib()
-        db = app.Nesting.SheetDatabase
+        db = _get_sheet_database(app)
     except Exception as exc:
         return {"success": False, "status": "com_error", "error": f"COM setup failed: {exc}"}
 

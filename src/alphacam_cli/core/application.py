@@ -1487,6 +1487,7 @@ class Application:
     ) -> dict[str, Any]:
         from alphacam_cli.core.stock import stock_offcut_create
 
+        drawing = self._app.ActiveDrawing  # type: ignore[attr-defined]
         return cast(
             dict[str, Any],
             stock_offcut_create(
