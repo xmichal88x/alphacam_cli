@@ -397,7 +397,7 @@ def test_parse_manifest_full(manifest_file: pathlib.Path) -> None:
     assert s1["unique_part_count"] == 2
     assert s1["quantity"] == 1
     assert s1["scrap"] == 71
-    assert s1["utilization"] == 29
+    assert s1["utilization"] == 71
     assert s1["has_image"] is True
     assert s1["nest_nc_filename"] == "Fronty - MDF_18_s1.nc"
     assert s1["press_name"] == "PRESS-1"
@@ -476,7 +476,7 @@ def test_parse_manifest_sheet_scrap_zero(tmp_path: pathlib.Path) -> None:
 
     s1 = manifest["sheets"][0]
     assert s1["scrap"] == 0
-    assert s1["utilization"] == 100
+    assert s1["utilization"] == 0
     assert manifest["sheets"][1]["scrap"] is None
     assert manifest["sheets"][1]["utilization"] is None
 
@@ -658,7 +658,7 @@ def test_manifest_files(tmp_path: pathlib.Path) -> None:
 
 
 def test_sheet_count_light_full(manifest_file: pathlib.Path) -> None:
-    assert acrepd.sheet_count_light(str(manifest_file)) == (2, 29)
+    assert acrepd.sheet_count_light(str(manifest_file)) == (2, 71)
 
 
 def test_sheet_count_light_scrap_zero(tmp_path: pathlib.Path) -> None:
@@ -667,7 +667,7 @@ def test_sheet_count_light_scrap_zero(tmp_path: pathlib.Path) -> None:
         _FULL_MANIFEST_XML.replace("<SheetScrap>71</SheetScrap>", "<SheetScrap>0</SheetScrap>"),
         encoding="utf-8",
     )
-    assert acrepd.sheet_count_light(str(path)) == (2, 100)
+    assert acrepd.sheet_count_light(str(path)) == (2, 0)
 
 
 def test_sheet_count_light_scrap_non_numeric(tmp_path: pathlib.Path) -> None:
@@ -705,7 +705,7 @@ def test_sheet_count_light_namespaced(tmp_path: pathlib.Path) -> None:
 def test_sheet_count_light_diffgram_skips_before_after(tmp_path: pathlib.Path) -> None:
     path = tmp_path / "Fronty - MDF_18.acrepd"
     path.write_text(_DIFFGRAM_MODIFIED_MANIFEST_XML, encoding="utf-8")
-    assert acrepd.sheet_count_light(str(path)) == (2, 29)
+    assert acrepd.sheet_count_light(str(path)) == (2, 71)
 
 
 def test_sheet_count_light_empty(tmp_path: pathlib.Path) -> None:
@@ -2041,6 +2041,8 @@ def test_parse_manifest_offcuts(tmp_path: pathlib.Path) -> None:
     sheet = result["sheets"][0]
     assert "offcuts" in sheet
     assert len(sheet["offcuts"]) == 1
+    assert sheet["scrap"] == 71
+    assert sheet["utilization"] == 71
     offcut = sheet["offcuts"][0]
     assert offcut["id"] == 1
     assert offcut["sheet_id"] == 1

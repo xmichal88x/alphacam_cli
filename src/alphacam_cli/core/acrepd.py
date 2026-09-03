@@ -216,7 +216,8 @@ def sheet_count_light(path: str) -> tuple[int, int | None]:
     diffgram sections; returns ``(0, None)`` on any error.
     """
     count = 0
-    utilization: int | None = None
+    first_sheet_scrap: int | None = None
+    has_any_offcuts = False
     skip_depth = 0
     recorded = False
     in_first_sheet = False
@@ -239,9 +240,11 @@ def sheet_count_light(path: str) -> tuple[int, int | None]:
             if skip_depth:
                 skip_depth -= 1
             elif local == "ac_04_sheets" and not recorded:
-                utilization = _first_sheet_utilization(elem)
+                first_sheet_scrap = _first_sheet_scrap_value(elem)
                 recorded = True
                 in_first_sheet = False
+            elif local == "ac_sheet_offcuts":
+                has_any_offcuts = True
             if in_first_sheet:
                 continue
             elem.clear()
@@ -250,14 +253,17 @@ def sheet_count_light(path: str) -> tuple[int, int | None]:
     except (OSError, ParseError) as exc:
         logger.warning("acrepd: sheet_count_light failed for %s: %r", path, exc)
         return 0, None
+    if first_sheet_scrap is None:
+        return count, None
+    utilization = max(0, first_sheet_scrap if has_any_offcuts else 100 - first_sheet_scrap)
     return count, utilization
 
 
-def _first_sheet_utilization(sheet_el: ET.Element) -> int | None:
+def _first_sheet_scrap_value(sheet_el: ET.Element) -> int | None:
     for child in sheet_el:
         if _local_name(child.tag).lower() == "sheetscrap":
             try:
-                return max(0, 100 - int(child.text or ""))
+                return int(child.text or "")
             except (TypeError, ValueError):
                 return None
     return None
@@ -417,11 +423,19 @@ def parse_manifest(path: str) -> dict[str, Any]:
         sheet["offcuts"] = []
         for key, cast in _SHEET_NUMERIC.items():
             sheet[key] = _num(sheet[key], cast)
-        sheet["utilization"] = None if sheet["scrap"] is None else max(0, 100 - int(sheet["scrap"]))
         sheets.append(sheet)
     _attach_sheet_cdm(sheets, sheet_cdm_rows)
     offcut_rows = _rows(root, "AC_SHEET_OFFCUTS")
     _attach_sheet_offcuts(sheets, offcut_rows)
+    for sheet in sheets:
+        scrap = sheet.get("scrap")
+        has_offcuts = bool(sheet.get("offcuts"))
+        if scrap is None:
+            sheet["utilization"] = None
+        elif has_offcuts:
+            sheet["utilization"] = max(0, int(scrap))
+        else:
+            sheet["utilization"] = max(0, 100 - int(scrap))
 
     part_cdm_rows = _rows(root, "AC_PART_CDM")
     parts: list[dict[str, Any]] = []
