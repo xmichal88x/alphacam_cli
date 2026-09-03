@@ -97,6 +97,8 @@ _PART_CDM_FIELDS: dict[str, str] = {
     "cdmpartnestncfilename": "nest_nc_filename",
     "cdmparttype": "type",
     "cdmpartpresssheetname": "press_sheet_name",
+    "cdmpartwidth": "cdm_width",
+    "cdmpartlength": "cdm_length",
 }
 _PART_CDM_FIELDS.update({f"cdmpartcustom{n}": f"custom_field_{n}" for n in range(1, 26)})
 
@@ -126,6 +128,8 @@ _PART_NUMERIC: dict[str, Callable[..., Any]] = {
     "width": float,
     "length": float,
     "thickness": float,
+    "cdm_width": float,
+    "cdm_length": float,
 }
 
 _IMAGE_TAGS = frozenset({"sheetimage", "partimage"})
@@ -210,17 +214,12 @@ _TREE_SKIP_TAGS = frozenset({"before", "after"})
 
 
 def sheet_count_light(path: str) -> tuple[int, int | None]:
-    """Stream-scan a manifest for sheet count and first-sheet utilization.
+    """Stream-scan a manifest for sheet count; returns (count, None).
 
-    Parses incrementally (no full tree) and skips ``before``/``after``
-    diffgram sections; returns ``(0, None)`` on any error.
+    Utilization is not computed here — use :func:`parse_manifest` for that.
     """
     count = 0
-    first_sheet_scrap: int | None = None
-    has_any_offcuts = False
     skip_depth = 0
-    recorded = False
-    in_first_sheet = False
     root: ET.Element | None = None
     try:
         for event, elem in ET.iterparse(path, events=("start", "end")):
@@ -233,40 +232,17 @@ def sheet_count_light(path: str) -> tuple[int, int | None]:
                 elif local in _TREE_SKIP_TAGS:
                     skip_depth = 1
                 elif local == "ac_04_sheets":
-                    if count == 0:
-                        in_first_sheet = True
                     count += 1
                 continue
             if skip_depth:
                 skip_depth -= 1
-            elif local == "ac_04_sheets" and not recorded:
-                first_sheet_scrap = _first_sheet_scrap_value(elem)
-                recorded = True
-                in_first_sheet = False
-            elif local == "ac_sheet_offcuts":
-                has_any_offcuts = True
-            if in_first_sheet:
-                continue
             elem.clear()
             if root is not None:
                 root.clear()
     except (OSError, ParseError) as exc:
         logger.warning("acrepd: sheet_count_light failed for %s: %r", path, exc)
         return 0, None
-    if first_sheet_scrap is None:
-        return count, None
-    utilization = max(0, first_sheet_scrap if has_any_offcuts else 100 - first_sheet_scrap)
-    return count, utilization
-
-
-def _first_sheet_scrap_value(sheet_el: ET.Element) -> int | None:
-    for child in sheet_el:
-        if _local_name(child.tag).lower() == "sheetscrap":
-            try:
-                return int(child.text or "")
-            except (TypeError, ValueError):
-                return None
-    return None
+    return count, None
 
 
 def _children(root: ET.Element, name: str) -> list[ET.Element]:
@@ -391,6 +367,38 @@ def _attach_sheet_offcuts(sheets: list[dict[str, Any]], offcut_rows: list[dict[s
             target.setdefault("offcuts", []).append(offcut)
 
 
+def _compute_utilization(sheet: dict[str, Any]) -> None:
+    """Compute utilization from geometry: CDM part areas / nesting area.
+
+    Uses CDM dimensions (CDMPartWidth × CDMPartLength) when available,
+    falling back to manifest dimensions (PartWidth × PartLength).
+    Nesting area = sheet area − offcut area.
+    """
+    width = sheet.get("width")
+    length = sheet.get("length")
+    if not width or not length:
+        sheet["utilization"] = None
+        return
+    sheet_area = float(width) * float(length)
+    offcut_area = sum(
+        float(o.get("width") or 0) * float(o.get("length") or 0) for o in sheet.get("offcuts", [])
+    )
+    nesting_area = sheet_area - offcut_area
+    if nesting_area <= 0:
+        sheet["utilization"] = 0
+        return
+    parts_area = 0.0
+    for part in sheet.get("parts", []):
+        w = part.get("cdm_width") or part.get("width")
+        l = part.get("cdm_length") or part.get("length")
+        if w and l:
+            parts_area += float(w) * float(l)
+    if parts_area <= 0:
+        sheet["utilization"] = 0
+        return
+    sheet["utilization"] = max(0, min(100, round(parts_area / nesting_area * 100)))
+
+
 def parse_manifest(path: str) -> dict[str, Any]:
     """Parse an .acrepd nesting results manifest (VistaDB DataSet XML)."""
     size = os.path.getsize(path)
@@ -427,15 +435,6 @@ def parse_manifest(path: str) -> dict[str, Any]:
     _attach_sheet_cdm(sheets, sheet_cdm_rows)
     offcut_rows = _rows(root, "AC_SHEET_OFFCUTS")
     _attach_sheet_offcuts(sheets, offcut_rows)
-    for sheet in sheets:
-        scrap = sheet.get("scrap")
-        has_offcuts = bool(sheet.get("offcuts"))
-        if scrap is None:
-            sheet["utilization"] = None
-        elif has_offcuts:
-            sheet["utilization"] = max(0, int(scrap))
-        else:
-            sheet["utilization"] = max(0, 100 - int(scrap))
 
     part_cdm_rows = _rows(root, "AC_PART_CDM")
     parts: list[dict[str, Any]] = []
@@ -458,6 +457,9 @@ def parse_manifest(path: str) -> dict[str, Any]:
             found["parts"].append(part)
         else:
             unmatched_parts.append(part)
+
+    for sheet in sheets:
+        _compute_utilization(sheet)
 
     return {
         "job_name": job_name,
