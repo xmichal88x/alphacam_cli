@@ -36,3 +36,4 @@ docs/alphacam-ecosystem/sdk-download/standalone/help-unpacked/
 # Session/legacy artifacts
 server.py
 todowrite.json
+*.db
