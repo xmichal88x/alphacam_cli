@@ -186,6 +186,9 @@ class RemoteSession:
     def auto_style_apply(self, file: str) -> dict[str, Any]:
         return self._call("auto_style_apply", {"file": file})  # type: ignore[no-any-return]
 
+    def open_vba_project(self, file: str) -> dict[str, Any]:
+        return self._call("open_vba_project", {"file": file})  # type: ignore[no-any-return]
+
     def create_layer(self, name: str) -> dict[str, Any]:
         return self._call("create_layer", {"name": name})  # type: ignore[no-any-return]
 

@@ -216,6 +216,9 @@ class RemoteApplication:
     def auto_style_apply(self, file: str) -> dict[str, Any]:
         return self._session.auto_style_apply(file)  # type: ignore[no-any-return]
 
+    def open_vba_project(self, file: str) -> dict[str, Any]:
+        return self._session.open_vba_project(file)  # type: ignore[no-any-return]
+
     def health(self) -> dict[str, Any]:
         return self._session.health()  # type: ignore[no-any-return]
 

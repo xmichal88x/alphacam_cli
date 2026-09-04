@@ -411,6 +411,17 @@ class GatewayServer:
         except Exception as e:
             raise COMError(str(e)) from e
 
+    def _handler_open_vba_project(self, params: dict[str, Any]) -> dict[str, Any]:
+        from alphacam_cli.gateway.server import _app as com_app
+
+        file = str(params.get("file", ""))
+        if not file:
+            raise COMError("file is required")
+        try:
+            return com_app.open_vba_project(file)  # type: ignore[no-any-return]
+        except Exception as e:
+            raise COMError(str(e)) from e
+
     def _handler_create_layer(self, params: dict[str, Any]) -> dict[str, Any]:
         from alphacam_cli.gateway.server import _app as com_app
 

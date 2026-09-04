@@ -617,6 +617,14 @@ class Application:
             raise RuntimeError(msg) from e  # noqa: TRY003
         return {"success": True, "file": file}
 
+    def open_vba_project(self, name: str) -> dict[str, Any]:
+        """Open a VBA project for editing (shows VBA IDE)."""
+        try:
+            self._raw_app.OpenVBAProject(name)
+        except Exception as e:
+            raise RuntimeError(f"failed to open VBA project '{name}': {e}") from e  # noqa: TRY003
+        return {"success": True, "file": name}
+
     def get_automation_manager_addin(self) -> Any:
         """Return the CDM Automation Manager (headless-safe: GetAutomationManagerAddInGUI)."""
         addins = self.get_addins()
