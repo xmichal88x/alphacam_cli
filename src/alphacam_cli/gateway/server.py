@@ -531,31 +531,29 @@ class GatewayServer:
         except Exception as e:
             raise COMError(str(e)) from e
 
-    def _handler_vba_read_code(self, params: dict[str, Any]) -> dict[str, Any]:
+    def _handler_vba_probe(self, params: dict[str, Any]) -> dict[str, Any]:
         from alphacam_cli.gateway.server import _app as com_app
 
-        project_name = str(params.get("project", ""))
-        component_name = str(params.get("component", ""))
         try:
             raw = com_app._raw_app
             vbe = raw.VBE
-            vbp = vbe.VBProjects
-            for i in range(1, vbp.Count + 1):
-                proj = vbp(i)
-                if project_name and proj.Name != project_name:
-                    continue
-                comps = proj.VBComponents
-                for j in range(1, comps.Count + 1):
-                    comp = comps(j)
-                    if component_name and comp.Name != component_name:
-                        continue
-                    cm = comp.CodeModule
-                    total = cm.CountOfLines
-                    if total == 0:
-                        return {"project": proj.Name, "component": comp.Name, "code": "", "lines": 0}
-                    code = cm.Lines(1, total)
-                    return {"project": proj.Name, "component": comp.Name, "code": code, "lines": total}
-            return {"error": "project or component not found"}
+            result: dict[str, Any] = {}
+
+            if hasattr(vbe, "VBProjects") and vbe.VBProjects.Count > 0:
+                proj = vbe.VBProjects(1)
+                result["proj_methods"] = [a for a in dir(proj) if not a.startswith("_")]
+                result["proj_name"] = proj.Name
+
+                if hasattr(proj, "VBComponents") and proj.VBComponents.Count > 0:
+                    comp = proj.VBComponents(1)
+                    result["comp_methods"] = [a for a in dir(comp) if not a.startswith("_")]
+                    result["comp_name"] = comp.Name
+
+                    if hasattr(comp, "CodeModule"):
+                        cm = comp.CodeModule
+                        result["cm_methods"] = [a for a in dir(cm) if not a.startswith("_")]
+
+            return result
         except Exception as e:
             raise COMError(str(e)) from e
 
@@ -617,21 +615,7 @@ class GatewayServer:
         except Exception as e:
             raise COMError(str(e)) from e
 
-    def _handler_vba_save_project(self, params: dict[str, Any]) -> dict[str, Any]:
-        from alphacam_cli.gateway.server import _app as com_app
-
-        try:
-            raw = com_app._raw_app
-            vbe = raw.VBE
-            vbp = vbe.VBProjects
-            for i in range(1, vbp.Count + 1):
-                proj = vbp(i)
-                proj.Save()
-            return {"success": True, "projects_saved": vbp.Count}
-        except Exception as e:
-            raise COMError(str(e)) from e
-
-    def _handler_create_layer(self, params: dict[str, Any]) -> dict[str, Any]:
+    def _handler_vba_read_code(self, params: dict[str, Any]) -> dict[str, Any]:
         from alphacam_cli.gateway.server import _app as com_app
 
         name = str(params.get("name", ""))
