@@ -495,6 +495,7 @@ class GatewayServer:
     def _handler_vba_save_project(self, params: dict[str, Any]) -> dict[str, Any]:
         from alphacam_cli.gateway.server import _app as com_app
 
+        path = str(params.get("path", "")) or None
         try:
             raw = com_app._raw_app
             vbe = raw.VBE
@@ -505,7 +506,10 @@ class GatewayServer:
                 proj = vbp(i)
                 name = proj.Name
                 try:
-                    proj.Save()
+                    if path:
+                        proj.SaveAs(path)
+                    else:
+                        proj.Save()
                     saved += 1
                 except Exception as e:
                     errors.append(f"{name}: {e}")
