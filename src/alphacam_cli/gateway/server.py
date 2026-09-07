@@ -422,6 +422,46 @@ class GatewayServer:
         except Exception as e:
             raise COMError(str(e)) from e
 
+    def _handler_vba_diagnose(self, params: dict[str, Any]) -> dict[str, Any]:
+        from alphacam_cli.gateway.server import _app as com_app
+
+        try:
+            raw = com_app._raw_app
+            result: dict[str, Any] = {}
+
+            result["has_vbproject"] = hasattr(raw, "VBProject")
+
+            for attr in ("VBProject", "VBE", "CommandBars", "Macros"):
+                result[f"has_{attr}"] = hasattr(raw, attr)
+
+            try:
+                cmd_bars = raw.CommandBars
+                bar_names = []
+                for i in range(1, min(cmd_bars.Count + 1, 50)):
+                    try:
+                        bar_names.append(cmd_bars(i).Name)
+                    except Exception:
+                        pass
+                result["command_bars"] = bar_names
+            except Exception as e:
+                result["command_bars_error"] = str(e)
+
+            try:
+                macros = raw.Macros
+                result["has_macros"] = True
+                result["macros_count"] = macros.Count if hasattr(macros, "Count") else "unknown"
+            except Exception as e:
+                result["macros_error"] = str(e)
+
+            for attr_name in dir(raw):
+                low = attr_name.lower()
+                if any(k in low for k in ("vba", "macro", "module", "vbproject", "vbe", "code")):
+                    result[f"attr_{attr_name}"] = True
+
+            return result
+        except Exception as e:
+            raise COMError(str(e)) from e
+
     def _handler_create_layer(self, params: dict[str, Any]) -> dict[str, Any]:
         from alphacam_cli.gateway.server import _app as com_app
 
