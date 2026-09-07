@@ -622,23 +622,41 @@ class GatewayServer:
     def _handler_vba_read_code(self, params: dict[str, Any]) -> dict[str, Any]:
         from alphacam_cli.gateway.server import _app as com_app
 
-        name = str(params.get("name", ""))
-        if not name:
-            raise COMError("name is required")
-        drw = com_app.get_active_drawing()
-        if drw is None:
-            raise COMError("No active drawing")
+        project_name = str(params.get("project", ""))
+        component_name = str(params.get("component", ""))
         try:
-            drw.create_layer(name)
+            raw = com_app._raw_app
+            vbe = raw.VBE
+            vbp = vbe.VBProjects
+            for i in range(1, vbp.Count + 1):
+                proj = vbp(i)
+                if project_name and proj.Name != project_name:
+                    continue
+                comps = proj.VBComponents
+                for j in range(1, comps.Count + 1):
+                    comp = comps(j)
+                    if component_name and comp.Name != component_name:
+                        continue
+                    if hasattr(comp, "Activate"):
+                        try:
+                            comp.Activate()
+                        except Exception:
+                            pass
+                    cm = comp.CodeModule
+                    total = cm.CountOfLines
+                    if total == 0:
+                        return {"project": proj.Name, "component": comp.Name, "code": "", "lines": 0}
+                    code = cm.Lines(1, total)
+                    return {"project": proj.Name, "component": comp.Name, "code": code, "lines": total}
+            return {"error": "project or component not found"}
         except Exception as e:
-            raise COMError(f"create_layer failed: {e}") from e
-        return {"success": True, "layer": name}
+            raise COMError(str(e)) from e
 
-    def _handler_drawing_query(self, params: dict[str, Any]) -> dict[str, Any]:
+    def _handler_create_layer(self, params: dict[str, Any]) -> dict[str, Any]:
         from alphacam_cli.gateway.server import _app as com_app
 
-        file = str(params.get("file", ""))
-        if not file:
+        name = str(params.get("name", ""))
+        if not name:
             raise COMError("file is required")
         drw = com_app.get_active_drawing()
         if drw is None:
