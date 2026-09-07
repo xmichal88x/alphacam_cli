@@ -492,6 +492,45 @@ class GatewayServer:
         except Exception as e:
             raise COMError(str(e)) from e
 
+    def _handler_vba_save_project(self, params: dict[str, Any]) -> dict[str, Any]:
+        from alphacam_cli.gateway.server import _app as com_app
+
+        try:
+            raw = com_app._raw_app
+            vbe = raw.VBE
+            vbp = vbe.VBProjects
+            errors = []
+            saved = 0
+            for i in range(1, vbp.Count + 1):
+                proj = vbp(i)
+                name = proj.Name
+                try:
+                    proj.Save()
+                    saved += 1
+                except Exception as e:
+                    errors.append(f"{name}: {e}")
+            return {"saved": saved, "total": vbp.Count, "errors": errors}
+        except Exception as e:
+            raise COMError(str(e)) from e
+
+    def _handler_vba_export_project(self, params: dict[str, Any]) -> dict[str, Any]:
+        from alphacam_cli.gateway.server import _app as com_app
+
+        path = str(params.get("path", ""))
+        if not path:
+            raise COMError("path is required")
+        try:
+            raw = com_app._raw_app
+            vbe = raw.VBE
+            vbp = vbe.VBProjects
+            for i in range(1, vbp.Count + 1):
+                proj = vbp(i)
+                proj.Export(path)
+                return {"success": True, "project": proj.Name, "path": path}
+            return {"error": "no project found"}
+        except Exception as e:
+            raise COMError(str(e)) from e
+
     def _handler_vba_read_code(self, params: dict[str, Any]) -> dict[str, Any]:
         from alphacam_cli.gateway.server import _app as com_app
 
