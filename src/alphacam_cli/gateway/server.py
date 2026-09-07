@@ -458,6 +458,36 @@ class GatewayServer:
                 if any(k in low for k in ("vba", "macro", "module", "vbproject", "vbe", "code")):
                     result[f"attr_{attr_name}"] = True
 
+            try:
+                vbe = raw.VBE
+                result["vbe_attrs"] = [a for a in dir(vbe) if not a.startswith("_")]
+                result["vbe_type"] = str(type(vbe))
+
+                if hasattr(vbe, "VBProjects"):
+                    vbp = vbe.VBProjects
+                    result["vbp_count"] = vbp.Count
+                    for i in range(1, vbp.Count + 1):
+                        proj = vbp(i)
+                        result[f"project_{i}_name"] = proj.Name
+                        result[f"project_{i}_type"] = str(type(proj))
+                        if hasattr(proj, "VBComponents"):
+                            comps = proj.VBComponents
+                            result[f"project_{i}_components_count"] = comps.Count
+                            for j in range(1, comps.Count + 1):
+                                comp = comps(j)
+                                comp_name = comp.Name
+                                result[f"project_{i}_comp_{j}_name"] = comp_name
+                                result[f"project_{i}_comp_{j}_type"] = comp.Type
+                                if hasattr(comp, "CodeModule"):
+                                    cm = comp.CodeModule
+                                    lines = cm.CountOfLines
+                                    result[f"project_{i}_comp_{j}_lines"] = lines
+                                    if lines > 0:
+                                        code = cm.Lines(1, min(lines, 20))
+                                        result[f"project_{i}_comp_{j}_code_preview"] = code
+            except Exception as e:
+                result["vbe_error"] = str(e)
+
             return result
         except Exception as e:
             raise COMError(str(e)) from e
