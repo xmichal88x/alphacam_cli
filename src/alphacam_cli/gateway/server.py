@@ -411,6 +411,26 @@ class GatewayServer:
         except Exception as e:
             raise COMError(str(e)) from e
 
+    def _handler_run_macro(self, params: dict[str, Any]) -> dict[str, Any]:
+        from alphacam_cli.gateway.server import _app as com_app
+
+        macro = str(params.get("macro", ""))
+        if not macro:
+            raise COMError("macro name is required")
+        p1 = params.get("p1")
+        p2 = params.get("p2")
+        try:
+            raw = com_app._raw_app
+            args = [macro]
+            if p1 is not None:
+                args.append(p1)
+            if p2 is not None:
+                args.append(p2)
+            result = raw.Run(*args)
+            return {"success": True, "result": str(result) if result is not None else None}
+        except Exception as e:
+            raise COMError(str(e)) from e
+
     def _handler_open_vba_project(self, params: dict[str, Any]) -> dict[str, Any]:
         from alphacam_cli.gateway.server import _app as com_app
 
