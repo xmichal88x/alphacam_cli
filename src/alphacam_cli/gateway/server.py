@@ -492,6 +492,106 @@ class GatewayServer:
         except Exception as e:
             raise COMError(str(e)) from e
 
+    def _handler_vba_read_code(self, params: dict[str, Any]) -> dict[str, Any]:
+        from alphacam_cli.gateway.server import _app as com_app
+
+        project_name = str(params.get("project", ""))
+        component_name = str(params.get("component", ""))
+        try:
+            raw = com_app._raw_app
+            vbe = raw.VBE
+            vbp = vbe.VBProjects
+            for i in range(1, vbp.Count + 1):
+                proj = vbp(i)
+                if project_name and proj.Name != project_name:
+                    continue
+                comps = proj.VBComponents
+                for j in range(1, comps.Count + 1):
+                    comp = comps(j)
+                    if component_name and comp.Name != component_name:
+                        continue
+                    cm = comp.CodeModule
+                    total = cm.CountOfLines
+                    if total == 0:
+                        return {"project": proj.Name, "component": comp.Name, "code": "", "lines": 0}
+                    code = cm.Lines(1, total)
+                    return {"project": proj.Name, "component": comp.Name, "code": code, "lines": total}
+            return {"error": "project or component not found"}
+        except Exception as e:
+            raise COMError(str(e)) from e
+
+    def _handler_vba_write_code(self, params: dict[str, Any]) -> dict[str, Any]:
+        from alphacam_cli.gateway.server import _app as com_app
+
+        project_name = str(params.get("project", ""))
+        component_name = str(params.get("component", ""))
+        code = str(params.get("code", ""))
+        start_line = int(params.get("start_line", 1))
+        count = int(params.get("count", 0))
+        try:
+            raw = com_app._raw_app
+            vbe = raw.VBE
+            vbp = vbe.VBProjects
+            for i in range(1, vbp.Count + 1):
+                proj = vbp(i)
+                if project_name and proj.Name != project_name:
+                    continue
+                comps = proj.VBComponents
+                for j in range(1, comps.Count + 1):
+                    comp = comps(j)
+                    if component_name and comp.Name != component_name:
+                        continue
+                    cm = comp.CodeModule
+                    if count > 0:
+                        cm.DeleteLines(start_line, count)
+                    cm.InsertLines(start_line, code)
+                    new_total = cm.CountOfLines
+                    return {"success": True, "project": proj.Name, "component": comp.Name, "lines": new_total}
+            return {"error": "project or component not found"}
+        except Exception as e:
+            raise COMError(str(e)) from e
+
+    def _handler_vba_replace_code(self, params: dict[str, Any]) -> dict[str, Any]:
+        from alphacam_cli.gateway.server import _app as com_app
+
+        project_name = str(params.get("project", ""))
+        component_name = str(params.get("component", ""))
+        line = int(params.get("line", 1))
+        code = str(params.get("code", ""))
+        try:
+            raw = com_app._raw_app
+            vbe = raw.VBE
+            vbp = vbe.VBProjects
+            for i in range(1, vbp.Count + 1):
+                proj = vbp(i)
+                if project_name and proj.Name != project_name:
+                    continue
+                comps = proj.VBComponents
+                for j in range(1, comps.Count + 1):
+                    comp = comps(j)
+                    if component_name and comp.Name != component_name:
+                        continue
+                    cm = comp.CodeModule
+                    cm.ReplaceLine(line, code)
+                    return {"success": True, "project": proj.Name, "component": comp.Name, "line": line}
+            return {"error": "project or component not found"}
+        except Exception as e:
+            raise COMError(str(e)) from e
+
+    def _handler_vba_save_project(self, params: dict[str, Any]) -> dict[str, Any]:
+        from alphacam_cli.gateway.server import _app as com_app
+
+        try:
+            raw = com_app._raw_app
+            vbe = raw.VBE
+            vbp = vbe.VBProjects
+            for i in range(1, vbp.Count + 1):
+                proj = vbp(i)
+                proj.Save()
+            return {"success": True, "projects_saved": vbp.Count}
+        except Exception as e:
+            raise COMError(str(e)) from e
+
     def _handler_create_layer(self, params: dict[str, Any]) -> dict[str, Any]:
         from alphacam_cli.gateway.server import _app as com_app
 
