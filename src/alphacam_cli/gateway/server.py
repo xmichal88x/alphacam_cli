@@ -515,25 +515,63 @@ class GatewayServer:
     def _handler_vba_save_project(self, params: dict[str, Any]) -> dict[str, Any]:
         from alphacam_cli.gateway.server import _app as com_app
 
-        path = str(params.get("path", "")) or None
         try:
             raw = com_app._raw_app
             vbe = raw.VBE
             vbp = vbe.VBProjects
-            errors = []
-            saved = 0
+
             for i in range(1, vbp.Count + 1):
                 proj = vbp(i)
-                name = proj.Name
-                try:
-                    if path:
-                        proj.SaveAs(path)
-                    else:
-                        proj.Save()
-                    saved += 1
-                except Exception as e:
-                    errors.append(f"{name}: {e}")
-            return {"saved": saved, "total": vbp.Count, "errors": errors}
+                comps = proj.VBComponents
+                for j in range(1, comps.Count + 1):
+                    comp = comps(j)
+                    if hasattr(comp, "Activate"):
+                        try:
+                            comp.Activate()
+                        except Exception:
+                            pass
+                    cm = comp.CodeModule
+                    total = cm.CountOfLines
+
+                    save_fn = (
+                        "\r\nPublic Function __oa_save__() As Boolean\r\n"
+                        "    On Error Resume Next\r\n"
+                        "    VBE.ActiveVBProject.Save\r\n"
+                        "    __oa_save__ = (Err.Number = 0)\r\n"
+                        "    On Error GoTo 0\r\n"
+                        "End Function\r\n"
+                    )
+                    cm.InsertLines(total + 1, save_fn)
+
+            import time as _time
+            for i in range(1, vbp.Count + 1):
+                proj = vbp(i)
+                comps = proj.VBComponents
+                for j in range(1, comps.Count + 1):
+                    comp = comps(j)
+                    fn_name = f"{proj.Name}.{comp.Name}.__oa_save__"
+                    try:
+                        result = raw.Run(fn_name)
+                        saved = bool(result)
+                    except Exception:
+                        saved = False
+
+                    if hasattr(comp, "Activate"):
+                        try:
+                            comp.Activate()
+                        except Exception:
+                            pass
+                    cm = comp.CodeModule
+                    total = cm.CountOfLines
+                    for ln in range(total, 0, -1):
+                        line = cm.Lines(ln, 1)
+                        if "__oa_save__" in line:
+                            cm.DeleteLines(ln, 1)
+                        elif "Public Function __oa_save__" in line:
+                            cm.DeleteLines(ln, 5)
+                            break
+
+            return {"success": True, "saved": saved}
         except Exception as e:
             raise COMError(str(e)) from e
 
@@ -602,6 +640,11 @@ class GatewayServer:
                     comp = comps(j)
                     if component_name and comp.Name != component_name:
                         continue
+                    if hasattr(comp, "Activate"):
+                        try:
+                            comp.Activate()
+                        except Exception:
+                            pass
                     cm = comp.CodeModule
                     if count > 0:
                         cm.DeleteLines(start_line, count)
