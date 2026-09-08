@@ -520,6 +520,11 @@ class GatewayServer:
             vbe = raw.VBE
             vbp = vbe.VBProjects
 
+            import time as _time
+            import os
+            import subprocess as _sp
+
+            arb_path = None
             for i in range(1, vbp.Count + 1):
                 proj = vbp(i)
                 comps = proj.VBComponents
@@ -534,28 +539,32 @@ class GatewayServer:
                     total = cm.CountOfLines
 
                     save_fn = (
-                        "\r\nPublic Function __oa_save__() As Boolean\r\n"
+                        "\r\nPublic Sub __oa_save__()\r\n"
                         "    On Error Resume Next\r\n"
                         "    VBE.ActiveVBProject.Save\r\n"
-                        "    __oa_save__ = (Err.Number = 0)\r\n"
                         "    On Error GoTo 0\r\n"
-                        "End Function\r\n"
+                        "End Sub\r\n"
                     )
                     cm.InsertLines(total + 1, save_fn)
 
-            import time as _time
             for i in range(1, vbp.Count + 1):
                 proj = vbp(i)
                 comps = proj.VBComponents
                 for j in range(1, comps.Count + 1):
                     comp = comps(j)
-                    fn_name = f"{proj.Name}.{comp.Name}.__oa_save__"
                     try:
-                        result = raw.Run(fn_name)
-                        saved = bool(result)
+                        fn_name = f"{proj.Name}.{comp.Name}.__oa_save__"
+                        raw.Run(fn_name)
                     except Exception:
-                        saved = False
+                        pass
 
+            _time.sleep(1)
+
+            for i in range(1, vbp.Count + 1):
+                proj = vbp(i)
+                comps = proj.VBComponents
+                for j in range(1, comps.Count + 1):
+                    comp = comps(j)
                     if hasattr(comp, "Activate"):
                         try:
                             comp.Activate()
@@ -564,14 +573,11 @@ class GatewayServer:
                     cm = comp.CodeModule
                     total = cm.CountOfLines
                     for ln in range(total, 0, -1):
-                        line = cm.Lines(ln, 1)
-                        if "__oa_save__" in line:
+                        line_text = cm.Lines(ln, 1)
+                        if "__oa_save__" in line_text:
                             cm.DeleteLines(ln, 1)
-                        elif "Public Function __oa_save__" in line:
-                            cm.DeleteLines(ln, 5)
-                            break
 
-            return {"success": True, "saved": saved}
+            return {"success": True}
         except Exception as e:
             raise COMError(str(e)) from e
 
