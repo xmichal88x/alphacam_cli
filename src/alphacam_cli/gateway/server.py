@@ -519,60 +519,17 @@ class GatewayServer:
             raw = com_app._raw_app
             vbe = raw.VBE
             vbp = vbe.VBProjects
-            import time as _time
-
+            errors = []
+            saved = 0
             for i in range(1, vbp.Count + 1):
                 proj = vbp(i)
-                comps = proj.VBComponents
-                for j in range(1, comps.Count + 1):
-                    comp = comps(j)
-                    if hasattr(comp, "Activate"):
-                        try:
-                            comp.Activate()
-                        except Exception:
-                            pass
-                    cm = comp.CodeModule
-                    total = cm.CountOfLines
-                    cm.InsertLines(total + 1, (
-                        "\r\nPublic Sub __oa_save__()\r\n"
-                        "    On Error Resume Next\r\n"
-                        "    VBE.ActiveVBProject.Save\r\n"
-                        "    On Error GoTo 0\r\n"
-                        "End Sub\r\n"
-                    ))
-
-            _time.sleep(2)
-
-            for i in range(1, vbp.Count + 1):
-                proj = vbp(i)
-                comps = proj.VBComponents
-                for j in range(1, comps.Count + 1):
-                    comp = comps(j)
-                    macro_name = f"{proj.Name}.{comp.Name}.__oa_save__"
-                    try:
-                        raw.Run(macro_name)
-                    except Exception:
-                        pass
-
-            _time.sleep(2)
-
-            for i in range(1, vbp.Count + 1):
-                proj = vbp(i)
-                comps = proj.VBComponents
-                for j in range(1, comps.Count + 1):
-                    comp = comps(j)
-                    if hasattr(comp, "Activate"):
-                        try:
-                            comp.Activate()
-                        except Exception:
-                            pass
-                    cm = comp.CodeModule
-                    total = cm.CountOfLines
-                    for ln in range(total, 0, -1):
-                        if "__oa_save__" in cm.Lines(ln, 1):
-                            cm.DeleteLines(ln, 1)
-
-            return {"success": True}
+                name = proj.Name
+                try:
+                    proj.Save()
+                    saved += 1
+                except Exception as e:
+                    errors.append(f"{name}: {e}")
+            return {"saved": saved, "total": vbp.Count, "errors": errors}
         except Exception as e:
             raise COMError(str(e)) from e
 
