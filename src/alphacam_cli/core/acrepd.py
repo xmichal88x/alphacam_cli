@@ -390,9 +390,9 @@ def _compute_utilization(sheet: dict[str, Any]) -> None:
     parts_area = 0.0
     for part in sheet.get("parts", []):
         w = part.get("cdm_width") or part.get("width")
-        l = part.get("cdm_length") or part.get("length")
-        if w and l:
-            parts_area += float(w) * float(l)
+        length = part.get("cdm_length") or part.get("length")
+        if w and length:
+            parts_area += float(w) * float(length)
     if parts_area <= 0:
         sheet["utilization"] = 0
         return

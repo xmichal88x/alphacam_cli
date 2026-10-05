@@ -458,6 +458,14 @@ class RemoteSession:
             params["name"] = name
         return self._call("cdm_stock_add", params)  # type: ignore[no-any-return]
 
+    def cdm_stock_material_add(
+        self, name: str, thickness: float, thickness_units: int = 0
+    ) -> dict[str, Any]:
+        return self._call(  # type: ignore[no-any-return]
+            "cdm_stock_material_add",
+            {"name": name, "thickness": thickness, "thickness_units": thickness_units},
+        )
+
     def cdm_stock_delete(self, sheet_name: str) -> dict[str, Any]:
         return self._call("cdm_stock_delete", {"sheet_name": sheet_name})  # type: ignore[no-any-return]
 

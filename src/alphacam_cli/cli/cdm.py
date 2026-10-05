@@ -16,8 +16,9 @@ from alphacam_cli.cli.common import (
     require_platform,
     resolve_app,
 )
-from alphacam_cli.com.manager import alphacam_context
+from alphacam_cli.com.manager import AlphacamComError, AlphacamConnectionError, alphacam_context
 from alphacam_cli.core.application import _validate_due_date, _validate_job_name
+from alphacam_cli.core.stock import thickness_units_from_label
 
 app = typer.Typer(help="Cabinet Door Manufacturing (CDM Automation Manager add-in)")
 
@@ -1148,6 +1149,50 @@ def stock_offcut_delete_cmd(
         console.print(f"[green]OK:[/green] offcut deleted: {result.get('sheet_id', sheet_id)}")
     else:
         console.print(f"[red]Error:[/red] {result.get('error') or result.get('status')}")
+    if not result.get("success"):
+        raise typer.Exit(code=1)
+
+
+@stock_app.command("material-add")
+def stock_material_add_cmd(
+    name: str = typer.Argument(..., help="Material name"),
+    thickness: float = typer.Argument(..., help="Thickness value"),
+    units: str = typer.Option("mm", "--units", help="Thickness units: mm, m, inches, feet"),
+    json_output: bool = typer.Option(False, "--json", help="Output deterministic JSON"),
+) -> None:
+    """Add a material definition to the sheet database."""
+    require_platform()
+    label = units.strip().lower()
+    units_int = thickness_units_from_label(units)
+    if units_int is None:
+        console.print(f"[red]Error:[/red] unknown units '{units}'")
+        raise typer.Exit(code=2)
+    try:
+        with alphacam_context(visible=get_visible()) as raw:
+            ac = resolve_app(raw)
+            result = ac.stock_material_add(name, thickness, units_int)
+    except AlphacamComError as e:
+        console.print(f"[red]COM Error:[/red] {e}")
+        if e.hresult:
+            console.print(f"      HRESULT: [yellow]0x{e.hresult:08X}[/yellow]")
+        console.print("      [dim]Try restarting AlphaCAM or check the connection.[/dim]")
+        raise typer.Exit(code=4) from e
+    except AlphacamConnectionError as e:
+        console.print(f"[red]Connection Error:[/red] {e}")
+        console.print("      [dim]Make sure AlphaCAM is installed and licensed.[/dim]")
+        raise typer.Exit(code=3) from e
+    except Exception as e:
+        console.print(f"[red]Error:[/red] {e}")
+        raise typer.Exit(code=1) from e
+    if json_output:
+        console.print(json.dumps(result, indent=2, sort_keys=True))
+    elif result.get("success"):
+        console.print(
+            f"[green]OK:[/green] added material '{result.get('material', name)}' "
+            f"(id={result.get('id')}, thickness {result.get('thickness', thickness)} {label})"
+        )
+    else:
+        console.print(f"[red]Error:[/red] {result.get('error')}")
     if not result.get("success"):
         raise typer.Exit(code=1)
 

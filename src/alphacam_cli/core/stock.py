@@ -1,12 +1,22 @@
 from __future__ import annotations
 
 import contextlib
+import math
 from typing import Any, Literal, TypedDict
 
 _NESTING_TYPELIB = "{6702E3DF-142C-4627-8EA2-4C47EBC78441}"
 
 _GRAIN_LABELS = {0: "none", 1: "x", 2: "y"}
-_UNIT_LABELS = {0: "mm", 1: "cm", 2: "m", 3: "inches"}
+UNIT_LABELS = {0: "mm", 1: "m", 2: "inches", 3: "feet"}
+
+
+def thickness_units_from_label(label: str) -> int | None:
+    normalized = label.strip().lower()
+    for code, name in UNIT_LABELS.items():
+        if name == normalized:
+            return code
+    return None
+
 
 SHEET_WRITABLE = frozenset(
     {
@@ -78,6 +88,7 @@ OPERATIONS = {
         " grain_direction, cost"
     ),
     "stock_add": "add new sheet to database (via thickness.NewSheet + WholeSheets.Add + Store)",
+    "stock_material_add": "add material with its first thickness to the sheet database",
     "stock_offcut_create": "blocked until a real ISheetPaths source is proven",
     "stock_delete": "delete sheet from database (via sheet.Delete)",
 }
@@ -145,7 +156,7 @@ def _read_thickness(t: Any) -> dict[str, Any]:
         "id": int(t.Id),
         "thickness": float(t.Thickness),
         "thickness_units": int(t.ThicknessUnits),
-        "thickness_units_label": _UNIT_LABELS.get(int(t.ThicknessUnits), "unknown"),
+        "thickness_units_label": UNIT_LABELS.get(int(t.ThicknessUnits), "unknown"),
         "area_units": int(t.AreaUnits),
         "weight_units": int(t.WeightUnits),
         "cost_per_area": float(t.CostPerArea),
@@ -313,6 +324,48 @@ def _safe_set_sheet_fields(
     sheet.Width = float(width)
     sheet.Height = float(height)
     sheet.Quantity = int(quantity)
+
+
+def stock_material_add(
+    app: Any, name: str, thickness: float, thickness_units: int = 0
+) -> dict[str, Any]:
+    if not isinstance(name, str) or not name.strip():
+        return {"success": False, "error": "name is required"}
+    if (
+        isinstance(thickness, bool)
+        or not isinstance(thickness, (int, float))
+        or thickness <= 0
+        or (isinstance(thickness, float) and not math.isfinite(thickness))
+    ):
+        return {"success": False, "error": "thickness must be a positive number"}
+    if (
+        isinstance(thickness_units, bool)
+        or not isinstance(thickness_units, int)
+        or thickness_units not in (0, 1, 2, 3)
+    ):
+        return {"success": False, "error": "thickness_units must be an integer 0-3"}
+    clean_name = name.strip()
+    _ensure_nesting_typelib()
+    db = _get_sheet_database(app)
+    if _find_material_by_name(db, clean_name) is not None:
+        return {"success": False, "error": f"material already exists: {clean_name}"}
+    mat = db.AddMaterial(clean_name)
+    try:
+        th = mat.NewThickness()
+        th.SetThickness(float(thickness), int(thickness_units))
+        th.Store()
+    except Exception as exc:
+        with contextlib.suppress(Exception):
+            mat.Delete()
+        return {"success": False, "error": f"add thickness failed: {exc}"}
+    return {
+        "success": True,
+        "material": str(mat.Name),
+        "id": int(mat.Id),
+        "thickness": float(th.Thickness),
+        "thickness_units": int(th.ThicknessUnits),
+        "thickness_id": int(th.Id),
+    }
 
 
 def stock_offcut_create(

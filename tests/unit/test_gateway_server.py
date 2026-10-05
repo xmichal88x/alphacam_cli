@@ -105,6 +105,84 @@ def test_offcut_create_handler_wraps_com_error(server_app: MagicMock) -> None:
         )
 
 
+def test_material_add_handler_returns_result_and_delegates(server_app: MagicMock) -> None:
+    expected = {
+        "success": True,
+        "material": "MDF_TEST",
+        "id": 7,
+        "thickness": 18.0,
+        "thickness_units": 0,
+        "thickness_id": 11,
+    }
+    server_app.stock_material_add.return_value = expected
+    result = GatewayServer()._handler_cdm_stock_material_add(
+        {"name": "MDF_TEST", "thickness": 18.0}
+    )
+    assert result == expected
+    server_app.stock_material_add.assert_called_once_with("MDF_TEST", 18.0, 0)
+
+
+def test_material_add_handler_passes_thickness_units(server_app: MagicMock) -> None:
+    GatewayServer()._handler_cdm_stock_material_add(
+        {"name": "X", "thickness": 18, "thickness_units": 3}
+    )
+    server_app.stock_material_add.assert_called_once_with("X", 18.0, 3)
+
+
+@pytest.mark.parametrize(
+    "params",
+    [
+        {"thickness": 18.0},
+        {"name": "", "thickness": 18.0},
+        {"name": "   ", "thickness": 18.0},
+        {"name": 123, "thickness": 18.0},
+    ],
+)
+def test_material_add_handler_rejects_bad_name(
+    server_app: MagicMock, params: dict[str, Any]
+) -> None:
+    with pytest.raises(COMError, match="stock: material add requires a non-empty name"):
+        GatewayServer()._handler_cdm_stock_material_add(params)
+    server_app.stock_material_add.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    "params",
+    [
+        {"name": "X"},
+        {"name": "X", "thickness": 0},
+        {"name": "X", "thickness": -1},
+        {"name": "X", "thickness": True},
+        {"name": "X", "thickness": "18"},
+        {"name": "X", "thickness": float("nan")},
+        {"name": "X", "thickness": float("inf")},
+    ],
+)
+def test_material_add_handler_rejects_bad_thickness(
+    server_app: MagicMock, params: dict[str, Any]
+) -> None:
+    with pytest.raises(COMError, match="stock: material add requires a positive thickness"):
+        GatewayServer()._handler_cdm_stock_material_add(params)
+    server_app.stock_material_add.assert_not_called()
+
+
+@pytest.mark.parametrize("units", ["3", 4, -1, True])
+def test_material_add_handler_rejects_bad_thickness_units(
+    server_app: MagicMock, units: Any
+) -> None:
+    with pytest.raises(COMError, match="stock: material add requires thickness_units 0-3"):
+        GatewayServer()._handler_cdm_stock_material_add(
+            {"name": "X", "thickness": 18.0, "thickness_units": units}
+        )
+    server_app.stock_material_add.assert_not_called()
+
+
+def test_material_add_handler_wraps_com_error(server_app: MagicMock) -> None:
+    server_app.stock_material_add.side_effect = RuntimeError("COM failure")
+    with pytest.raises(COMError, match="stock: material add failed: COM failure"):
+        GatewayServer()._handler_cdm_stock_material_add({"name": "MDF", "thickness": 18})
+
+
 def test_apply_style_handler_no_geometries(server_app: MagicMock) -> None:
     drw = MagicMock()
     drw.geometries_count = 0
@@ -1092,6 +1170,14 @@ def test_create_layer_handler_missing_name(server_app: MagicMock) -> None:
         gw._handler_create_layer({})
 
 
+@pytest.mark.parametrize("name", [None, 123, "   "])
+def test_create_layer_handler_rejects_non_string_name(server_app: MagicMock, name: Any) -> None:
+    gw = GatewayServer()
+    with pytest.raises(COMError, match="name is required"):
+        gw._handler_create_layer({"name": name})
+    server_app.get_active_drawing.assert_not_called()
+
+
 def test_create_layer_handler_no_drawing(server_app: MagicMock) -> None:
     server_app.get_active_drawing.return_value = None
     gw = GatewayServer()
@@ -1122,6 +1208,14 @@ def test_drawing_query_handler_missing_file(server_app: MagicMock) -> None:
     gw = GatewayServer()
     with pytest.raises(COMError, match="file is required"):
         gw._handler_drawing_query({})
+    server_app.get_active_drawing.assert_not_called()
+
+
+@pytest.mark.parametrize("file", [None, 123, "   "])
+def test_drawing_query_handler_rejects_non_string_file(server_app: MagicMock, file: Any) -> None:
+    gw = GatewayServer()
+    with pytest.raises(COMError, match="file is required"):
+        gw._handler_drawing_query({"file": file})
     server_app.get_active_drawing.assert_not_called()
 
 

@@ -242,11 +242,20 @@ The gateway uses **JSON-RPC 2.0** over TCP with length-prefixed frames.
 | `process_cdm_job` | `job_name, timeout_seconds, output_root` | `{success, job_name, status, processed, method: "inproc", elapsed_s, log, detail, report, warnings?}` |
 | `cdm_stock_offcut_create` | `material_name, thickness, width, height, quantity, name?` | `{success, status, error/reason?, sheet_id?}`; `status: "blocked"` is an explicit failed result |
 | `cdm_stock_offcut_delete` | `sheet_id` (positive stable integer ID only) | `{success, status, sheet_id, error?}` |
+| `cdm_stock_material_add` | `name, thickness, thickness_units? (int 0-3: 0=mm, 1=m, 2=inch, 3=ft; default 0)` | `{success: true, material, id, thickness, thickness_units, thickness_id}` or `{success: false, error}` |
 
 Offcut operations are atomic standalone stock operations. They do not perform nesting,
 NC generation, machining, or any other end-to-end flow. Creation remains fail-closed
 when no verified COM `ISheetPaths` source is available; callers must not treat
 `success: false` or `status: "blocked"` as success.
+
+`cdm_stock_material_add` is likewise a standalone stock block: it creates a new
+sheet-database material with its mandatory first thickness only — no sheets, nesting, NC,
+or machining. Invalid params raise `COMError` (`stock: material add requires a non-empty
+name` / `... a positive thickness` / `... thickness_units 0-3`), a duplicate name returns
+`{success: false, error: "material already exists: <name>"}`, and a failed thickness
+creation rolls the material back best-effort (deletion failure is suppressed; `add thickness
+failed: ...`), so in the worst case a material without a thickness may remain.
 
 > `process_cdm_job` is synchronous and may run long (geometry + toolpaths + nesting). The client automatically extends the socket timeout for the duration of the call to `max(self.timeout, timeout_seconds + 30)` and restores it in `finally` — no manual timeout adjustment is needed. The gateway serves one request at a time: `process_cdm_job` blocks the only STA thread for its whole duration, so other requests wait until it finishes. The only execution method is `inproc`: the macro `ApplyMachiningAfterNesting.Events.HeadlessProcess` runs in-proc on the gateway's held COM reference (Session 0) — the legacy VBScript/PsExec path was removed. `process_cdm_job` must be invoked on the gateway's STA thread like all handlers (`_com_call`) — otherwise COM raises `RPC_E_WRONG_THREAD`.
 >

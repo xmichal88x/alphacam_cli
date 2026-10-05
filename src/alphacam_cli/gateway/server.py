@@ -5,6 +5,7 @@ from __future__ import annotations
 import contextlib
 import glob as glob_module
 import logging
+import math
 import os
 import queue
 import re
@@ -608,7 +609,12 @@ class GatewayServer:
                         cm.DeleteLines(start_line, count)
                     cm.InsertLines(start_line, code)
                     new_total = cm.CountOfLines
-                    return {"success": True, "project": proj.Name, "component": comp.Name, "lines": new_total}
+                    return {
+                        "success": True,
+                        "project": proj.Name,
+                        "component": comp.Name,
+                        "lines": new_total,
+                    }
             return {"error": "project or component not found"}
         except Exception as e:
             raise COMError(str(e)) from e
@@ -635,7 +641,12 @@ class GatewayServer:
                         continue
                     cm = comp.CodeModule
                     cm.ReplaceLine(line, code)
-                    return {"success": True, "project": proj.Name, "component": comp.Name, "line": line}
+                    return {
+                        "success": True,
+                        "project": proj.Name,
+                        "component": comp.Name,
+                        "line": line,
+                    }
             return {"error": "project or component not found"}
         except Exception as e:
             raise COMError(str(e)) from e
@@ -666,9 +677,19 @@ class GatewayServer:
                     cm = comp.CodeModule
                     total = cm.CountOfLines
                     if total == 0:
-                        return {"project": proj.Name, "component": comp.Name, "code": "", "lines": 0}
+                        return {
+                            "project": proj.Name,
+                            "component": comp.Name,
+                            "code": "",
+                            "lines": 0,
+                        }
                     code = cm.Lines(1, total)
-                    return {"project": proj.Name, "component": comp.Name, "code": code, "lines": total}
+                    return {
+                        "project": proj.Name,
+                        "component": comp.Name,
+                        "code": code,
+                        "lines": total,
+                    }
             return {"error": "project or component not found"}
         except Exception as e:
             raise COMError(str(e)) from e
@@ -676,9 +697,26 @@ class GatewayServer:
     def _handler_create_layer(self, params: dict[str, Any]) -> dict[str, Any]:
         from alphacam_cli.gateway.server import _app as com_app
 
-        name = str(params.get("name", ""))
-        if not name:
+        name = params.get("name")
+        if not isinstance(name, str) or not name.strip():
+            raise COMError("name is required")
+        name = name.strip()
+        drw = com_app.get_active_drawing()
+        if drw is None:
+            raise COMError("No active drawing")
+        try:
+            drw.create_layer(name)
+        except Exception as e:
+            raise COMError(f"create_layer failed: {e}") from e
+        return {"success": True, "layer": name}
+
+    def _handler_drawing_query(self, params: dict[str, Any]) -> dict[str, Any]:
+        from alphacam_cli.gateway.server import _app as com_app
+
+        file = params.get("file")
+        if not isinstance(file, str) or not file.strip():
             raise COMError("file is required")
+        file = file.strip()
         drw = com_app.get_active_drawing()
         if drw is None:
             raise COMError("No active drawing")
@@ -943,13 +981,13 @@ class GatewayServer:
     def _handler_cdm_stock_list(self, params: dict[str, Any]) -> dict[str, Any]:
         material = str(params.get("material")) if params.get("material") else None
         try:
-            return _app.stock_list(material)
+            return _app.stock_list(material)  # type: ignore[no-any-return]
         except Exception as e:
             raise COMError(f"stock: list failed: {e}") from e
 
     def _handler_cdm_stock_set(self, params: dict[str, Any]) -> dict[str, Any]:
         try:
-            return _app.stock_set(
+            return _app.stock_set(  # type: ignore[no-any-return]
                 str(params["sheet_name"]),
                 params.get("qty"),
                 params.get("delta"),
@@ -959,7 +997,7 @@ class GatewayServer:
 
     def _handler_cdm_stock_add(self, params: dict[str, Any]) -> dict[str, Any]:
         try:
-            return _app.stock_add(
+            return _app.stock_add(  # type: ignore[no-any-return]
                 str(params["material_name"]),
                 float(params["thickness"]),
                 float(params["width"]),
@@ -971,9 +1009,33 @@ class GatewayServer:
         except Exception as e:
             raise COMError(f"stock: add failed: {e}") from e
 
+    def _handler_cdm_stock_material_add(self, params: dict[str, Any]) -> dict[str, Any]:
+        name = params.get("name")
+        if not isinstance(name, str) or not name.strip():
+            raise COMError("stock: material add requires a non-empty name")
+        thickness = params.get("thickness")
+        if (
+            isinstance(thickness, bool)
+            or not isinstance(thickness, (int, float))
+            or thickness <= 0
+            or (isinstance(thickness, float) and not math.isfinite(thickness))
+        ):
+            raise COMError("stock: material add requires a positive thickness")
+        thickness_units = params.get("thickness_units", 0)
+        if (
+            isinstance(thickness_units, bool)
+            or not isinstance(thickness_units, int)
+            or thickness_units not in (0, 1, 2, 3)
+        ):
+            raise COMError("stock: material add requires thickness_units 0-3")
+        try:
+            return _app.stock_material_add(name, float(thickness), thickness_units)  # type: ignore[no-any-return]
+        except Exception as e:
+            raise COMError(f"stock: material add failed: {e}") from e
+
     def _handler_cdm_stock_delete(self, params: dict[str, Any]) -> dict[str, Any]:
         try:
-            return _app.stock_delete(str(params["sheet_name"]))
+            return _app.stock_delete(str(params["sheet_name"]))  # type: ignore[no-any-return]
         except Exception as e:
             raise COMError(f"stock: delete failed: {e}") from e
 
@@ -983,7 +1045,7 @@ class GatewayServer:
             missing = next(key for key in required if key not in params)
             raise COMError(f"stock: offcut create requires {missing}")
         try:
-            return _app.stock_offcut_create(
+            return _app.stock_offcut_create(  # type: ignore[no-any-return]
                 str(params["material_name"]),
                 float(params["thickness"]),
                 float(params["width"]),
@@ -999,7 +1061,7 @@ class GatewayServer:
         if isinstance(sheet_id, bool) or not isinstance(sheet_id, int):
             raise COMError("stock: offcut delete requires integer sheet_id")
         try:
-            return _app.stock_offcut_delete(sheet_id)
+            return _app.stock_offcut_delete(sheet_id)  # type: ignore[no-any-return]
         except Exception as e:
             raise COMError(f"stock: offcut delete failed: {e}") from e
 

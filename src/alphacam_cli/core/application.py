@@ -1483,6 +1483,16 @@ class Application:
 
         return stock_delete(self._app, sheet_name)
 
+    def stock_material_add(
+        self,
+        name: str,
+        thickness: float,
+        thickness_units: int = 0,
+    ) -> dict[str, Any]:
+        from alphacam_cli.core.stock import stock_material_add
+
+        return stock_material_add(self._app, name, thickness, thickness_units)
+
     def stock_offcut_create(
         self,
         material_name: str,

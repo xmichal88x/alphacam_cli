@@ -73,6 +73,50 @@ def test_remote_session_offcut_methods_send_stable_id_and_parameters() -> None:
     ]
 
 
+def test_remote_stock_material_add_delegates() -> None:
+    session = MagicMock()
+    session.cdm_stock_material_add.return_value = {
+        "success": True,
+        "material": "MDF",
+        "id": 5,
+        "thickness": 18.0,
+        "thickness_units": 0,
+        "thickness_id": 9,
+    }
+    app = RemoteApplication(session)
+    assert app.stock_material_add("MDF", 18.0) == {
+        "success": True,
+        "material": "MDF",
+        "id": 5,
+        "thickness": 18.0,
+        "thickness_units": 0,
+        "thickness_id": 9,
+    }
+    session.cdm_stock_material_add.assert_called_once_with(
+        name="MDF", thickness=18.0, thickness_units=0
+    )
+
+
+def test_remote_stock_material_add_passes_units() -> None:
+    session = MagicMock()
+    session.cdm_stock_material_add.return_value = {"success": True, "id": 6}
+    app = RemoteApplication(session)
+    assert app.stock_material_add("MDF", 18.0, 3) == {"success": True, "id": 6}
+    session.cdm_stock_material_add.assert_called_once_with(
+        name="MDF", thickness=18.0, thickness_units=3
+    )
+
+
+def test_remote_session_stock_material_add_sends_params() -> None:
+    session = RemoteSession()
+    session._call = MagicMock(return_value={"success": True, "id": 5})  # type: ignore[method-assign]
+    session.cdm_stock_material_add("MDF", 18.0, 0)
+    session._call.assert_called_once_with(
+        "cdm_stock_material_add",
+        {"name": "MDF", "thickness": 18.0, "thickness_units": 0},
+    )
+
+
 def test_remote_new_drawing_defaults() -> None:
     session = MagicMock()
     session.new_drawing.return_value = {"geometries_count": 0}

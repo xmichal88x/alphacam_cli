@@ -7,9 +7,11 @@ from alphacam_cli.core.stock import (
     stock_add,
     stock_delete,
     stock_list,
+    stock_material_add,
     stock_offcut_create,
     stock_offcut_delete,
     stock_set,
+    thickness_units_from_label,
 )
 
 
@@ -642,3 +644,159 @@ def test_stock_offcut_create_validates_dimensions_and_quantity_before_com(_mock_
         assert result["status"] == "invalid_input"
 
     app.Nesting.SheetDatabase.assert_not_called()
+
+
+@patch("alphacam_cli.core.stock._ensure_nesting_typelib")
+def test_stock_material_add_success_default_units(_mock_ensure: MagicMock) -> None:
+    app = MagicMock()
+    db = app.Nesting.SheetDatabase
+    db.Materials.Count = 0
+    mat = db.AddMaterial.return_value
+    mat.Name = "NEW_MAT"
+    mat.Id = 7
+    th = mat.NewThickness.return_value
+    th.Thickness = 18.0
+    th.ThicknessUnits = 0
+    th.Id = 11
+
+    result = stock_material_add(app, "  NEW_MAT  ", 18.0)
+
+    assert result == {
+        "success": True,
+        "material": "NEW_MAT",
+        "id": 7,
+        "thickness": 18.0,
+        "thickness_units": 0,
+        "thickness_id": 11,
+    }
+    _mock_ensure.assert_called_once_with()
+    db.AddMaterial.assert_called_once_with("NEW_MAT")
+    th.SetThickness.assert_called_once_with(18.0, 0)
+    th.Store.assert_called_once_with()
+    mat.Delete.assert_not_called()
+
+
+@patch("alphacam_cli.core.stock._ensure_nesting_typelib")
+def test_stock_material_add_units_inches(_mock_ensure: MagicMock) -> None:
+    app = MagicMock()
+    db = app.Nesting.SheetDatabase
+    db.Materials.Count = 0
+    mat = db.AddMaterial.return_value
+    mat.Name = "INCH_MAT"
+    mat.Id = 3
+    th = mat.NewThickness.return_value
+    th.Thickness = 18.0
+    th.ThicknessUnits = 2
+    th.Id = 4
+
+    result = stock_material_add(app, "INCH_MAT", 18.0, thickness_units=2)
+
+    assert result == {
+        "success": True,
+        "material": "INCH_MAT",
+        "id": 3,
+        "thickness": 18.0,
+        "thickness_units": 2,
+        "thickness_id": 4,
+    }
+    th.SetThickness.assert_called_once_with(18.0, 2)
+    th.Store.assert_called_once_with()
+    mat.Delete.assert_not_called()
+
+
+def test_thickness_units_from_label() -> None:
+    assert thickness_units_from_label("mm") == 0
+    assert thickness_units_from_label("M") == 1
+    assert thickness_units_from_label("inches") == 2
+    assert thickness_units_from_label(" feet ") == 3
+    assert thickness_units_from_label("cm") is None
+    assert thickness_units_from_label("furlongs") is None
+
+
+@patch("alphacam_cli.core.stock._ensure_nesting_typelib")
+def test_stock_material_add_duplicate(_mock_ensure: MagicMock) -> None:
+    app = MagicMock()
+    db = app.Nesting.SheetDatabase
+    db.Materials.Count = 1
+    db.Materials.Item.return_value.Name = "EXISTING"
+
+    result = stock_material_add(app, "EXISTING", 18.0)
+
+    assert result["success"] is False
+    assert result["error"] == "material already exists: EXISTING"
+    db.AddMaterial.assert_not_called()
+
+
+@patch("alphacam_cli.core.stock._ensure_nesting_typelib")
+def test_stock_material_add_invalid_name(_mock_ensure: MagicMock) -> None:
+    app = MagicMock()
+
+    for name in ("", "   ", None, 123):
+        result = stock_material_add(app, name, 18.0)  # type: ignore[arg-type]
+        assert result["success"] is False
+        assert result["error"] == "name is required"
+
+    _mock_ensure.assert_not_called()
+
+
+@patch("alphacam_cli.core.stock._ensure_nesting_typelib")
+def test_stock_material_add_invalid_thickness(_mock_ensure: MagicMock) -> None:
+    app = MagicMock()
+
+    for thickness in (0, -1, True, "18", float("nan"), float("inf")):
+        result = stock_material_add(app, "MAT", thickness)  # type: ignore[arg-type]
+        assert result["success"] is False
+        assert result["error"] == "thickness must be a positive number"
+
+    _mock_ensure.assert_not_called()
+
+
+@patch("alphacam_cli.core.stock._ensure_nesting_typelib")
+def test_stock_material_add_invalid_units(_mock_ensure: MagicMock) -> None:
+    app = MagicMock()
+
+    for units in (-1, 4, True, 1.5, "mm"):
+        result = stock_material_add(app, "MAT", 18.0, thickness_units=units)  # type: ignore[arg-type]
+        assert result["success"] is False
+        assert result["error"] == "thickness_units must be an integer 0-3"
+
+    _mock_ensure.assert_not_called()
+
+
+@patch("alphacam_cli.core.stock._ensure_nesting_typelib")
+def test_stock_material_add_rolls_back_on_thickness_failure(_mock_ensure: MagicMock) -> None:
+    app = MagicMock()
+    db = app.Nesting.SheetDatabase
+    db.Materials.Count = 0
+    mat = db.AddMaterial.return_value
+    mat.Name = "NEW_MAT"
+    mat.Id = 7
+    th = mat.NewThickness.return_value
+    th.SetThickness.side_effect = RuntimeError("COM nope")
+
+    result = stock_material_add(app, "NEW_MAT", 18.0)
+
+    assert result["success"] is False
+    assert "COM nope" in result["error"]
+    assert result["error"].startswith("add thickness failed")
+    mat.Delete.assert_called_once_with()
+
+
+@patch("alphacam_cli.core.stock._ensure_nesting_typelib")
+def test_stock_material_add_rollback_failure_keeps_original_error(_mock_ensure: MagicMock) -> None:
+    app = MagicMock()
+    db = app.Nesting.SheetDatabase
+    db.Materials.Count = 0
+    mat = db.AddMaterial.return_value
+    mat.Name = "NEW_MAT"
+    mat.Id = 7
+    th = mat.NewThickness.return_value
+    th.Store.side_effect = RuntimeError("store boom")
+    mat.Delete.side_effect = RuntimeError("delete boom")
+
+    result = stock_material_add(app, "NEW_MAT", 18.0)
+
+    assert result["success"] is False
+    assert "store boom" in result["error"]
+    assert "delete boom" not in result["error"]
+    mat.Delete.assert_called_once_with()

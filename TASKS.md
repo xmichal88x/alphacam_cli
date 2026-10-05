@@ -6,6 +6,36 @@
 - COM safety: STA thread ✅ marshal ✅ cleanup (result_sent guard) ✅ keep_alive ✅
 - CI: publish workflow ✅ lint ✅ typecheck ✅ coverage gate 70% ✅
 - CDM 3 bloki (create/import/process): audyt produkcyjny + 8 fixów + E2E na maszynie ✅
+- Sesja 2026-10-05: `cdm stock material-add` (nowy materiał w bibliotece arkuszy) + fixy pre-existing — pytest **1318 passed, 3 skipped**, ruff/mypy src/ 0, E2E vm125 PASS
+
+---
+
+## SESJA 2026-10-05 — `cdm stock material-add` (nowy materiał w bibliotece arkuszy) + fixy pre-existing
+
+**Feature (testy-first, E2E PASS):**
+- Nowy blok: `alphacam cdm stock material-add NAME THICKNESS [--units mm|m|inches|feet] [--json]` — tworzy materiał w `App.Nesting.SheetDatabase` (`db.AddMaterial`) i wymaganą pierwszą grubość (`mat.NewThickness` → `SetThickness` → `Store`); rollback `mat.Delete()` (best-effort) przy błędzie grubości.
+- Warstwy: core `stock_material_add` + publiczne `UNIT_LABELS`/`thickness_units_from_label`; `Application.stock_material_add`; handler gateway `cdm_stock_material_add`; `RemoteSession.cdm_stock_material_add`/`RemoteApplication.stock_material_add`; docs README (`#### stock`) + docs/gateway.md.
+- **KLUCZOWE odkrycie — mapowanie jednostek**: `_UNIT_LABELS` było błędne ({0:mm,1:cm,2:m,3:inches}); typelib Nesting v3.0 (`lenUnitMM=0, lenUnitM=1, lenUnitInch=2, lenUnitFt=3`) → poprawione na `UNIT_LABELS = {0:mm, 1:m, 2:inches, 3:feet}` (naprawia też `thickness_units_label` w `stock list`). `cm` jest teraz odrzucane (exit 2).
+- Walidacje: name required / thickness dodatnia i skończona (NaN/Inf odrzucane) / units 0-3; duplikat `material already exists: <name>` (exact, case-sensitive po strip).
+- Weryfikacja: pytest **1318 passed, 3 skipped**; ruff check src/ tests/ 0; mypy src/ 0; nowe testy mypy-clean; E2E vm125 (2 rundy): create 18mm, duplicate, `--units inches`→2, `--units feet`→3, `cm`→exit 2, `nan`→exit 1, `stock list` labels poprawne, pełny cleanup (końcowy stan: 17mm + MDF_18).
+
+**Naprawione w pętli (pre-existing, znalezione przy weryfikacji):**
+- Regresja z commita `4ea8436`: `_handler_drawing_query` nadpisał `_handler_create_layer` (F821 `file`, 7 failujących testów) — przywrócone oba handlery (+ walidacja None→`"None"`).
+- mypy src/: 7× `no-any-return` w handlerach `_handler_cdm_stock_*` → `# type: ignore[no-any-return]`.
+- ruff: E741 w `core/acrepd.py`; F811 — 6 zduplikowanych testów w `tests/unit/test_acrepd.py`.
+- Mypy nowych testów: adnotacje + ignore w `test_stock.py`.
+
+**Środowisko vm125 (naprawa przy okazji E2E):**
+- Brak `App.Nesting` w Session 0 → root cause: brak sekcji rejestru `HKU\.DEFAULT\SOFTWARE\Hexagon\ALPHACAM\Nesting` + pusty `sheet_database_v2.db`. Fix: `reg copy HKCU→HKU\.DEFAULT` (+backupy w C:\temp), kill Acam + restart usługi; odtworzenie bazy z `sheet_database_v2.db.bak` i ponowne utworzenie MDF_18 (id=2, 2440×1220×18, qty 100) przez COM. Gateway z aktualnym kodem, usługa Running, 1× Acam.
+- Procedura na przyszłość: po zmianach ustawień w GUI — `reg copy HKCU→HKU\.DEFAULT` + kill Acam (samo Stop/Start-Service nie przeładuje rejestru).
+
+**Backlog (pre-existing / świadomie odłożone):**
+- [ ] `mypy tests/` ~72 błędów w starych testach (brak adnotacji) — CI `mypy src/ tests/` jest czerwony pre-existing (src/ czyste).
+- [ ] `.gitignore` zawiera wzorzec `server.py` → ruff pomija `src/alphacam_cli/gateway/server.py` (10× pre-existing TRY300/SIM105 w handlerach `_handler_vba_*`); kandydat na `per-file-ignores`/jawny include.
+- [ ] Rich `Console(stderr=True)` soft-wrapuje długie linie JSON (wszystkie `--json`; workaround `COLUMNS=500`) — systemowy.
+- [ ] `RemoteComError`/`RemoteConnectionError` nie mapowane na `AlphacamComError`/`AlphacamConnectionError` w trybie `--remote` (exit 1 zamiast 3/4; dotyczy wszystkich komend) — `com/manager.py`.
+- [ ] `core/stock.py`: readback po `Store()` poza try (retry → "already exists" przy błędzie odczytu); `AddMaterial` poza wspólnym try/rollbackiem (low).
+- [ ] `docs/gateway.md:263` wiersz `find_drawing_files` oderwany od tabeli; `RemoteApplication.run_query` martwy/dryf (dict vs int); `cli/cdm.py:998` zbędny lokalny `import json` (nit).
 
 ---
 

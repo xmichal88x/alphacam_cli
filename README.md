@@ -817,6 +817,79 @@ alphacam cdm manifest                          # list all manifests (Arkusze/Wyp
 
 **How it works:** the NC root is the `--nc-root` override when given, else the job's `NCFileOutputLocation` (`cdm_db.job_config["nc_output"]`), else `DrawingFileOutputLocation` (`cdm_db.job_config["output_root"]`); the CLI scans it recursively for `*.nc` (depth ≤ 4) and matches files to sheets by name patterns — sheet stem alone, `material_sheet` and `sheet_material` (plus a numeric suffix when `use_name_identifiers`). When names do not match and the sheet/file counts are equal, a positional fallback pairs them in order (`nc_matched_by_order`).
 
+#### `stock`
+
+Sheet database (`App.Nesting.SheetDatabase`) management — the AlphaCAM nesting library where a **material** is a name with thicknesses and sheets (whole sheets + offcuts). This is a standalone block: it only reads/writes the sheet database and never nests, processes jobs, generates NC, or machines. `stock list` additionally returns `operations` and `writable_fields` (sheet/thickness/material) for programmatic callers.
+
+**Subcommands:**
+
+| Subcommand | Description |
+|------------|-------------|
+| `list [--material] [--json]` | List all sheets (whole sheets + offcuts with thickness) in the sheet database, optionally filtered by material name. |
+| `set SHEET_NAME [--qty\|--delta]` | Set a sheet quantity — absolute (`--qty`) or relative (`--delta`); exactly one is required. |
+| `add MATERIAL THICKNESS WIDTH HEIGHT QUANTITY [--name] [--grain]` | Add a whole sheet to an existing material/thickness (`NewSheet` + `WholeSheets.Add` + `Store`). |
+| `delete SHEET_NAME [--force]` | Delete a sheet by name (asks for confirmation unless `--force`). |
+| `offcut-add MATERIAL THICKNESS WIDTH HEIGHT QUANTITY [--name] [--json]` | Attempt to add an offcut; fail-closed — a blocked creation is reported explicitly, never faked as success. |
+| `offcut-delete SHEET_ID [--force] [--json]` | Delete exactly one offcut by its stable database ID. |
+| `material-add NAME THICKNESS [--units mm\|m\|inches\|feet] [--json]` | Create a new material and its (mandatory) first thickness in the sheet database. |
+
+##### `material-add`
+
+Create a new material in the AlphaCAM sheet database (`App.Nesting.SheetDatabase`) and, in the same operation, its first thickness — the thickness is required and cannot be omitted.
+
+**Syntax:**
+
+```bash
+alphacam cdm stock material-add NAME THICKNESS [--units mm|m|inches|feet] [--json]
+```
+
+**Arguments:**
+
+| Argument | Type | Description |
+|----------|------|-------------|
+| `name` | `str` | Material name (required, non-empty; exact-match duplicate check on the stripped name) |
+| `thickness` | `float` | Thickness value (required, must be a positive number) |
+
+**Options:**
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `--units` | `str` | `mm` | Thickness units (`LengthUnits` typelib): `mm`=0, `m`=1, `inches`=2, `feet`=3; case-insensitive; an unknown value (including `cm`) exits with code 2 |
+| `--json` | `flag` | `False` | Output deterministic JSON (sorted keys) |
+
+**Examples:**
+
+```bash
+alphacam cdm stock material-add MDF 18
+alphacam cdm stock material-add HDF 0.75 --units inches
+alphacam --remote --host 100.71.109.69 cdm stock material-add MDF 18 --units mm --json
+```
+
+**Result:** text `OK: added material '<name>' (id=<id>, thickness <value> <units>)`; with `--json`:
+
+```json
+{"id": 6, "material": "MDF", "success": true, "thickness": 18.0, "thickness_id": 12, "thickness_units": 0}
+```
+
+**Exit codes:**
+
+| Code | Meaning |
+|:----:|---------|
+| `0` | Material and its first thickness created |
+| `1` | Result error (duplicate name, validation) or unexpected exception |
+| `2` | Unknown `--units` value (CLI validation) |
+| `3` | Connection error (local mode only — direct COM) |
+| `4` | COM error (local mode only — direct COM; e.g. sheet database unavailable) |
+
+Codes `3`/`4` apply to local mode (direct COM); in `--remote` mode gateway errors are returned as exit 1 with a text message, and server-side validations use `stock: material add requires ...` messages.
+
+**Semantics:**
+
+- **Duplicate:** a material whose stripped name exactly matches (case-sensitive) an existing name is rejected before creation — `{"success": false, "error": "material already exists: <name>"}` — exit 1.
+- **Rollback:** if creating the thickness fails (`NewThickness`/`SetThickness`/`Store`), the just-created material is deleted (`mat.Delete()`) as a best-effort rollback; if deletion itself fails, the material may remain in the library, and the result is `{"success": false, "error": "add thickness failed: ..."}` (exit 1).
+- **Validation errors:** `name is required`, `thickness must be a positive number`, `thickness_units must be an integer 0-3`.
+- **Standalone block:** creates only the material + first thickness. It does not add sheets, process jobs, nest, or generate NC — compose it with other blocks (`stock add`, `cdm process`, ...).
+
 #### `types`
 
 List CDM door types from the VistaDB database (`CDM_DoorTypes`) and existing jobs (merged, deduplicated). Falls back to job types only when the database is unreadable.

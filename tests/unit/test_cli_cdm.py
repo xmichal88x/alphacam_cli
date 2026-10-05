@@ -10,6 +10,7 @@ from unittest.mock import patch
 from typer.testing import CliRunner
 
 from alphacam_cli.cli.common import console
+from alphacam_cli.com.manager import AlphacamComError, AlphacamConnectionError
 from alphacam_cli.main import app
 
 runner = CliRunner()
@@ -152,6 +153,247 @@ def test_stock_offcut_delete_com_error_has_nonzero_exit() -> None:
         result = runner.invoke(app, ["cdm", "stock", "offcut-delete", "123", "--force"])
     assert result.exit_code == 1
     assert "COM failure" in result.stderr
+
+
+def test_stock_material_add_ok_text() -> None:
+    from tests.unit.test_cli import _mock_com
+
+    created = {
+        "success": True,
+        "material": "TEST_MAT",
+        "id": 7,
+        "thickness": 18.0,
+        "thickness_units": 0,
+        "thickness_id": 11,
+    }
+    with (
+        _mock_com(),
+        patch(
+            "alphacam_cli.core.application.Application.stock_material_add",
+            return_value=created,
+        ) as add,
+    ):
+        result = runner.invoke(app, ["cdm", "stock", "material-add", "TEST_MAT", "18"])
+    assert result.exit_code == 0
+    assert "OK:" in result.stderr
+    assert "TEST_MAT" in result.stderr
+    add.assert_called_once_with("TEST_MAT", 18.0, 0)
+
+
+def test_stock_material_add_units_inches() -> None:
+    from tests.unit.test_cli import _mock_com
+
+    created = {"success": True, "material": "TEST_MAT", "thickness_units": 2}
+    with (
+        _mock_com(),
+        patch(
+            "alphacam_cli.core.application.Application.stock_material_add",
+            return_value=created,
+        ) as add,
+    ):
+        result = runner.invoke(
+            app, ["cdm", "stock", "material-add", "TEST_MAT", "0.75", "--units", "inches"]
+        )
+    assert result.exit_code == 0
+    add.assert_called_once_with("TEST_MAT", 0.75, 2)
+
+
+def test_stock_material_add_units_m_case_insensitive() -> None:
+    from tests.unit.test_cli import _mock_com
+
+    created = {"success": True, "material": "TEST_MAT", "thickness_units": 1}
+    with (
+        _mock_com(),
+        patch(
+            "alphacam_cli.core.application.Application.stock_material_add",
+            return_value=created,
+        ) as add,
+    ):
+        result = runner.invoke(
+            app, ["cdm", "stock", "material-add", "TEST_MAT", "1.8", "--units", "M"]
+        )
+    assert result.exit_code == 0
+    add.assert_called_once_with("TEST_MAT", 1.8, 1)
+
+
+def test_stock_material_add_units_feet() -> None:
+    from tests.unit.test_cli import _mock_com
+
+    created = {"success": True, "material": "TEST_MAT", "thickness_units": 3}
+    with (
+        _mock_com(),
+        patch(
+            "alphacam_cli.core.application.Application.stock_material_add",
+            return_value=created,
+        ) as add,
+    ):
+        result = runner.invoke(
+            app, ["cdm", "stock", "material-add", "TEST_MAT", "0.5", "--units", "feet"]
+        )
+    assert result.exit_code == 0
+    add.assert_called_once_with("TEST_MAT", 0.5, 3)
+
+
+def test_stock_material_add_json_success() -> None:
+    from tests.unit.test_cli import _mock_com
+
+    payload = {
+        "success": True,
+        "material": "TEST_MAT",
+        "id": 7,
+        "thickness": 18.0,
+        "thickness_units": 0,
+        "thickness_id": 11,
+    }
+    with (
+        _mock_com(),
+        patch(
+            "alphacam_cli.core.application.Application.stock_material_add",
+            return_value=payload,
+        ) as add,
+    ):
+        result = runner.invoke(app, ["cdm", "stock", "material-add", "TEST_MAT", "18", "--json"])
+    assert result.exit_code == 0
+    data = json.loads(result.stderr)
+    assert data["success"] is True
+    assert data == payload
+    add.assert_called_once_with("TEST_MAT", 18.0, 0)
+
+
+def test_stock_material_add_failure_has_nonzero_exit() -> None:
+    from tests.unit.test_cli import _mock_com
+
+    failure = {"success": False, "error": "material already exists: X"}
+    with (
+        _mock_com(),
+        patch(
+            "alphacam_cli.core.application.Application.stock_material_add",
+            return_value=failure,
+        ) as add,
+    ):
+        result = runner.invoke(app, ["cdm", "stock", "material-add", "TEST_MAT", "18"])
+    assert result.exit_code == 1
+    assert "Error:" in result.stderr
+    assert "material already exists: X" in result.stderr
+    add.assert_called_once_with("TEST_MAT", 18.0, 0)
+
+
+def test_stock_material_add_failure_json_has_nonzero_exit() -> None:
+    from tests.unit.test_cli import _mock_com
+
+    failure = {"success": False, "error": "material already exists: X"}
+    with (
+        _mock_com(),
+        patch(
+            "alphacam_cli.core.application.Application.stock_material_add",
+            return_value=failure,
+        ) as add,
+    ):
+        result = runner.invoke(app, ["cdm", "stock", "material-add", "TEST_MAT", "18", "--json"])
+    assert result.exit_code == 1
+    data = json.loads(result.stderr)
+    assert data["success"] is False
+    assert data["error"] == "material already exists: X"
+    add.assert_called_once_with("TEST_MAT", 18.0, 0)
+
+
+def test_stock_material_add_unknown_units_exit2() -> None:
+    from tests.unit.test_cli import _mock_com
+
+    for units in ("furlongs", "cm"):
+        with (
+            _mock_com(),
+            patch(
+                "alphacam_cli.core.application.Application.stock_material_add",
+            ) as add,
+        ):
+            result = runner.invoke(
+                app, ["cdm", "stock", "material-add", "TEST_MAT", "18", "--units", units]
+            )
+        assert result.exit_code == 2
+        assert "Error:" in result.stderr
+        add.assert_not_called()
+
+
+def test_stock_material_add_thickness_not_a_number_exit2() -> None:
+    from tests.unit.test_cli import _mock_com
+
+    with (
+        _mock_com(),
+        patch(
+            "alphacam_cli.core.application.Application.stock_material_add",
+        ) as add,
+    ):
+        result = runner.invoke(app, ["cdm", "stock", "material-add", "TEST_MAT", "abc"])
+    assert result.exit_code == 2
+    add.assert_not_called()
+
+
+def test_stock_material_add_generic_error_exit1() -> None:
+    from tests.unit.test_cli import _mock_com
+
+    with (
+        _mock_com(),
+        patch(
+            "alphacam_cli.core.application.Application.stock_material_add",
+            side_effect=RuntimeError("boom"),
+        ) as add,
+    ):
+        result = runner.invoke(app, ["cdm", "stock", "material-add", "M", "18"])
+    assert result.exit_code == 1
+    assert "Error:" in result.stderr
+    assert "boom" in result.stderr
+    add.assert_called_once_with("M", 18.0, 0)
+
+
+def test_stock_material_add_com_error_exit4() -> None:
+    from tests.unit.test_cli import _mock_com
+
+    with (
+        _mock_com(),
+        patch(
+            "alphacam_cli.core.application.Application.stock_material_add",
+            side_effect=AlphacamComError("COM failed", hresult=-2147221164),
+        ) as add,
+    ):
+        result = runner.invoke(app, ["cdm", "stock", "material-add", "M", "18"])
+    assert result.exit_code == 4
+    assert "COM Error:" in result.stderr
+    add.assert_called_once_with("M", 18.0, 0)
+
+
+def test_stock_material_add_connection_error_exit3() -> None:
+    from tests.unit.test_cli import _mock_com
+
+    with (
+        _mock_com(),
+        patch(
+            "alphacam_cli.core.application.Application.stock_material_add",
+            side_effect=AlphacamConnectionError("No connection"),
+        ) as add,
+    ):
+        result = runner.invoke(app, ["cdm", "stock", "material-add", "M", "18"])
+    assert result.exit_code == 3
+    assert "Connection Error:" in result.stderr
+    assert "Traceback" not in result.stderr
+    add.assert_called_once_with("M", 18.0, 0)
+
+
+def test_stock_material_add_generic_error_json_exit1() -> None:
+    from tests.unit.test_cli import _mock_com
+
+    with (
+        _mock_com(),
+        patch(
+            "alphacam_cli.core.application.Application.stock_material_add",
+            side_effect=RuntimeError("boom"),
+        ) as add,
+    ):
+        result = runner.invoke(app, ["cdm", "stock", "material-add", "M", "18", "--json"])
+    assert result.exit_code == 1
+    assert "Error:" in result.stderr
+    assert "boom" in result.stderr
+    add.assert_called_once_with("M", 18.0, 0)
 
 
 def test_cdm_create_command_config_material() -> None:
