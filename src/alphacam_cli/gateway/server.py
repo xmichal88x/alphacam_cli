@@ -1033,6 +1033,15 @@ class GatewayServer:
         except Exception as e:
             raise COMError(f"stock: material add failed: {e}") from e
 
+    def _handler_cdm_stock_material_delete(self, params: dict[str, Any]) -> dict[str, Any]:
+        name = params.get("name")
+        if not isinstance(name, str) or not name.strip():
+            raise COMError("stock: material delete requires a non-empty name")
+        try:
+            return _app.stock_material_delete(name)  # type: ignore[no-any-return]
+        except Exception as e:
+            raise COMError(f"stock: material delete failed: {e}") from e
+
     def _handler_cdm_stock_delete(self, params: dict[str, Any]) -> dict[str, Any]:
         try:
             return _app.stock_delete(str(params["sheet_name"]))  # type: ignore[no-any-return]

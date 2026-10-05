@@ -7,6 +7,7 @@
 - CI: publish workflow ✅ lint ✅ typecheck ✅ coverage gate 70% ✅
 - CDM 3 bloki (create/import/process): audyt produkcyjny + 8 fixów + E2E na maszynie ✅
 - Sesja 2026-10-05: `cdm stock material-add` (nowy materiał w bibliotece arkuszy) + fixy pre-existing — pytest **1318 passed, 3 skipped**, ruff/mypy src/ 0, E2E vm125 PASS
+- Sesja 2026-10-05 (2): `cdm stock material-delete` (kaskadowe usunięcie materiału, `--force`) — pytest **1346 passed, 3 skipped**, ruff/mypy src/ 0, E2E vm125 PASS ×2
 
 ---
 
@@ -36,6 +37,25 @@
 - [ ] `RemoteComError`/`RemoteConnectionError` nie mapowane na `AlphacamComError`/`AlphacamConnectionError` w trybie `--remote` (exit 1 zamiast 3/4; dotyczy wszystkich komend) — `com/manager.py`.
 - [ ] `core/stock.py`: readback po `Store()` poza try (retry → "already exists" przy błędzie odczytu); `AddMaterial` poza wspólnym try/rollbackiem (low).
 - [ ] `docs/gateway.md:263` wiersz `find_drawing_files` oderwany od tabeli; `RemoteApplication.run_query` martwy/dryf (dict vs int); `cli/cdm.py:998` zbędny lokalny `import json` (nit).
+
+---
+
+## SESJA 2026-10-05 (2) — `cdm stock material-delete` (kaskadowe usuwanie materiału)
+
+**Probe realny PRZED CLI (vm125, AlphaCAM 2025):** `IDatabaseMaterial.Delete()` jest void, kaskaduje materiał + wszystkie grubości + arkusze, nie rzuca przy sukcesie, ponowne wywołanie jest bezpiecznym no-op, `FindMaterial`/skan po usunięciu zwracają None. Wniosek: nie trzeba `--force` z powodu niepustego materiału (force = pominięcie potwierdzenia, jak w `stock delete`); sukces weryfikowany readbackiem.
+
+**Feature (testy-first, E2E PASS ×2):**
+- `alphacam cdm stock material-delete NAME [--force] [--json]` — kaskadowe usunięcie materiału; bez `--force` prompt `typer.confirm`, odmowa → `Cancelled` exit 0; pusta nazwa nie wywołuje promptu (od razu `name is required`).
+- Warstwy: core `stock_material_delete` (+ helper `_find_material_by_id` do readbacku), `Application.stock_material_delete`, CLI (własny try/except COM 4/3/1, czysty JSON), handler gateway `cdm_stock_material_delete`, client/remote; docs README + docs/gateway.md (warning o nieodwracalnej kaskadzie i o materiałach używanych przez joby CDM).
+- Wynik: `{success, deleted, id, thicknesses, sheets}` (liczniki PRZED usunięciem; sheets = whole + offcuts); błędy: `name is required`, `material not found: X`, `delete material failed: <exc>` / `... readback error: <exc>` / `... X still in database` (ciche niepowodzenie Delete).
+- Weryfikacja: pytest **1346 passed, 3 skipped**; ruff 0; mypy src/ 0; nowe testy mypy-clean; E2E: materiał z grubością i arkuszem usunięty kaskadowo (1 th + 1 sheet), not-found exit 1, potwierdzenia n/y, pusta nazwa bez promptu (anti-hang), pełny cleanup; 17mm/MDF_18 bez zmian.
+- Code review: 0 blokerów; naprawione low: readback w try + po `id` (nie po nazwie), brak promptu dla pustej nazwy, `{"name": True}` w testach handlera, doprecyzowane docs (exit 2, `--json` nie obejmuje wyjątków COM, pre-delete counts, readback, warning o referencjach CDM/nesting).
+
+**Do decyzji/backlog:**
+- [ ] Obcy leftover w bibliotece na vm125: `TEST-PA-MATERIAL-DO-USUNIECIA` (id=7, 18 mm, 0 arkuszy) — kandydat do ręcznego sprzątania przez nowy blok (`material-delete --force`).
+- [ ] Nit: blok try/except COM (4/3/1) + JSON print powielony 3× w `cli/cdm.py` (material-add/material-delete/offcut-add) — kandydat na wspólny helper.
+- [ ] `stock list --json` zwraca surowy newline wewnątrz długich stringów (rich soft-wrap; m.in. `operations.*`) → `json.loads` bez `COLUMNS=500`/`strict=False` pada (pre-existing, wzmianka w poprzedniej sesji).
+- [ ] `cdm stock add` nie ma `--json` (odkryte w E2E; do rozważenia spójność).
 
 ---
 

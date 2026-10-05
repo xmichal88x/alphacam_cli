@@ -8,6 +8,7 @@ from alphacam_cli.core.stock import (
     stock_delete,
     stock_list,
     stock_material_add,
+    stock_material_delete,
     stock_offcut_create,
     stock_offcut_delete,
     stock_set,
@@ -799,4 +800,179 @@ def test_stock_material_add_rollback_failure_keeps_original_error(_mock_ensure: 
     assert result["success"] is False
     assert "store boom" in result["error"]
     assert "delete boom" not in result["error"]
+    mat.Delete.assert_called_once_with()
+
+
+@patch("alphacam_cli.core.stock._ensure_nesting_typelib")
+def test_stock_material_delete_success(_mock_ensure: MagicMock) -> None:
+    app = MagicMock()
+    db = app.Nesting.SheetDatabase
+    db.Materials.Count = 1
+    mat = db.Materials.Item.return_value
+    mat.Name = "MDF_18"
+    mat.Id = 2
+    mat.Thicknesses.Count = 1
+    mat.WholeSheets.Count = 1
+    mat.Offcuts.Count = 0
+
+    def _delete_side_effect() -> None:
+        db.Materials.Count = 0
+
+    mat.Delete.side_effect = _delete_side_effect
+
+    result = stock_material_delete(app, "  MDF_18  ")
+
+    assert result == {
+        "success": True,
+        "deleted": "MDF_18",
+        "id": 2,
+        "thicknesses": 1,
+        "sheets": 1,
+    }
+    _mock_ensure.assert_called_once_with()
+    mat.Delete.assert_called_once_with()
+
+
+@patch("alphacam_cli.core.stock._ensure_nesting_typelib")
+def test_stock_material_delete_counts_offcuts(_mock_ensure: MagicMock) -> None:
+    app = MagicMock()
+    db = app.Nesting.SheetDatabase
+    db.Materials.Count = 1
+    mat = db.Materials.Item.return_value
+    mat.Name = "MDF_18"
+    mat.Id = 5
+    mat.Thicknesses.Count = 3
+    mat.WholeSheets.Count = 0
+    mat.Offcuts.Count = 2
+
+    def _delete_side_effect() -> None:
+        db.Materials.Count = 0
+
+    mat.Delete.side_effect = _delete_side_effect
+
+    result = stock_material_delete(app, "MDF_18")
+
+    assert result["success"] is True
+    assert result["sheets"] == 2
+    assert result["thicknesses"] == 3
+    mat.Delete.assert_called_once_with()
+
+
+@patch("alphacam_cli.core.stock._ensure_nesting_typelib")
+def test_stock_material_delete_not_found(_mock_ensure: MagicMock) -> None:
+    app = MagicMock()
+    db = app.Nesting.SheetDatabase
+    db.Materials.Count = 1
+    db.Materials.Item.return_value.Name = "INNY"
+
+    result = stock_material_delete(app, "NONEXISTENT")
+
+    assert result["success"] is False
+    assert result["error"] == "material not found: NONEXISTENT"
+    db.Materials.Item.return_value.Delete.assert_not_called()
+
+
+@patch("alphacam_cli.core.stock._ensure_nesting_typelib")
+def test_stock_material_delete_invalid_name(_mock_ensure: MagicMock) -> None:
+    app = MagicMock()
+
+    for name in ("", "   ", None, 123):
+        result = stock_material_delete(app, name)  # type: ignore[arg-type]
+        assert result["success"] is False
+        assert result["error"] == "name is required"
+
+    _mock_ensure.assert_not_called()
+    app.Nesting.SheetDatabase.assert_not_called()
+
+
+@patch("alphacam_cli.core.stock._ensure_nesting_typelib")
+def test_stock_material_delete_com_failure(_mock_ensure: MagicMock) -> None:
+    app = MagicMock()
+    db = app.Nesting.SheetDatabase
+    db.Materials.Count = 1
+    mat = db.Materials.Item.return_value
+    mat.Name = "MDF_18"
+    mat.Id = 2
+    mat.Thicknesses.Count = 1
+    mat.WholeSheets.Count = 1
+    mat.Offcuts.Count = 0
+    mat.Delete.side_effect = RuntimeError("COM boom")
+
+    result = stock_material_delete(app, "MDF_18")
+
+    assert result["success"] is False
+    assert result["error"].startswith("delete material failed")
+    assert "COM boom" in result["error"]
+
+
+@patch("alphacam_cli.core.stock._ensure_nesting_typelib")
+def test_stock_material_delete_silent_failure(_mock_ensure: MagicMock) -> None:
+    app = MagicMock()
+    db = app.Nesting.SheetDatabase
+    db.Materials.Count = 1
+    mat = db.Materials.Item.return_value
+    mat.Name = "MDF_18"
+    mat.Id = 2
+    mat.Thicknesses.Count = 1
+    mat.WholeSheets.Count = 1
+    mat.Offcuts.Count = 0
+
+    result = stock_material_delete(app, "MDF_18")
+
+    assert result["success"] is False
+    assert "still in database" in result["error"]
+    mat.Delete.assert_called_once_with()
+
+
+@patch("alphacam_cli.core.stock._ensure_nesting_typelib")
+def test_stock_material_delete_readback_failure(_mock_ensure: MagicMock) -> None:
+    app = MagicMock()
+    db = app.Nesting.SheetDatabase
+    db.Materials.Count = 1
+    mat = db.Materials.Item.return_value
+    mat.Name = "MDF_18"
+    mat.Id = 2
+    mat.Thicknesses.Count = 1
+    mat.WholeSheets.Count = 1
+    mat.Offcuts.Count = 0
+
+    def _delete_side_effect() -> None:
+        db.Materials.Count = 1
+        db.Materials.Item.side_effect = RuntimeError("readback boom")
+
+    mat.Delete.side_effect = _delete_side_effect
+
+    result = stock_material_delete(app, "MDF_18")
+
+    assert result["success"] is False
+    assert result["error"].startswith("delete material failed")
+    assert "readback boom" in result["error"]
+
+
+@patch("alphacam_cli.core.stock._ensure_nesting_typelib")
+def test_stock_material_delete_readback_uses_id(_mock_ensure: MagicMock) -> None:
+    app = MagicMock()
+    db = app.Nesting.SheetDatabase
+    db.Materials.Count = 1
+    mat = db.Materials.Item.return_value
+    mat.Name = "MDF_18"
+    mat.Id = 2
+    mat.Thicknesses.Count = 1
+    mat.WholeSheets.Count = 1
+    mat.Offcuts.Count = 0
+
+    duplicate = MagicMock()
+    duplicate.Name = "MDF_18"
+    duplicate.Id = 99
+
+    def _delete_side_effect() -> None:
+        db.Materials.Item.return_value = duplicate
+
+    mat.Delete.side_effect = _delete_side_effect
+
+    result = stock_material_delete(app, "MDF_18")
+
+    assert result["success"] is True
+    assert result["deleted"] == "MDF_18"
+    assert result["id"] == 2
     mat.Delete.assert_called_once_with()

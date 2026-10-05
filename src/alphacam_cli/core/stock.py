@@ -89,6 +89,9 @@ OPERATIONS = {
     ),
     "stock_add": "add new sheet to database (via thickness.NewSheet + WholeSheets.Add + Store)",
     "stock_material_add": "add material with its first thickness to the sheet database",
+    "stock_material_delete": (
+        "delete a material with all its thicknesses and sheets from the sheet database"
+    ),
     "stock_offcut_create": "blocked until a real ISheetPaths source is proven",
     "stock_delete": "delete sheet from database (via sheet.Delete)",
 }
@@ -305,6 +308,17 @@ def _find_material_by_name(db: Any, material_name: str) -> Any | None:
     return None
 
 
+def _find_material_by_id(db: Any, material_id: int) -> Any | None:
+    for i in range(1, int(db.Materials.Count) + 1):
+        material = db.Materials.Item(i)
+        try:
+            if int(material.Id) == material_id:
+                return material
+        except Exception:
+            continue
+    return None
+
+
 def _find_thickness(material: Any, thickness: float) -> Any | None:
     for i in range(1, int(material.Thicknesses.Count) + 1):
         candidate = material.Thicknesses.Item(i)
@@ -365,6 +379,40 @@ def stock_material_add(
         "thickness": float(th.Thickness),
         "thickness_units": int(th.ThicknessUnits),
         "thickness_id": int(th.Id),
+    }
+
+
+def stock_material_delete(app: Any, name: str) -> dict[str, Any]:
+    if not isinstance(name, str) or not name.strip():
+        return {"success": False, "error": "name is required"}
+    clean_name = name.strip()
+    _ensure_nesting_typelib()
+    db = _get_sheet_database(app)
+    mat = _find_material_by_name(db, clean_name)
+    if mat is None:
+        return {"success": False, "error": f"material not found: {clean_name}"}
+    mat_id = int(mat.Id)
+    thicknesses = int(mat.Thicknesses.Count)
+    sheets = int(mat.WholeSheets.Count) + int(mat.Offcuts.Count)
+    try:
+        mat.Delete()
+    except Exception as exc:
+        return {"success": False, "error": f"delete material failed: {exc}"}
+    try:
+        survived = _find_material_by_id(db, mat_id)
+    except Exception as exc:
+        return {"success": False, "error": f"delete material failed: readback error: {exc}"}
+    if survived is not None:
+        return {
+            "success": False,
+            "error": f"delete material failed: {clean_name} still in database",
+        }
+    return {
+        "success": True,
+        "deleted": clean_name,
+        "id": mat_id,
+        "thicknesses": thicknesses,
+        "sheets": sheets,
     }
 
 

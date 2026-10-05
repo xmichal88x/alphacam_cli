@@ -1493,6 +1493,11 @@ class Application:
 
         return stock_material_add(self._app, name, thickness, thickness_units)
 
+    def stock_material_delete(self, name: str) -> dict[str, Any]:
+        from alphacam_cli.core.stock import stock_material_delete
+
+        return stock_material_delete(self._app, name)
+
     def stock_offcut_create(
         self,
         material_name: str,

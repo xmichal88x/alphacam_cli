@@ -243,6 +243,7 @@ The gateway uses **JSON-RPC 2.0** over TCP with length-prefixed frames.
 | `cdm_stock_offcut_create` | `material_name, thickness, width, height, quantity, name?` | `{success, status, error/reason?, sheet_id?}`; `status: "blocked"` is an explicit failed result |
 | `cdm_stock_offcut_delete` | `sheet_id` (positive stable integer ID only) | `{success, status, sheet_id, error?}` |
 | `cdm_stock_material_add` | `name, thickness, thickness_units? (int 0-3: 0=mm, 1=m, 2=inch, 3=ft; default 0)` | `{success: true, material, id, thickness, thickness_units, thickness_id}` or `{success: false, error}` |
+| `cdm_stock_material_delete` | `name` | `{success: true, deleted, id, thicknesses, sheets}` or `{success: false, error}` |
 
 Offcut operations are atomic standalone stock operations. They do not perform nesting,
 NC generation, machining, or any other end-to-end flow. Creation remains fail-closed
@@ -256,6 +257,15 @@ name` / `... a positive thickness` / `... thickness_units 0-3`), a duplicate nam
 `{success: false, error: "material already exists: <name>"}`, and a failed thickness
 creation rolls the material back best-effort (deletion failure is suppressed; `add thickness
 failed: ...`), so in the worst case a material without a thickness may remain.
+
+`cdm_stock_material_delete` is likewise a standalone stock block: it irreversibly
+deletes one material with all its thicknesses and sheets in a single cascade
+(`mat.Delete()`), nothing else. Invalid params raise `COMError` (`stock: material delete
+requires a non-empty name`), a missing material returns `{success: false, error: "material
+not found: <name>"}`, and a COM failure raises `stock: material delete failed: <e>`.
+`thicknesses` and `sheets` are counted before deletion (`sheets` = whole sheets + offcuts);
+after `Delete()` the core verifies by `id` that the material is gone, returning `{success:
+false, error: "delete material failed: <name> still in database"}` on a silent failure.
 
 > `process_cdm_job` is synchronous and may run long (geometry + toolpaths + nesting). The client automatically extends the socket timeout for the duration of the call to `max(self.timeout, timeout_seconds + 30)` and restores it in `finally` — no manual timeout adjustment is needed. The gateway serves one request at a time: `process_cdm_job` blocks the only STA thread for its whole duration, so other requests wait until it finishes. The only execution method is `inproc`: the macro `ApplyMachiningAfterNesting.Events.HeadlessProcess` runs in-proc on the gateway's held COM reference (Session 0) — the legacy VBScript/PsExec path was removed. `process_cdm_job` must be invoked on the gateway's STA thread like all handlers (`_com_call`) — otherwise COM raises `RPC_E_WRONG_THREAD`.
 >

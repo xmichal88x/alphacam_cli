@@ -183,6 +183,39 @@ def test_material_add_handler_wraps_com_error(server_app: MagicMock) -> None:
         GatewayServer()._handler_cdm_stock_material_add({"name": "MDF", "thickness": 18})
 
 
+def test_material_delete_handler_returns_result_and_delegates(server_app: MagicMock) -> None:
+    expected = {"success": True, "deleted": "MDF_18", "id": 2, "thicknesses": 1, "sheets": 1}
+    server_app.stock_material_delete.return_value = expected
+    result = GatewayServer()._handler_cdm_stock_material_delete({"name": "MDF_18"})
+    assert result == expected
+    server_app.stock_material_delete.assert_called_once_with("MDF_18")
+
+
+@pytest.mark.parametrize(
+    "params",
+    [
+        {},
+        {"name": ""},
+        {"name": "   "},
+        {"name": 123},
+        {"name": None},
+        {"name": True},
+    ],
+)
+def test_material_delete_handler_rejects_bad_name(
+    server_app: MagicMock, params: dict[str, Any]
+) -> None:
+    with pytest.raises(COMError, match="stock: material delete requires a non-empty name"):
+        GatewayServer()._handler_cdm_stock_material_delete(params)
+    server_app.stock_material_delete.assert_not_called()
+
+
+def test_material_delete_handler_wraps_com_error(server_app: MagicMock) -> None:
+    server_app.stock_material_delete.side_effect = RuntimeError("COM failure")
+    with pytest.raises(COMError, match="stock: material delete failed: COM failure"):
+        GatewayServer()._handler_cdm_stock_material_delete({"name": "MDF"})
+
+
 def test_apply_style_handler_no_geometries(server_app: MagicMock) -> None:
     drw = MagicMock()
     drw.geometries_count = 0

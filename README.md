@@ -832,6 +832,7 @@ Sheet database (`App.Nesting.SheetDatabase`) management — the AlphaCAM nesting
 | `offcut-add MATERIAL THICKNESS WIDTH HEIGHT QUANTITY [--name] [--json]` | Attempt to add an offcut; fail-closed — a blocked creation is reported explicitly, never faked as success. |
 | `offcut-delete SHEET_ID [--force] [--json]` | Delete exactly one offcut by its stable database ID. |
 | `material-add NAME THICKNESS [--units mm\|m\|inches\|feet] [--json]` | Create a new material and its (mandatory) first thickness in the sheet database. |
+| `material-delete NAME [--force] [--json]` | Delete a material together with all its thicknesses and sheets (cascade; asks for confirmation unless `--force`). |
 
 ##### `material-add`
 
@@ -889,6 +890,66 @@ Codes `3`/`4` apply to local mode (direct COM); in `--remote` mode gateway error
 - **Rollback:** if creating the thickness fails (`NewThickness`/`SetThickness`/`Store`), the just-created material is deleted (`mat.Delete()`) as a best-effort rollback; if deletion itself fails, the material may remain in the library, and the result is `{"success": false, "error": "add thickness failed: ..."}` (exit 1).
 - **Validation errors:** `name is required`, `thickness must be a positive number`, `thickness_units must be an integer 0-3`.
 - **Standalone block:** creates only the material + first thickness. It does not add sheets, process jobs, nest, or generate NC — compose it with other blocks (`stock add`, `cdm process`, ...).
+
+##### `material-delete`
+
+Delete a material from the AlphaCAM sheet database (`App.Nesting.SheetDatabase`) together with **all** its thicknesses and sheets, in a single operation (`mat.Delete()` cascades).
+
+> **Warning — irreversible cascade:** deleting a material also deletes every thickness and every sheet (whole sheets + offcuts) that belongs to it. There is no undo and no `--dry-run`. Use `stock list --material NAME --json` first (offcuts and per-thickness details are only in the JSON output). Deleting a material still used by existing CDM/nesting jobs may corrupt those jobs — references are not checked.
+
+**Syntax:**
+
+```bash
+alphacam cdm stock material-delete NAME [--force] [--json]
+```
+
+**Arguments:**
+
+| Argument | Type | Description |
+|----------|------|-------------|
+| `name` | `str` | Material name (required, non-empty; exact-match, case-sensitive lookup on the stripped name) |
+
+**Options:**
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `--force` | `flag` | `False` | Skip the interactive confirmation prompt (required in automation/non-interactive shells) |
+| `--json` | `flag` | `False` | Output deterministic JSON (sorted keys) on stderr; covers block results only — COM/connection exceptions print plain text (`COM Error:`/`Connection Error:`), not JSON (same as `material-add`) |
+
+**Examples:**
+
+```bash
+alphacam cdm stock material-delete MDF                 # asks for confirmation
+alphacam cdm stock material-delete MDF --force         # no prompt (automation)
+alphacam --remote --host 100.71.109.69 cdm stock material-delete MDF --force --json
+```
+
+**Result:** text `OK: deleted material '<name>' (id=<id>, thicknesses=<n>, sheets=<n>)`; with `--json`:
+
+```json
+{"deleted": "MDF", "id": 6, "sheets": 3, "success": true, "thicknesses": 2}
+```
+
+`thicknesses` and `sheets` are counted **before** deletion; `sheets` = whole sheets + offcuts removed together with the material.
+
+**Exit codes:**
+
+| Code | Meaning |
+|:----:|---------|
+| `0` | Material deleted, or the confirmation was declined (`Cancelled`, database untouched) |
+| `1` | Result error (`material not found: <name>`, `name is required`, `delete material failed: ...`) or unexpected exception |
+| `2` | Missing NAME argument (Typer usage error) |
+| `3` | Connection error (local mode only — direct COM) |
+| `4` | COM error (local mode only — direct COM; e.g. sheet database unavailable) |
+
+Codes `3`/`4` apply to local mode (direct COM); in `--remote` mode gateway errors are returned as exit 1 with a text message, and server-side validation uses `stock: material delete requires a non-empty name`.
+
+**Semantics:**
+
+- **Cascade delete:** `mat.Delete()` removes the material and all dependent thicknesses and sheets. On failure the result is `{"success": false, "error": "delete material failed: ..."}` (exit 1); the core also re-checks the database and reports `delete material failed: <name> still in database` if the material survived.
+- **Cancel:** without `--force`, declining the `typer.confirm` prompt prints `Cancelled` and exits 0 without touching the database.
+- **Validation errors:** `name is required`, `material not found: <name>` (both exit 1).
+- **Standalone block:** deletes only from the sheet database. It does not nest, process jobs, generate NC, or machine — compose it with other blocks.
 
 #### `types`
 

@@ -117,6 +117,33 @@ def test_remote_session_stock_material_add_sends_params() -> None:
     )
 
 
+def test_remote_stock_material_delete_delegates() -> None:
+    session = MagicMock()
+    session.cdm_stock_material_delete.return_value = {
+        "success": True,
+        "deleted": "MDF_18",
+        "id": 2,
+        "thicknesses": 1,
+        "sheets": 1,
+    }
+    app = RemoteApplication(session)
+    assert app.stock_material_delete("MDF_18") == {
+        "success": True,
+        "deleted": "MDF_18",
+        "id": 2,
+        "thicknesses": 1,
+        "sheets": 1,
+    }
+    session.cdm_stock_material_delete.assert_called_once_with(name="MDF_18")
+
+
+def test_remote_session_stock_material_delete_sends_params() -> None:
+    session = RemoteSession()
+    session._call = MagicMock(return_value={"success": True, "deleted": "MDF_18"})  # type: ignore[method-assign]
+    session.cdm_stock_material_delete("MDF_18")
+    session._call.assert_called_once_with("cdm_stock_material_delete", {"name": "MDF_18"})
+
+
 def test_remote_new_drawing_defaults() -> None:
     session = MagicMock()
     session.new_drawing.return_value = {"geometries_count": 0}

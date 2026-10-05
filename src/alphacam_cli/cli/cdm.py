@@ -1197,6 +1197,52 @@ def stock_material_add_cmd(
         raise typer.Exit(code=1)
 
 
+@stock_app.command("material-delete")
+def stock_material_delete_cmd(
+    name: str = typer.Argument(..., help="Material name"),
+    force: bool = typer.Option(False, "--force", help="Skip confirmation"),
+    json_output: bool = typer.Option(False, "--json", help="Output deterministic JSON"),
+) -> None:
+    """Delete a material and all its thicknesses and sheets from the database."""
+    require_platform()
+    if (
+        not force
+        and name.strip()
+        and not typer.confirm(f"Delete material '{name}' and all its thicknesses and sheets?")
+    ):
+        console.print("[yellow]Cancelled[/yellow]")
+        raise typer.Exit()
+    try:
+        with alphacam_context(visible=get_visible()) as raw:
+            ac = resolve_app(raw)
+            result = ac.stock_material_delete(name)
+    except AlphacamComError as e:
+        console.print(f"[red]COM Error:[/red] {e}")
+        if e.hresult:
+            console.print(f"      HRESULT: [yellow]0x{e.hresult:08X}[/yellow]")
+        console.print("      [dim]Try restarting AlphaCAM or check the connection.[/dim]")
+        raise typer.Exit(code=4) from e
+    except AlphacamConnectionError as e:
+        console.print(f"[red]Connection Error:[/red] {e}")
+        console.print("      [dim]Make sure AlphaCAM is installed and licensed.[/dim]")
+        raise typer.Exit(code=3) from e
+    except Exception as e:
+        console.print(f"[red]Error:[/red] {e}")
+        raise typer.Exit(code=1) from e
+    if json_output:
+        console.print(json.dumps(result, indent=2, sort_keys=True))
+    elif result.get("success"):
+        console.print(
+            f"[green]OK:[/green] deleted material '{result.get('deleted', name)}' "
+            f"(id={result.get('id')}, thicknesses={result.get('thicknesses')}, "
+            f"sheets={result.get('sheets')})"
+        )
+    else:
+        console.print(f"[red]Error:[/red] {result.get('error')}")
+    if not result.get("success"):
+        raise typer.Exit(code=1)
+
+
 config_app = typer.Typer(help="CDM job configurations")
 
 

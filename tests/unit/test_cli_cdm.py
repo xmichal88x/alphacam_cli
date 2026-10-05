@@ -396,6 +396,181 @@ def test_stock_material_add_generic_error_json_exit1() -> None:
     add.assert_called_once_with("M", 18.0, 0)
 
 
+def test_stock_material_delete_force_ok_text() -> None:
+    from tests.unit.test_cli import _mock_com
+
+    deleted = {"success": True, "deleted": "MDF_18", "id": 2, "thicknesses": 1, "sheets": 1}
+    with (
+        _mock_com(),
+        patch(
+            "alphacam_cli.core.application.Application.stock_material_delete",
+            return_value=deleted,
+        ) as delete,
+    ):
+        result = runner.invoke(app, ["cdm", "stock", "material-delete", "MDF_18", "--force"])
+    assert result.exit_code == 0
+    assert "OK:" in result.stderr
+    assert "MDF_18" in result.stderr
+    delete.assert_called_once_with("MDF_18")
+
+
+def test_stock_material_delete_json_success() -> None:
+    from tests.unit.test_cli import _mock_com
+
+    deleted = {"success": True, "deleted": "MDF_18", "id": 2, "thicknesses": 1, "sheets": 1}
+    with (
+        _mock_com(),
+        patch(
+            "alphacam_cli.core.application.Application.stock_material_delete",
+            return_value=deleted,
+        ) as delete,
+    ):
+        result = runner.invoke(
+            app, ["cdm", "stock", "material-delete", "MDF_18", "--force", "--json"]
+        )
+    assert result.exit_code == 0
+    data = json.loads(result.stderr)
+    assert data["success"] is True
+    assert data == deleted
+    delete.assert_called_once_with("MDF_18")
+
+
+def test_stock_material_delete_confirmation_declined() -> None:
+    from tests.unit.test_cli import _mock_com
+
+    with (
+        _mock_com(),
+        patch(
+            "alphacam_cli.core.application.Application.stock_material_delete",
+        ) as delete,
+    ):
+        result = runner.invoke(app, ["cdm", "stock", "material-delete", "MDF_18"], input="n\n")
+    assert result.exit_code == 0
+    assert "Cancelled" in result.stderr
+    delete.assert_not_called()
+
+
+def test_stock_material_delete_blank_name_skips_confirmation() -> None:
+    from tests.unit.test_cli import _mock_com
+
+    with (
+        _mock_com(),
+        patch(
+            "alphacam_cli.core.application.Application.stock_material_delete",
+            return_value={"success": False, "error": "name is required"},
+        ) as delete,
+    ):
+        result = runner.invoke(app, ["cdm", "stock", "material-delete", "   "])
+    assert result.exit_code == 1
+    assert "name is required" in result.stderr
+    delete.assert_called_once_with("   ")
+    assert "Cancelled" not in result.stderr
+
+
+def test_stock_material_delete_confirmation_accepted() -> None:
+    from tests.unit.test_cli import _mock_com
+
+    deleted = {"success": True, "deleted": "MDF_18", "id": 2, "thicknesses": 1, "sheets": 1}
+    with (
+        _mock_com(),
+        patch(
+            "alphacam_cli.core.application.Application.stock_material_delete",
+            return_value=deleted,
+        ) as delete,
+    ):
+        result = runner.invoke(app, ["cdm", "stock", "material-delete", "MDF_18"], input="y\n")
+    assert result.exit_code == 0
+    assert "OK:" in result.stderr
+    delete.assert_called_once_with("MDF_18")
+
+
+def test_stock_material_delete_failure_exit1() -> None:
+    from tests.unit.test_cli import _mock_com
+
+    failure = {"success": False, "error": "material not found: X"}
+    with (
+        _mock_com(),
+        patch(
+            "alphacam_cli.core.application.Application.stock_material_delete",
+            return_value=failure,
+        ) as delete,
+    ):
+        result = runner.invoke(app, ["cdm", "stock", "material-delete", "X", "--force"])
+    assert result.exit_code == 1
+    assert "Error:" in result.stderr
+    assert "material not found: X" in result.stderr
+    delete.assert_called_once_with("X")
+
+
+def test_stock_material_delete_failure_json_exit1() -> None:
+    from tests.unit.test_cli import _mock_com
+
+    failure = {"success": False, "error": "material not found: X"}
+    with (
+        _mock_com(),
+        patch(
+            "alphacam_cli.core.application.Application.stock_material_delete",
+            return_value=failure,
+        ) as delete,
+    ):
+        result = runner.invoke(app, ["cdm", "stock", "material-delete", "X", "--force", "--json"])
+    assert result.exit_code == 1
+    data = json.loads(result.stderr)
+    assert data["success"] is False
+    assert data["error"] == "material not found: X"
+    delete.assert_called_once_with("X")
+
+
+def test_stock_material_delete_generic_error_exit1() -> None:
+    from tests.unit.test_cli import _mock_com
+
+    with (
+        _mock_com(),
+        patch(
+            "alphacam_cli.core.application.Application.stock_material_delete",
+            side_effect=RuntimeError("boom"),
+        ) as delete,
+    ):
+        result = runner.invoke(app, ["cdm", "stock", "material-delete", "MDF_18", "--force"])
+    assert result.exit_code == 1
+    assert "Error:" in result.stderr
+    assert "boom" in result.stderr
+    delete.assert_called_once_with("MDF_18")
+
+
+def test_stock_material_delete_com_error_exit4() -> None:
+    from tests.unit.test_cli import _mock_com
+
+    with (
+        _mock_com(),
+        patch(
+            "alphacam_cli.core.application.Application.stock_material_delete",
+            side_effect=AlphacamComError("COM failed", hresult=-2147221164),
+        ) as delete,
+    ):
+        result = runner.invoke(app, ["cdm", "stock", "material-delete", "MDF_18", "--force"])
+    assert result.exit_code == 4
+    assert "COM Error:" in result.stderr
+    delete.assert_called_once_with("MDF_18")
+
+
+def test_stock_material_delete_connection_error_exit3() -> None:
+    from tests.unit.test_cli import _mock_com
+
+    with (
+        _mock_com(),
+        patch(
+            "alphacam_cli.core.application.Application.stock_material_delete",
+            side_effect=AlphacamConnectionError("No connection"),
+        ) as delete,
+    ):
+        result = runner.invoke(app, ["cdm", "stock", "material-delete", "MDF_18", "--force"])
+    assert result.exit_code == 3
+    assert "Connection Error:" in result.stderr
+    assert "Traceback" not in result.stderr
+    delete.assert_called_once_with("MDF_18")
+
+
 def test_cdm_create_command_config_material() -> None:
     from tests.unit.test_cli import _mock_com
 

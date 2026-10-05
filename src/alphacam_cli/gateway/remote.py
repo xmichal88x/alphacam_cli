@@ -391,6 +391,11 @@ class RemoteApplication:
             name=name, thickness=thickness, thickness_units=thickness_units
         )
 
+    def stock_material_delete(self, name: str) -> dict[str, Any]:
+        return self._session.cdm_stock_material_delete(  # type: ignore[no-any-return]
+            name=name
+        )
+
     def stock_delete(self, sheet_name: str) -> dict[str, Any]:
         return self._session.cdm_stock_delete(sheet_name)  # type: ignore[no-any-return]
 
