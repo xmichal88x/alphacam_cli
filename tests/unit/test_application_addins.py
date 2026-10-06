@@ -1553,6 +1553,25 @@ def test_manifest_read_by_token_aggregates_entries(monkeypatch: pytest.MonkeyPat
     assert by_token[1]["csv_order_number"] == "Z-002"
 
 
+def test_manifest_read_returns_material_thickness_fallback(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    manifest = _manifest_with_tokens([("Arkusz A1", [_token_cdm_part("CusPO 002_Typ 1_1", "ABC")])])
+    manifest["job"] = {"material": "MDF_18", "thickness": 18.0}
+    manifest["material"] = "MDF_18"
+    manifest["thickness"] = 18.0
+    _manifest_read_env(monkeypatch, manifest)
+
+    ac = Application(MagicMock())
+    result = ac.manifest_read("CusPO 002", by_token=True, validate=True)
+
+    assert result["manifest"]["job"]["material"] == "MDF_18"
+    assert result["manifest"]["job"]["thickness"] == 18.0
+    assert result["manifest"]["material"] == "MDF_18"
+    assert result["manifest"]["thickness"] == 18.0
+    assert result["validation"]["valid"] is True
+
+
 def test_manifest_read_validate_with_token_qty(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

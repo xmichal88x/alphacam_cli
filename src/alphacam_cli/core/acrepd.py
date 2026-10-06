@@ -396,6 +396,73 @@ def _compute_utilization(sheet: dict[str, Any]) -> None:
     sheet["utilization"] = max(0, min(100, round(parts_area / sheet_area * 100)))
 
 
+_MATERIAL_SENTINELS = ("nie można odnaleźć", "nie mozna odnalezc")
+
+
+def _is_missing_material(value: Any) -> bool:
+    """True when a material name is absent/blank or an Automation Manager error sentinel."""
+    if value is None:
+        return True
+    if not isinstance(value, str) or not value.strip():
+        return True
+    folded = value.lower()
+    return any(sentinel in folded for sentinel in _MATERIAL_SENTINELS)
+
+
+def _first_sheet_value(sheets: list[dict[str, Any]], key: str) -> str | None:
+    """Return the first non-blank string value of ``key`` across sheets."""
+    for sheet in sheets:
+        value = sheet.get(key)
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    return None
+
+
+def _sheet_thickness(sheets: list[dict[str, Any]]) -> float | None:
+    """Return the common sheet thickness; None when absent or conflicting."""
+    values = {
+        float(sheet["thickness"])
+        for sheet in sheets
+        if isinstance(sheet.get("thickness"), (int, float))
+        and not isinstance(sheet.get("thickness"), bool)
+    }
+    if not values:
+        return None
+    if len(values) > 1:
+        logger.warning(
+            "acrepd: arkusze maja rozne grubosci %r — nie ustawiam job.thickness",
+            sorted(values),
+        )
+        return None
+    return values.pop()
+
+
+def _apply_job_fallback(
+    job: dict[str, Any],
+    sheets: list[dict[str, Any]],
+    manifest_material: str | None,
+) -> tuple[str | None, float | None]:
+    """Fill job material/thickness from sheet rows; return top-level (material, thickness).
+
+    Automation Manager sometimes fails the material DB lookup and stores the
+    error text (sentinel, e.g. "Nie można odnaleźć materiału...") in
+    ``JobMaterial_AutomationManager``; the sheet rows still carry the real
+    values in ``SheetDatabaseName``/``SheetThickness``. The production consumer
+    (production-automation) builds warehouse refs
+    ``ARK-<material>-<thickness:g>-<W>x<H>`` from ``job.material`` and the
+    top-level ``thickness``, so a sentinel/None there breaks stock reservation.
+    """
+    if _is_missing_material(job.get("material")):
+        job["material"] = _first_sheet_value(sheets, "database_name") or _first_sheet_value(
+            sheets, "name"
+        )
+    job["thickness"] = _sheet_thickness(sheets)
+    material = manifest_material
+    if _is_missing_material(material):
+        material = job.get("material")
+    return material, job["thickness"]
+
+
 def parse_manifest(path: str) -> dict[str, Any]:
     """Parse an .acrepd nesting results manifest (VistaDB DataSet XML)."""
     size = os.path.getsize(path)
@@ -458,9 +525,12 @@ def parse_manifest(path: str) -> dict[str, Any]:
     for sheet in sheets:
         _compute_utilization(sheet)
 
+    material, thickness = _apply_job_fallback(job, sheets, material)
+
     return {
         "job_name": job_name,
         "material": material,
+        "thickness": thickness,
         "job": job,
         "drawings": drawings,
         "sheets": sheets,

@@ -466,6 +466,114 @@ def test_parse_manifest_full(manifest_file: pathlib.Path) -> None:
     assert p3["csv_item_number"] == "I-3"
 
 
+_SENTINEL_MATERIAL = "Nie można odnaleźć materiału w bazie danych materiałów"
+
+
+def _write_minimal_manifest(tmp_path: pathlib.Path, filename: str, rows: str) -> pathlib.Path:
+    path = tmp_path / filename
+    path.write_text(
+        f'<?xml version="1.0" encoding="utf-8"?>\n<NewDataSet>\n{rows}\n</NewDataSet>\n',
+        encoding="utf-8",
+    )
+    return path
+
+
+def test_parse_manifest_material_thickness_fallback(tmp_path: pathlib.Path) -> None:
+    rows = f"""\
+  <AC_02_JOB>
+    <JobName>Fronty</JobName>
+    <JobMaterial_AutomationManager>{_SENTINEL_MATERIAL}</JobMaterial_AutomationManager>
+  </AC_02_JOB>
+  <AC_04_SHEETS>
+    <SheetID>1</SheetID>
+    <SheetName>Arkusz A1</SheetName>
+    <SheetDatabaseName>MDF_18</SheetDatabaseName>
+    <SheetThickness>18</SheetThickness>
+  </AC_04_SHEETS>
+  <AC_04_SHEETS>
+    <SheetID>2</SheetID>
+    <SheetName>Arkusz A2</SheetName>
+    <SheetDatabaseName>MDF_18</SheetDatabaseName>
+    <SheetThickness>18</SheetThickness>
+  </AC_04_SHEETS>
+"""
+    path = _write_minimal_manifest(tmp_path, f"Fronty - {_SENTINEL_MATERIAL}.acrepd", rows)
+
+    manifest = acrepd.parse_manifest(str(path))
+
+    assert manifest["job"]["material"] == "MDF_18"
+    assert manifest["job"]["thickness"] == 18.0
+    assert manifest["material"] == "MDF_18"
+    assert manifest["thickness"] == 18.0
+
+
+def test_parse_manifest_valid_job_material_not_overwritten(tmp_path: pathlib.Path) -> None:
+    rows = """\
+  <AC_02_JOB>
+    <JobName>Fronty</JobName>
+    <JobMaterial_AutomationManager>MDF_18</JobMaterial_AutomationManager>
+  </AC_02_JOB>
+  <AC_04_SHEETS>
+    <SheetID>1</SheetID>
+    <SheetName>Arkusz A1</SheetName>
+    <SheetDatabaseName>INNY_MATERIAL</SheetDatabaseName>
+    <SheetThickness>18</SheetThickness>
+  </AC_04_SHEETS>
+"""
+    path = _write_minimal_manifest(tmp_path, f"Fronty - {_SENTINEL_MATERIAL}.acrepd", rows)
+
+    manifest = acrepd.parse_manifest(str(path))
+
+    assert manifest["job"]["material"] == "MDF_18"
+    assert manifest["material"] == "MDF_18"
+
+
+def test_parse_manifest_no_sheets_keeps_none_without_error(tmp_path: pathlib.Path) -> None:
+    rows = f"""\
+  <AC_02_JOB>
+    <JobName>Fronty</JobName>
+    <JobMaterial_AutomationManager>{_SENTINEL_MATERIAL}</JobMaterial_AutomationManager>
+  </AC_02_JOB>
+"""
+    path = _write_minimal_manifest(tmp_path, "Fronty - MDF_18.acrepd", rows)
+
+    manifest = acrepd.parse_manifest(str(path))
+
+    assert manifest["job"]["material"] is None
+    assert manifest["job"]["thickness"] is None
+    assert manifest["material"] == "MDF_18"
+    assert manifest["thickness"] is None
+
+
+def test_parse_manifest_conflicting_sheet_thickness_warns(
+    tmp_path: pathlib.Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    rows = f"""\
+  <AC_02_JOB>
+    <JobName>Fronty</JobName>
+    <JobMaterial_AutomationManager>{_SENTINEL_MATERIAL}</JobMaterial_AutomationManager>
+  </AC_02_JOB>
+  <AC_04_SHEETS>
+    <SheetID>1</SheetID>
+    <SheetDatabaseName>MDF_18</SheetDatabaseName>
+    <SheetThickness>18</SheetThickness>
+  </AC_04_SHEETS>
+  <AC_04_SHEETS>
+    <SheetID>2</SheetID>
+    <SheetDatabaseName>MDF_18</SheetDatabaseName>
+    <SheetThickness>19</SheetThickness>
+  </AC_04_SHEETS>
+"""
+    path = _write_minimal_manifest(tmp_path, f"Fronty - {_SENTINEL_MATERIAL}.acrepd", rows)
+
+    with caplog.at_level("WARNING", logger="alphacam_cli.core.acrepd"):
+        manifest = acrepd.parse_manifest(str(path))
+
+    assert manifest["job"]["thickness"] is None
+    assert manifest["thickness"] is None
+    assert "arkusze maja rozne grubosci [18.0, 19.0]" in caplog.text
+
+
 def test_parse_manifest_sheet_scrap_zero(tmp_path: pathlib.Path) -> None:
     path = tmp_path / "Fronty - MDF_18.acrepd"
     path.write_text(
@@ -618,6 +726,7 @@ def test_parse_manifest_empty_tables(tmp_path: pathlib.Path, xml: str) -> None:
         "order_date": None,
         "processed_date": None,
         "efficiency_rate": None,
+        "thickness": None,
     }
     assert manifest["drawings"] == []
     assert manifest["sheets"] == []
