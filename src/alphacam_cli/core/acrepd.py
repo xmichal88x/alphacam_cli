@@ -368,11 +368,12 @@ def _attach_sheet_offcuts(sheets: list[dict[str, Any]], offcut_rows: list[dict[s
 
 
 def _compute_utilization(sheet: dict[str, Any]) -> None:
-    """Compute utilization from geometry: CDM part areas / nesting area.
+    """Compute utilization from geometry: CDM part areas / full sheet area.
 
     Uses CDM dimensions (CDMPartWidth × CDMPartLength) when available,
     falling back to manifest dimensions (PartWidth × PartLength).
-    Nesting area = sheet area − offcut area.
+    Offcuts are reported separately in the manifest and do NOT reduce the
+    denominator, so a saved offcut never inflates utilization.
     """
     width = sheet.get("width")
     length = sheet.get("length")
@@ -380,11 +381,7 @@ def _compute_utilization(sheet: dict[str, Any]) -> None:
         sheet["utilization"] = None
         return
     sheet_area = float(width) * float(length)
-    offcut_area = sum(
-        float(o.get("width") or 0) * float(o.get("length") or 0) for o in sheet.get("offcuts", [])
-    )
-    nesting_area = sheet_area - offcut_area
-    if nesting_area <= 0:
+    if sheet_area <= 0:
         sheet["utilization"] = 0
         return
     parts_area = 0.0
@@ -396,7 +393,7 @@ def _compute_utilization(sheet: dict[str, Any]) -> None:
     if parts_area <= 0:
         sheet["utilization"] = 0
         return
-    sheet["utilization"] = max(0, min(100, round(parts_area / nesting_area * 100)))
+    sheet["utilization"] = max(0, min(100, round(parts_area / sheet_area * 100)))
 
 
 def parse_manifest(path: str) -> dict[str, Any]:

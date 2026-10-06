@@ -397,7 +397,7 @@ def test_parse_manifest_full(manifest_file: pathlib.Path) -> None:
     assert s1["unique_part_count"] == 2
     assert s1["quantity"] == 1
     assert s1["scrap"] == 71
-    assert s1["utilization"] == 28
+    assert s1["utilization"] == 5
     assert s1["has_image"] is True
     assert s1["nest_nc_filename"] == "Fronty - MDF_18_s1.nc"
     assert s1["press_name"] == "PRESS-1"
@@ -476,7 +476,7 @@ def test_parse_manifest_sheet_scrap_zero(tmp_path: pathlib.Path) -> None:
 
     s1 = manifest["sheets"][0]
     assert s1["scrap"] == 0
-    assert s1["utilization"] == 28
+    assert s1["utilization"] == 5
     assert manifest["sheets"][1]["scrap"] is None
     assert manifest["sheets"][1]["utilization"] == 0
 
@@ -2000,7 +2000,7 @@ def test_parse_manifest_offcuts(tmp_path: pathlib.Path) -> None:
     assert "offcuts" in sheet
     assert len(sheet["offcuts"]) == 1
     assert sheet["scrap"] == 71
-    assert sheet["utilization"] == 28
+    assert sheet["utilization"] == 5
     offcut = sheet["offcuts"][0]
     assert offcut["id"] == 1
     assert offcut["sheet_id"] == 1
@@ -2017,3 +2017,17 @@ def test_parse_manifest_no_offcuts(tmp_path: pathlib.Path) -> None:
     p.write_text(xml, encoding="utf-8")
     result = acrepd.parse_manifest(str(p))
     assert result["sheets"][0]["offcuts"] == []
+
+
+def test_parse_manifest_utilization_ignores_offcut(tmp_path: pathlib.Path) -> None:
+    with_offcut = tmp_path / "with-offcut.acrepd"
+    with_offcut.write_text(_wrap(_MANIFEST_ROWS), encoding="utf-8")
+    without_offcut = tmp_path / "without-offcut.acrepd"
+    without_offcut.write_text(_wrap(_MANIFEST_ROWS.replace(_OFFCUT_SECTION, "")), encoding="utf-8")
+
+    sheet_with = acrepd.parse_manifest(str(with_offcut))["sheets"][0]
+    sheet_without = acrepd.parse_manifest(str(without_offcut))["sheets"][0]
+
+    assert sheet_with["utilization"] == sheet_without["utilization"] == 5
+    assert len(sheet_with["offcuts"]) == 1
+    assert sheet_without["offcuts"] == []
