@@ -740,6 +740,11 @@ class GatewayServer:
         po = str(params.get("po", "") or "").strip() or None
         due_date = str(params.get("due_date", "") or "").strip() or None
         description = str(params.get("description", "") or "").strip() or None
+        material_group = str(params.get("material_group") or "").strip() or None
+        include_offcuts = _as_bool(params.get("include_offcuts"))
+        prefer_offcuts = _as_bool(params.get("prefer_offcuts"))
+        sheets = str(params.get("sheets") or "").strip() or None
+        sheet_order = str(params.get("sheet_order") or "").strip() or None
         if due_date is not None:
             try:
                 _validate_due_date(due_date)
@@ -756,6 +761,11 @@ class GatewayServer:
                 po=po,
                 due_date=due_date,
                 description=description,
+                material_group=material_group,
+                include_offcuts=include_offcuts,
+                prefer_offcuts=prefer_offcuts,
+                sheets=sheets,
+                sheet_order=sheet_order,
             )
         except Exception as e:
             raise COMError(str(e)) from e
@@ -855,6 +865,11 @@ class GatewayServer:
         if import_setting is not None and not isinstance(import_setting, (int, str)):
             raise COMError("cdm: import_setting must be an int or str")
         preview = _as_bool(params.get("preview"))
+        material_group_param = str(params.get("material_group") or "").strip() or None
+        include_offcuts = _as_bool(params.get("include_offcuts"))
+        prefer_offcuts = _as_bool(params.get("prefer_offcuts"))
+        sheets_param = str(params.get("sheets") or "").strip() or None
+        sheet_order_param = str(params.get("sheet_order") or "").strip() or None
         if not os.path.exists(csv_path):
             raise COMError(f"cdm: csv file not found: {csv_path}")
         try:
@@ -868,6 +883,11 @@ class GatewayServer:
                 material=material_param,
                 import_setting=import_setting,
                 preview=preview,
+                material_group=material_group_param,
+                include_offcuts=include_offcuts,
+                prefer_offcuts=prefer_offcuts,
+                sheets=sheets_param,
+                sheet_order=sheet_order_param,
             )
         except Exception as e:
             raise COMError(str(e)) from e
@@ -896,6 +916,10 @@ class GatewayServer:
         import_setting = params.get("import_setting")
         if import_setting is not None and not isinstance(import_setting, (int, str)):
             raise COMError("cdm: import_setting must be an int or str")
+        material_group_param = str(params.get("material_group") or "").strip() or None
+        include_offcuts = _as_bool(params.get("include_offcuts"))
+        prefer_offcuts = _as_bool(params.get("prefer_offcuts"))
+        sheets_param = str(params.get("sheets") or "").strip() or None
         if not os.path.exists(csv_path):
             raise COMError(f"cdm: csv file not found: {csv_path}")
         try:
@@ -908,6 +932,10 @@ class GatewayServer:
                 name=name_param,
                 config=config_param,
                 material=material_param,
+                material_group=material_group_param,
+                include_offcuts=include_offcuts,
+                prefer_offcuts=prefer_offcuts,
+                sheets=sheets_param,
             )
         except Exception as e:
             raise COMError(str(e)) from e

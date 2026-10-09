@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import copy
 import os
 import pathlib
 import sys
@@ -92,6 +93,97 @@ def test_sheet_materials_parses_rows(monkeypatch: pytest.MonkeyPatch) -> None:
 def test_sheet_materials_value_wrap(monkeypatch: pytest.MonkeyPatch) -> None:
     _mock_run(monkeypatch, stdout='{"value": {"materials": [{"name": "Oak", "id": "7"}]}}')
     assert cdm_db.sheet_materials() == {"Oak": 7}
+
+
+_MATERIAL_GROUPS_STDOUT = (
+    '{"groups": {'
+    '"MDF_18": ['
+    '{"id": 2, "name": "MDF_18", "width": 2440, "height": 1220, "quantity": 100,'
+    ' "thickness": 18, "offcut": 0},'
+    '{"id": 7, "name": "MDF18", "width": 2800, "height": 2070, "quantity": 100,'
+    ' "thickness": 18, "offcut": 1}'
+    "],"
+    '"17mm": ['
+    '{"id": 1, "name": "Arkusz 1", "width": 1220, "height": 2440, "quantity": 5,'
+    ' "thickness": 17, "offcut": 0}'
+    "]"
+    "}}"
+)
+
+
+def test_material_groups_parses(monkeypatch: pytest.MonkeyPatch) -> None:
+    run = _mock_run(monkeypatch, stdout=_MATERIAL_GROUPS_STDOUT)
+    groups = cdm_db.material_groups()
+    assert set(groups) == {"MDF_18", "17mm"}
+    assert [s["id"] for s in groups["MDF_18"]] == [2, 7]
+    assert groups["MDF_18"][0] == {
+        "id": 2,
+        "name": "MDF_18",
+        "width": 2440.0,
+        "height": 1220.0,
+        "quantity": 100,
+        "thickness": 18.0,
+        "offcut": False,
+    }
+    assert groups["MDF_18"][1]["offcut"] is True
+    assert groups["17mm"] == [
+        {
+            "id": 1,
+            "name": "Arkusz 1",
+            "width": 1220.0,
+            "height": 2440.0,
+            "quantity": 5,
+            "thickness": 17.0,
+            "offcut": False,
+        }
+    ]
+    args, _ = run.call_args
+    assert args[0][-1].endswith("sheet_material_groups.py")
+
+
+def test_material_groups_nonzero_returncode(monkeypatch: pytest.MonkeyPatch) -> None:
+    _mock_run(monkeypatch, stdout="", returncode=1)
+    assert cdm_db.material_groups() == {}
+
+
+def test_material_groups_invalid_json(monkeypatch: pytest.MonkeyPatch) -> None:
+    _mock_run(monkeypatch, stdout="not json")
+    assert cdm_db.material_groups() == {}
+
+
+def test_material_groups_value_wrap(monkeypatch: pytest.MonkeyPatch) -> None:
+    _mock_run(
+        monkeypatch,
+        stdout=(
+            '{"value": {"groups": {"Oak": [{"id": "7", "name": "Oak", "width": "800",'
+            ' "height": "600", "quantity": "2", "thickness": "18", "offcut": 1}]}}}'
+        ),
+    )
+    assert cdm_db.material_groups() == {
+        "Oak": [
+            {
+                "id": 7,
+                "name": "Oak",
+                "width": 800.0,
+                "height": 600.0,
+                "quantity": 2,
+                "thickness": 18.0,
+                "offcut": True,
+            }
+        ]
+    }
+
+
+def test_material_groups_skips_rows_without_id_and_empty_groups(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _mock_run(monkeypatch, stdout='{"groups": {"A": [{"name": "no id"}], "B": []}}')
+    assert cdm_db.material_groups() == {}
+
+
+def test_material_groups_subprocess_failure(monkeypatch: pytest.MonkeyPatch) -> None:
+    _mock_run(monkeypatch).side_effect = FileNotFoundError("python")
+    assert cdm_db.material_groups() == {}
 
 
 def test_vdb5_job_defaults_parses(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -188,6 +280,76 @@ def test_set_order_details_active_subprocess_failure(
 ) -> None:
     _mock_run(monkeypatch).side_effect = FileNotFoundError("powershell")
     assert cdm_db.set_order_details_active("order") is False
+
+
+def test_set_selected_sheets_rows_updated(monkeypatch: pytest.MonkeyPatch) -> None:
+    run = _mock_run(monkeypatch, stdout="sheet_rows: 2\n")
+    sheets = [{"id": 2, "quantity": 0}, {"id": 7, "quantity": 1}]
+    assert cdm_db.set_selected_sheets("order", sheets) is True
+    args, _ = run.call_args
+    assert "-JobName:order" in args[0]
+    assert "-Sheets:2:0,7:1" in args[0]
+
+
+def test_set_selected_sheets_no_rows(monkeypatch: pytest.MonkeyPatch) -> None:
+    _mock_run(monkeypatch, stdout="sheet_rows: 0")
+    assert cdm_db.set_selected_sheets("order", [{"id": 2, "quantity": 0}]) is False
+
+
+def test_set_selected_sheets_nonzero_returncode(monkeypatch: pytest.MonkeyPatch) -> None:
+    _mock_run(monkeypatch, stdout="", returncode=1)
+    assert cdm_db.set_selected_sheets("order", [{"id": 2, "quantity": 0}]) is False
+
+
+def test_set_selected_sheets_empty_raises(monkeypatch: pytest.MonkeyPatch) -> None:
+    _mock_run(monkeypatch, stdout="sheet_rows: 0")
+    with pytest.raises(RuntimeError, match="at least one sheet"):
+        cdm_db.set_selected_sheets("order", [])
+
+
+def test_set_selected_sheets_subprocess_failure(monkeypatch: pytest.MonkeyPatch) -> None:
+    _mock_run(monkeypatch).side_effect = FileNotFoundError("powershell")
+    assert cdm_db.set_selected_sheets("order", [{"id": 2, "quantity": 0}]) is False
+
+
+def test_set_selected_sheets_single_sheet_spec(monkeypatch: pytest.MonkeyPatch) -> None:
+    run = _mock_run(monkeypatch, stdout="sheet_rows: 1")
+    assert cdm_db.set_selected_sheets("order", [{"id": 5, "quantity": 3}]) is True
+    args, _ = run.call_args
+    assert "-Sheets:5:3" in args[0]
+
+
+def test_set_sheet_order_rows_updated(monkeypatch: pytest.MonkeyPatch) -> None:
+    run = _mock_run(monkeypatch, stdout="rows: 1\n")
+    assert cdm_db.set_sheet_order("Fronty", 1) is True
+    args, _ = run.call_args
+    assert "-ConfigName:Fronty" in args[0]
+    assert "-Value:1" in args[0]
+    assert args[0][args[0].index("-ConfigName:Fronty") : args[0].index("-Value:1") + 1] == [
+        "-ConfigName:Fronty",
+        "-Value:1",
+    ]
+
+
+def test_set_sheet_order_no_rows(monkeypatch: pytest.MonkeyPatch) -> None:
+    _mock_run(monkeypatch, stdout="rows: 0")
+    assert cdm_db.set_sheet_order("Fronty", 0) is False
+
+
+def test_set_sheet_order_nonzero_returncode(monkeypatch: pytest.MonkeyPatch) -> None:
+    _mock_run(monkeypatch, stdout="", returncode=1)
+    assert cdm_db.set_sheet_order("Fronty", 1) is False
+
+
+def test_set_sheet_order_invalid_value_raises(monkeypatch: pytest.MonkeyPatch) -> None:
+    _mock_run(monkeypatch, stdout="rows: 1")
+    with pytest.raises(RuntimeError, match="cdm: sheet order must be 0"):
+        cdm_db.set_sheet_order("Fronty", 2)
+
+
+def test_set_sheet_order_subprocess_failure(monkeypatch: pytest.MonkeyPatch) -> None:
+    _mock_run(monkeypatch).side_effect = FileNotFoundError("powershell")
+    assert cdm_db.set_sheet_order("Fronty", 1) is False
 
 
 def test_finalize_cdm_job_rows_updated(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -634,6 +796,72 @@ def test_job_config_nonzero_returncode(monkeypatch: pytest.MonkeyPatch) -> None:
 def test_job_config_subprocess_failure(monkeypatch: pytest.MonkeyPatch) -> None:
     _mock_run(monkeypatch).side_effect = FileNotFoundError("powershell")
     assert cdm_db.job_config("order") is None
+
+
+def test_job_config_name_success(monkeypatch: pytest.MonkeyPatch) -> None:
+    run = _mock_run(monkeypatch, stdout="config: Fronty\n")
+    assert cdm_db.job_config_name("order") == "Fronty"
+    args, _ = run.call_args
+    assert "vdb5_job_config_name.ps1" in args[0][-2]
+    assert "-JobName:order" in args[0]
+
+
+def test_job_config_name_trims_whitespace(monkeypatch: pytest.MonkeyPatch) -> None:
+    _mock_run(monkeypatch, stdout="config:   Fronty  \n")
+    assert cdm_db.job_config_name("order") == "Fronty"
+
+
+def test_job_config_name_empty_returns_none(monkeypatch: pytest.MonkeyPatch) -> None:
+    _mock_run(monkeypatch, stdout="config: \n")
+    assert cdm_db.job_config_name("order") is None
+
+
+def test_job_config_name_missing_line_returns_none(monkeypatch: pytest.MonkeyPatch) -> None:
+    _mock_run(monkeypatch, stdout="other: x\n")
+    assert cdm_db.job_config_name("order") is None
+
+
+def test_job_config_name_nonzero_returncode(monkeypatch: pytest.MonkeyPatch) -> None:
+    _mock_run(monkeypatch, stdout="config: Fronty\n", returncode=1)
+    assert cdm_db.job_config_name("order") is None
+
+
+def test_job_config_name_subprocess_failure(monkeypatch: pytest.MonkeyPatch) -> None:
+    _mock_run(monkeypatch).side_effect = FileNotFoundError("powershell")
+    assert cdm_db.job_config_name("order") is None
+
+
+def test_job_material_id_success(monkeypatch: pytest.MonkeyPatch) -> None:
+    run = _mock_run(monkeypatch, stdout="material: 7\n")
+    assert cdm_db.job_material_id("order") == 7
+    args, _ = run.call_args
+    assert "vdb5_job_material.ps1" in args[0][-2]
+    assert "-JobName:order" in args[0]
+
+
+def test_job_material_id_zero(monkeypatch: pytest.MonkeyPatch) -> None:
+    _mock_run(monkeypatch, stdout="material: 0\n")
+    assert cdm_db.job_material_id("order") == 0
+
+
+def test_job_material_id_empty_returns_none(monkeypatch: pytest.MonkeyPatch) -> None:
+    _mock_run(monkeypatch, stdout="material: \n")
+    assert cdm_db.job_material_id("order") is None
+
+
+def test_job_material_id_missing_line_returns_none(monkeypatch: pytest.MonkeyPatch) -> None:
+    _mock_run(monkeypatch, stdout="other: x\n")
+    assert cdm_db.job_material_id("order") is None
+
+
+def test_job_material_id_nonzero_returncode(monkeypatch: pytest.MonkeyPatch) -> None:
+    _mock_run(monkeypatch, stdout="material: 7\n", returncode=1)
+    assert cdm_db.job_material_id("order") is None
+
+
+def test_job_material_id_subprocess_failure(monkeypatch: pytest.MonkeyPatch) -> None:
+    _mock_run(monkeypatch).side_effect = FileNotFoundError("powershell")
+    assert cdm_db.job_material_id("order") is None
 
 
 def test_read_cdm_csv_utf8_bom_stripped(tmp_path: pathlib.Path) -> None:
@@ -1811,3 +2039,95 @@ def test_lookups_single_row_section_wrapped_as_dict(monkeypatch: pytest.MonkeyPa
     ]
     assert len(data["machining_orders"]) == 1
     assert data["machining_orders"][0]["machining_style_name"] == "BALL 2MM 2F:0:0"
+
+
+# --- resolve_material_group ---
+
+_GROUP_WHOLE_OFFCUT: dict[str, list[dict[str, Any]]] = {
+    "MDF_18": [
+        {"id": 2, "name": "MDF_18", "offcut": False},
+        {"id": 7, "name": "MDF18", "offcut": True},
+    ]
+}
+
+
+def _patch_material_groups(
+    monkeypatch: pytest.MonkeyPatch, groups: dict[str, list[dict[str, Any]]]
+) -> None:
+    monkeypatch.setattr(cdm_db, "material_groups", lambda: groups)
+
+
+def test_resolve_material_group_whole_only(monkeypatch: pytest.MonkeyPatch) -> None:
+    _patch_material_groups(monkeypatch, _GROUP_WHOLE_OFFCUT)
+    assert cdm_db.resolve_material_group("MDF_18") == [
+        {"id": 2, "name": "MDF_18", "offcut": False, "quantity": 0}
+    ]
+
+
+def test_resolve_material_group_includes_offcuts(monkeypatch: pytest.MonkeyPatch) -> None:
+    _patch_material_groups(monkeypatch, _GROUP_WHOLE_OFFCUT)
+    assert cdm_db.resolve_material_group("MDF_18", include_offcuts=True) == [
+        {"id": 2, "name": "MDF_18", "offcut": False, "quantity": 0},
+        {"id": 7, "name": "MDF18", "offcut": True, "quantity": 1},
+    ]
+
+
+def test_resolve_material_group_offcuts_first(monkeypatch: pytest.MonkeyPatch) -> None:
+    _patch_material_groups(monkeypatch, _GROUP_WHOLE_OFFCUT)
+    assert cdm_db.resolve_material_group("MDF_18", include_offcuts=True, offcuts_first=True) == [
+        {"id": 7, "name": "MDF18", "offcut": True, "quantity": 1},
+        {"id": 2, "name": "MDF_18", "offcut": False, "quantity": 0},
+    ]
+
+
+def test_resolve_material_group_quantity_overrides(monkeypatch: pytest.MonkeyPatch) -> None:
+    _patch_material_groups(monkeypatch, _GROUP_WHOLE_OFFCUT)
+    assert cdm_db.resolve_material_group(
+        "MDF_18", include_offcuts=True, whole_quantity=3, offcut_quantity=5
+    ) == [
+        {"id": 2, "name": "MDF_18", "offcut": False, "quantity": 3},
+        {"id": 7, "name": "MDF18", "offcut": True, "quantity": 5},
+    ]
+
+
+def test_resolve_material_group_unknown_material(monkeypatch: pytest.MonkeyPatch) -> None:
+    _patch_material_groups(monkeypatch, {"MDF_18": []})
+    with pytest.raises(RuntimeError, match="material group not found: Oak"):
+        cdm_db.resolve_material_group("Oak")
+
+
+def test_resolve_material_group_only_offcuts_needs_flag(monkeypatch: pytest.MonkeyPatch) -> None:
+    _patch_material_groups(monkeypatch, {"MDF_18": [{"id": 7, "name": "MDF18", "offcut": True}]})
+    with pytest.raises(RuntimeError, match="no whole sheets"):
+        cdm_db.resolve_material_group("MDF_18")
+
+
+def test_resolve_material_group_empty_rows(monkeypatch: pytest.MonkeyPatch) -> None:
+    _patch_material_groups(monkeypatch, {"MDF_18": []})
+    with pytest.raises(RuntimeError, match="has no sheets"):
+        cdm_db.resolve_material_group("MDF_18")
+
+
+def test_resolve_material_group_no_groups(monkeypatch: pytest.MonkeyPatch) -> None:
+    _patch_material_groups(monkeypatch, {})
+    with pytest.raises(RuntimeError, match="material group not found"):
+        cdm_db.resolve_material_group("MDF_18")
+
+
+def test_resolve_material_group_does_not_mutate_input(monkeypatch: pytest.MonkeyPatch) -> None:
+    groups: dict[str, list[dict[str, Any]]] = {
+        "MDF_18": [
+            {"id": 2, "name": "MDF_18", "offcut": False},
+            {"id": 7, "name": "MDF18", "offcut": True},
+        ]
+    }
+    snapshot = copy.deepcopy(groups)
+    _patch_material_groups(monkeypatch, groups)
+    cdm_db.resolve_material_group(
+        "MDF_18",
+        include_offcuts=True,
+        offcuts_first=True,
+        whole_quantity=3,
+        offcut_quantity=5,
+    )
+    assert groups == snapshot

@@ -17,7 +17,7 @@ DESIGN_DIMS_FIELDS = 50
 
 
 def _scripts_dir() -> str:
-    """Directory with helper scripts (sheet_materials.py + vdb5 *.ps1), PyInstaller-safe."""
+    """Directory with helper scripts (sheet_material*.py + vdb5 *.ps1), PyInstaller-safe."""
     if getattr(sys, "frozen", False):
         base = getattr(sys, "_MEIPASS", os.path.dirname(os.path.abspath(__file__)))
         return os.path.join(base, "scripts")
@@ -88,6 +88,115 @@ def sheet_materials() -> dict[str, int]:
             if name_key not in materials:
                 materials[name_key] = mid_int
     return materials
+
+
+def material_groups() -> dict[str, list[dict[str, Any]]]:
+    """Material name -> its sheets (id/name/size/quantity/thickness/offcut flag).
+
+    Reads the SQLite sheet database via a helper script; empty dict on failure.
+    Offcuts are kept (``offcut`` flag) and come after whole sheets.
+    """
+    script_path = os.path.join(_scripts_dir(), "sheet_material_groups.py")
+    try:
+        proc = subprocess.run(
+            [sys.executable, script_path],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=20,
+            check=False,
+        )
+        if proc.returncode != 0 or not proc.stdout.strip():
+            return {}
+        data = json.loads(proc.stdout)
+    except Exception as e:
+        logger.warning("cdm material groups: sheet db read failed: %r", e)
+        return {}
+    if isinstance(data, dict) and "value" in data:
+        data = data["value"]
+    if not isinstance(data, dict):
+        return {}
+    raw = data.get("groups")
+    if not isinstance(raw, dict):
+        return {}
+    groups: dict[str, list[dict[str, Any]]] = {}
+    for name, rows in raw.items():
+        if not isinstance(name, str) or not isinstance(rows, list):
+            continue
+        cleaned: list[dict[str, Any]] = []
+        for row in rows:
+            if not isinstance(row, dict) or row.get("id") is None:
+                continue
+            try:
+                cleaned.append(
+                    {
+                        "id": int(row["id"]),
+                        "name": str(row.get("name") or ""),
+                        "width": float(row.get("width") or 0),
+                        "height": float(row.get("height") or 0),
+                        "quantity": int(row.get("quantity") or 0),
+                        "thickness": float(row.get("thickness") or 0),
+                        "offcut": bool(row.get("offcut")),
+                    }
+                )
+            except (TypeError, ValueError):
+                continue
+        if cleaned:
+            groups[name] = cleaned
+    return groups
+
+
+def resolve_material_group(
+    material_name: str,
+    *,
+    include_offcuts: bool = False,
+    offcuts_first: bool = False,
+    whole_quantity: int = 0,
+    offcut_quantity: int = 1,
+) -> list[dict[str, Any]]:
+    """Resolve a material group into selectable sheets with quantities.
+
+    Whole sheets get ``whole_quantity`` (default 0 = no limit) and, when
+    ``include_offcuts`` is set, offcuts get ``offcut_quantity`` (default 1 =
+    one physical sheet). ``offcuts_first`` puts offcuts before whole sheets;
+    otherwise whole sheets come first. Rows from :func:`material_groups` are
+    never mutated. Raises RuntimeError for an unknown material or a group
+    without selectable sheets (both would hang AM processing).
+    """
+    groups = material_groups()
+    key = material_name.strip()
+    if key not in groups:
+        raise RuntimeError(f"cdm: material group not found: {material_name}")  # noqa: TRY003
+    rows = groups[key]
+    whole_sheets = [
+        {
+            "id": int(row["id"]),
+            "name": str(row.get("name") or ""),
+            "offcut": bool(row.get("offcut")),
+            "quantity": whole_quantity,
+        }
+        for row in rows
+        if not row.get("offcut")
+    ]
+    offcut_sheets = [
+        {
+            "id": int(row["id"]),
+            "name": str(row.get("name") or ""),
+            "offcut": bool(row.get("offcut")),
+            "quantity": offcut_quantity,
+        }
+        for row in rows
+        if row.get("offcut") and include_offcuts
+    ]
+    result = [*offcut_sheets, *whole_sheets] if offcuts_first else [*whole_sheets, *offcut_sheets]
+    if not result:
+        if any(row.get("offcut") for row in rows):
+            raise RuntimeError(  # noqa: TRY003
+                f"cdm: material group has no whole sheets (use --include-offcuts): {key}"
+            )
+        raise RuntimeError(f"cdm: material group has no sheets: {material_name}")  # noqa: TRY003
+    return result
 
 
 def customers() -> dict[str, int]:
@@ -256,6 +365,81 @@ def set_order_details_active(job_name: str) -> bool:
         return False
     if proc.returncode != 0:
         logger.warning("cdm detail active: vdb5 update failed: %s", proc.stdout.strip())
+        return False
+    match = re.search(r"(?m)^rows:\s*(\d+)", proc.stdout)
+    return bool(match and int(match.group(1)) > 0)
+
+
+def set_selected_sheets(job_name: str, sheets: list[dict[str, Any]]) -> bool:
+    """Persist the picked sheet list for a job; True when rows were written."""
+    if not sheets:
+        raise RuntimeError(  # noqa: TRY003
+            "cdm: set_selected_sheets requires at least one sheet"
+        )
+    spec = ",".join(f"{int(s['id'])}:{int(s.get('quantity') or 0)}" for s in sheets)
+    script_path = os.path.join(_scripts_dir(), "vdb5_set_selected_sheets.ps1")
+    try:
+        proc = subprocess.run(
+            [
+                "powershell",
+                "-NoProfile",
+                "-ExecutionPolicy",
+                "Bypass",
+                "-File",
+                script_path,
+                f"-JobName:{job_name}",
+                f"-Sheets:{spec}",
+            ],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=20,
+            check=False,
+        )
+    except Exception as e:
+        logger.warning("cdm selected sheets: vdb5 update failed: %r", e)
+        return False
+    if proc.returncode != 0:
+        logger.warning("cdm selected sheets: vdb5 update failed: %s", proc.stdout.strip())
+        return False
+    match = re.search(r"(?m)^sheet_rows:\s*(\d+)", proc.stdout)
+    return bool(match and int(match.group(1)) > 0)
+
+
+def set_sheet_order(config_name: str, value: int) -> bool:
+    """Set AM_ConfigurationSettings.Nesting_SheetOrderType for a config by name.
+
+    ``value`` must be 0 (best utilisation) or 1 (picked order); True when a
+    row was updated.
+    """
+    if value not in (0, 1):
+        raise RuntimeError("cdm: sheet order must be 0 (best) or 1 (picked)")  # noqa: TRY003
+    script_path = os.path.join(_scripts_dir(), "vdb5_set_sheet_order.ps1")
+    try:
+        proc = subprocess.run(
+            [
+                "powershell",
+                "-NoProfile",
+                "-ExecutionPolicy",
+                "Bypass",
+                "-File",
+                script_path,
+                f"-ConfigName:{config_name}",
+                f"-Value:{value}",
+            ],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=20,
+            check=False,
+        )
+    except Exception as e:
+        logger.warning("cdm sheet order: vdb5 update failed: %r", e)
+        return False
+    if proc.returncode != 0:
+        logger.warning("cdm sheet order: vdb5 update failed: %s", proc.stdout.strip())
         return False
     match = re.search(r"(?m)^rows:\s*(\d+)", proc.stdout)
     return bool(match and int(match.group(1)) > 0)
@@ -529,6 +713,77 @@ def job_config(job_name: str, licomdir: str | None = None) -> dict[str, object] 
         ),
         "use_name_identifiers": _job_config_flag(stdout, "use_name_identifiers", empty_false=False),
     }
+
+
+def job_config_name(job_name: str) -> str | None:
+    """Read the configuration (setting) name for a job; None when unavailable.
+
+    The value is the job configuration's ``ConfigurationSettingName``
+    (AM_ConfigurationSettings), read via a dedicated script. None when the job
+    has no configuration or the read fails.
+    """
+    script_path = os.path.join(_scripts_dir(), "vdb5_job_config_name.ps1")
+    try:
+        proc = subprocess.run(
+            [
+                "powershell",
+                "-NoProfile",
+                "-ExecutionPolicy",
+                "Bypass",
+                "-File",
+                script_path,
+                f"-JobName:{job_name}",
+            ],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=20,
+            check=False,
+        )
+    except Exception as e:
+        logger.warning("cdm config name: vdb5 read failed: %r", e)
+        return None
+    if proc.returncode != 0:
+        logger.warning("cdm config name: vdb5 read failed: %s", proc.stdout.strip())
+        return None
+    match = re.search(r"(?m)^config:[ \t]*(.*)$", proc.stdout)
+    if match is None:
+        return None
+    return match.group(1).strip() or None
+
+
+def job_material_id(job_name: str) -> int | None:
+    """fkMaterialID of a job (AM_JobDetails); None when missing or read fails."""
+    script_path = os.path.join(_scripts_dir(), "vdb5_job_material.ps1")
+    try:
+        proc = subprocess.run(
+            [
+                "powershell",
+                "-NoProfile",
+                "-ExecutionPolicy",
+                "Bypass",
+                "-File",
+                script_path,
+                f"-JobName:{job_name}",
+            ],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=20,
+            check=False,
+        )
+    except Exception as e:
+        logger.warning("cdm job material: vdb5 read failed: %r", e)
+        return None
+    if proc.returncode != 0:
+        logger.warning("cdm job material: vdb5 read failed: %s", proc.stdout.strip())
+        return None
+    match = re.search(r"(?m)^material:[ \t]*(-?\d+)", proc.stdout)
+    if match is None:
+        return None
+    return int(match.group(1))
 
 
 def job_output_root(job_name: str, licomdir: str | None = None) -> str | None:

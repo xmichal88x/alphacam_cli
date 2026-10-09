@@ -266,6 +266,12 @@ class RemoteApplication:
         po: str | None = None,
         due_date: str | None = None,
         description: str | None = None,
+        *,
+        material_group: str | None = None,
+        include_offcuts: bool = False,
+        prefer_offcuts: bool = False,
+        sheets: str | None = None,
+        sheet_order: str | None = None,
     ) -> dict[str, Any]:
         return self._session.create_cdm_job(  # type: ignore[no-any-return]
             job_name=job_name,
@@ -275,6 +281,11 @@ class RemoteApplication:
             po=po,
             due_date=due_date,
             description=description,
+            material_group=material_group,
+            include_offcuts=include_offcuts,
+            prefer_offcuts=prefer_offcuts,
+            sheets=sheets,
+            sheet_order=sheet_order,
         )
 
     def process_cdm_job(
@@ -309,6 +320,12 @@ class RemoteApplication:
         material: str | None = None,
         import_setting: str | int | None = None,
         preview: bool = False,
+        *,
+        material_group: str | None = None,
+        include_offcuts: bool = False,
+        prefer_offcuts: bool = False,
+        sheets: str | None = None,
+        sheet_order: str | None = None,
     ) -> dict[str, Any]:
         return self._session.import_cdm_csv(  # type: ignore[no-any-return]
             csv=csv,
@@ -320,6 +337,11 @@ class RemoteApplication:
             material=material,
             import_setting=import_setting,
             preview=preview,
+            material_group=material_group,
+            include_offcuts=include_offcuts,
+            prefer_offcuts=prefer_offcuts,
+            sheets=sheets,
+            sheet_order=sheet_order,
         )
 
     def import_cdm_preview(
@@ -332,6 +354,11 @@ class RemoteApplication:
         name: str | None = None,
         config: str | None = None,
         material: str | None = None,
+        *,
+        material_group: str | None = None,
+        include_offcuts: bool = False,
+        prefer_offcuts: bool = False,
+        sheets: str | None = None,
     ) -> dict[str, Any]:
         return self._session.import_cdm_preview(  # type: ignore[no-any-return]
             csv=csv,
@@ -342,6 +369,10 @@ class RemoteApplication:
             name=name,
             config=config,
             material=material,
+            material_group=material_group,
+            include_offcuts=include_offcuts,
+            prefer_offcuts=prefer_offcuts,
+            sheets=sheets,
         )
 
     def cdm_import_settings(self) -> dict[str, Any]:

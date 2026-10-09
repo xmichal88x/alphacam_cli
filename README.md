@@ -738,16 +738,25 @@ Create an empty CDM job via the Automation Manager API (headless, no dialogs, no
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|
 | `--config` | `str` | database default | Configuration name (default from `AM_Settings`; fails fast if none is set) |
-| `--material` | `str` | database default | Material name (`AM_Materials`; default from database; fails fast if none is set) |
+| `--material` | `str` | database default | Material name (`AM_Materials`; default from database; fails fast if none is set). Mutually exclusive with `--material-group` and `--sheets` |
+| `--material-group` | `str` | `None` | Nest on a material group — sets the job to group mode: job material `fkMaterialID=0` plus a list of `AM_SelectedSheets` (all **whole sheets** of the sheet-database material NAME; the nester picks among them by the job configuration). Mutually exclusive with `--material` and `--sheets` |
+| `--include-offcuts` | `bool` | `False` | Also add the material group's offcuts as candidates (never added automatically; requires `--material-group`) |
+| `--prefer-offcuts` | `bool` | `False` | Consume offcuts first: offcuts first (`Quantity=1` each), whole sheets after (`Quantity=0`, no limit); forces `picked` order (rejects `--sheet-order best`; requires `--material-group`) |
+| `--sheets` | `str` | `None` | Explicit sheets as `id:qty,id:qty` (sheet-database ids); mutually exclusive with `--material-group` and `--material` |
+| `--sheet-order` | `str` | `None` | Sheet order for the job configuration: `best` (Best Utilisation) or `picked` (list order). Sets `Nesting_SheetOrderType` **globally** for the configuration — affects all its jobs |
 | `--customer` | `str` | `None` | Customer name (`AM_CustomerDetails`) |
 | `--po` | `str` | `None` | Purchase order number |
 | `--due-date` | `str` | `None` | Due date (`YYYY-MM-DD`, validated) |
 | `--description` | `str` | `None` | Job description |
 
-**Example:**
+The material-group options (`--material-group`, `--include-offcuts`, `--prefer-offcuts`, `--sheets`, `--sheet-order`) mirror those of `cdm import` and put the job into group mode (job material = 0 + explicit `AM_SelectedSheets` list). See `cdm import` below for the full semantics of offcut preference and global `--sheet-order`.
+
+**Examples:**
 
 ```bash
 alphacam cdm create "Zamówienie 2026-08" --config "Fronty" --material MDF_18 --customer "Jan Kowalski" --po "PO-001" --due-date 2026-08-20
+alphacam cdm create "Job X" --material-group MDF_18 --prefer-offcuts
+alphacam cdm create "Job Y" --sheets "118:1,119:1,2:0" --sheet-order best
 ```
 
 #### `process`
@@ -982,6 +991,8 @@ Job creation depends on the setting's `CreateJob` flag:
 - **CreateJob=Yes** (e.g. "sklep CSV") — without `--job` a new job is created (name from `--name`, the mapped `job_name` column or the CSV basename, max 60 chars; config from `--config`, the mapped `job_config_id` column or the database default; material from the mapped material column, `--material` or the database default).
 - **CreateJob=No** (e.g. "Ustawienia Importu CSV 2") — `--job` is **required**; rows are imported only into an existing job (create it first with `cdm create`). Without `--job` the import fails before any job operation.
 
+**Material resolution (From Job like GUI):** importing into an existing job (`--job`) **without** an explicit material (`--material` / `--material-group` / `--sheets` or a mapped material column) **keeps the job's material** — the order details inherit the job's `fkMaterialID` and the job's material is **not** overwritten (previously the import replaced it with the database default). The database default is applied only when a **new** job is created. If the target job is a group job (`fkMaterialID=0`), a material-less import **preserves the group** (details stay `0`, `AM_SelectedSheets` untouched). An explicit `--material`, `--material-group` or `--sheets` is an explicit choice and always overrides the job's material.
+
 UTF-8 with BOM (Excel) and CP1250 are detected automatically; the separator is a single character. All rows are validated before the job is created — if every row is invalid, the job is **not** created (exit 1).
 
 New `OrderDetails` fields (customer, order number, item number, production comment, custom fields, rotation, nest priority, small nest) are set automatically from the mapped columns. `has_drilling` is written via a direct VistaDB UPDATE — the COM API does not expose a setter for it.
@@ -1002,8 +1013,38 @@ New `OrderDetails` fields (customer, order number, item number, production comme
 | `--import-setting` | `str` | `None` | Import setting id or name from the database (default: selected setting, `AM_ImportSettings.Selected`) |
 | `--separator` | `str` | `None` | CSV separator character (default: from import settings or `,`) |
 | `--header` | `bool` | `False` | CSV has a header row |
-| `--material` | `str` | `None` | Material name (`AM_Materials`); overrides the mapped material column |
+| `--material` | `str` | `None` | Material name (`AM_Materials`); explicit — overrides the mapped material column and the job's material |
+| `--material-group` | `str` | `None` | Nest on a material group — all **whole sheets** of the sheet-database material NAME; AlphaCAM picks the sheet by the job configuration. Explicit — overrides the job's material. Mutually exclusive with `--material` and `--sheets` |
+| `--include-offcuts` | `bool` | `False` | Also add the material group's offcuts as candidates (never added automatically; requires `--material-group`) |
+| `--prefer-offcuts` | `bool` | `False` | Consume offcuts first: offcuts first (`Quantity=1` each), whole sheets after (`Quantity=0`, no limit); forces `picked` order (rejects `--sheet-order best`; requires `--material-group`) |
+| `--sheets` | `str` | `None` | Explicit sheets as `id:qty,id:qty` (sheet-database ids); mutually exclusive with `--material-group` and `--material` |
+| `--sheet-order` | `str` | `None` | Sheet order for the job configuration: `best` (Best Utilisation) or `picked` (list order). Sets `Nesting_SheetOrderType` **globally** for the configuration — affects all its jobs. Ignored with `--preview` |
 | `--preview` | `bool` | `False` | Dry run preview without creating a job |
+
+**Material group (multi-sheet nesting)**
+
+`--material-group NAME` uses every **whole sheet** of the sheet-database material `NAME` as a
+nesting candidate; AlphaCAM itself picks the sheet according to the job configuration
+(`Nesting_SheetOrderType`). Internally the order detail is written with `fkMaterialID=0` plus
+`AM_SelectedSheets` rows. Offcuts are **not** candidates unless `--include-offcuts` is passed
+(they are never added automatically). Unknown material or sheet ids fail with a readable error
+(no AlphaCAM hang).
+
+**Consume offcuts first (guaranteed):** `--prefer-offcuts` lists the material's offcuts first
+(`Quantity=1` each) and whole sheets after (`Quantity=0`, no limit) and forces `picked` order.
+Best Utilisation does **not** guarantee offcut usage — it may skip them. `--sheet-order` (and
+`--prefer-offcuts`) set `Nesting_SheetOrderType` **globally** for the job configuration, so all
+jobs of that configuration are affected. Nesting does **not** remove consumed offcuts; deleting
+them is an explicit step (the operator or a separate `stock offcut-delete` block).
+
+```bash
+# use all whole sheets of a material; AlphaCAM picks (config order)
+alphacam cdm import order.csv --job "Job 2026-01" --material-group MDF_18
+# consume offcuts first, then whole sheets (guaranteed: picked order)
+alphacam cdm import order.csv --job "Job 2026-01" --material-group MDF_18 --prefer-offcuts
+# explicit sheets by id
+alphacam cdm import order.csv --job "Job 2026-01" --sheets "118:1,119:1,2:0"
+```
 
 **Examples:**
 

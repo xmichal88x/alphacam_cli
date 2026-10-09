@@ -416,6 +416,11 @@ def test_remote_create_cdm_job() -> None:
         po="PO-1",
         due_date="2026-08-10",
         description="opis",
+        material_group=None,
+        include_offcuts=False,
+        prefer_offcuts=False,
+        sheets=None,
+        sheet_order=None,
     )
 
 
@@ -432,6 +437,11 @@ def test_remote_create_cdm_job_defaults() -> None:
         po=None,
         due_date=None,
         description=None,
+        material_group=None,
+        include_offcuts=False,
+        prefer_offcuts=False,
+        sheets=None,
+        sheet_order=None,
     )
 
 
@@ -455,6 +465,39 @@ def test_remote_create_cdm_job_material() -> None:
         po=None,
         due_date=None,
         description=None,
+        material_group=None,
+        include_offcuts=False,
+        prefer_offcuts=False,
+        sheets=None,
+        sheet_order=None,
+    )
+
+
+def test_remote_create_cdm_job_material_group() -> None:
+    session = MagicMock()
+    session.create_cdm_job.return_value = {"success": True}
+    app = RemoteApplication(session)
+    app.create_cdm_job(
+        job_name="JOB-001",
+        material_group="MDF_18",
+        include_offcuts=True,
+        prefer_offcuts=True,
+        sheets="2:0,7:1",
+        sheet_order="picked",
+    )
+    session.create_cdm_job.assert_called_once_with(
+        job_name="JOB-001",
+        config=None,
+        material=None,
+        customer=None,
+        po=None,
+        due_date=None,
+        description=None,
+        material_group="MDF_18",
+        include_offcuts=True,
+        prefer_offcuts=True,
+        sheets="2:0,7:1",
+        sheet_order="picked",
     )
 
 
@@ -501,6 +544,11 @@ def test_remote_import_cdm_csv() -> None:
         material=None,
         import_setting=None,
         preview=False,
+        material_group=None,
+        include_offcuts=False,
+        prefer_offcuts=False,
+        sheets=None,
+        sheet_order=None,
     )
 
 
@@ -526,6 +574,11 @@ def test_remote_import_cdm_csv_material() -> None:
         material="MDF_18",
         import_setting=None,
         preview=False,
+        material_group=None,
+        include_offcuts=False,
+        prefer_offcuts=False,
+        sheets=None,
+        sheet_order=None,
     )
 
 
@@ -559,6 +612,11 @@ def test_remote_import_cdm_csv_defaults() -> None:
         material=None,
         import_setting=None,
         preview=False,
+        material_group=None,
+        include_offcuts=False,
+        prefer_offcuts=False,
+        sheets=None,
+        sheet_order=None,
     )
 
 
@@ -583,6 +641,11 @@ def test_remote_import_cdm_csv_name_config() -> None:
         material=None,
         import_setting=None,
         preview=False,
+        material_group=None,
+        include_offcuts=False,
+        prefer_offcuts=False,
+        sheets=None,
+        sheet_order=None,
     )
 
 
@@ -611,6 +674,11 @@ def test_remote_import_cdm_csv_mapped() -> None:
         material=None,
         import_setting=3,
         preview=False,
+        material_group=None,
+        include_offcuts=False,
+        prefer_offcuts=False,
+        sheets=None,
+        sheet_order=None,
     )
 
 
@@ -635,6 +703,11 @@ def test_remote_import_cdm_csv_preview() -> None:
         material=None,
         import_setting=3,
         preview=True,
+        material_group=None,
+        include_offcuts=False,
+        prefer_offcuts=False,
+        sheets=None,
+        sheet_order=None,
     )
 
 
@@ -659,6 +732,70 @@ def test_remote_import_cdm_preview() -> None:
         name=None,
         config=None,
         material=None,
+        material_group=None,
+        include_offcuts=False,
+        prefer_offcuts=False,
+        sheets=None,
+    )
+
+
+def test_remote_import_cdm_csv_material_group() -> None:
+    session = MagicMock()
+    session.import_cdm_csv.return_value = {"success": True, "items": 1, "errors": []}
+    app = RemoteApplication(session)
+    result = app.import_cdm_csv(
+        r"C:\temp\order.csv",
+        material_group="MDF_18",
+        include_offcuts=True,
+        prefer_offcuts=True,
+        sheets="2:0,7:1",
+        sheet_order="picked",
+    )
+    assert result["items"] == 1
+    session.import_cdm_csv.assert_called_once_with(
+        csv=r"C:\temp\order.csv",
+        job=None,
+        name=None,
+        config=None,
+        separator=None,
+        has_header=False,
+        material=None,
+        import_setting=None,
+        preview=False,
+        material_group="MDF_18",
+        include_offcuts=True,
+        prefer_offcuts=True,
+        sheets="2:0,7:1",
+        sheet_order="picked",
+    )
+
+
+def test_remote_import_cdm_preview_material_group() -> None:
+    session = MagicMock()
+    session.import_cdm_preview.return_value = {
+        "success": True,
+        "items": 1,
+        "rows": [],
+        "errors": [],
+    }
+    app = RemoteApplication(session)
+    result = app.import_cdm_preview(
+        r"C:\temp\order.csv", material_group="MDF_18", include_offcuts=True, sheets="2:0"
+    )
+    assert result["items"] == 1
+    session.import_cdm_preview.assert_called_once_with(
+        csv=r"C:\temp\order.csv",
+        import_setting=None,
+        separator=None,
+        has_header=False,
+        job=None,
+        name=None,
+        config=None,
+        material=None,
+        material_group="MDF_18",
+        include_offcuts=True,
+        prefer_offcuts=False,
+        sheets="2:0",
     )
 
 
@@ -700,6 +837,59 @@ def test_remote_session_import_cdm_preview_digit_string_setting() -> None:
     client._call.assert_called_once_with(
         "cdm_import_preview",
         {"csv": r"C:\temp\order.csv", "has_header": False, "import_setting": 7},
+    )
+
+
+def test_remote_session_import_cdm_csv_material_group_params() -> None:
+    client = RemoteSession()
+    client._call = MagicMock(return_value={"success": True})  # type: ignore[method-assign]
+    client.import_cdm_csv(
+        r"C:\temp\order.csv",
+        material_group="MDF_18",
+        include_offcuts=True,
+        prefer_offcuts=True,
+        sheets="2:0,7:1",
+        sheet_order="picked",
+    )
+    client._call.assert_called_once_with(
+        "cdm_import_csv",
+        {
+            "csv": r"C:\temp\order.csv",
+            "has_header": False,
+            "material_group": "MDF_18",
+            "include_offcuts": True,
+            "prefer_offcuts": True,
+            "sheets": "2:0,7:1",
+            "sheet_order": "picked",
+        },
+    )
+
+
+def test_remote_session_import_cdm_csv_group_defaults_omitted() -> None:
+    client = RemoteSession()
+    client._call = MagicMock(return_value={"success": True})  # type: ignore[method-assign]
+    client.import_cdm_csv(r"C:\temp\order.csv")
+    client._call.assert_called_once_with(
+        "cdm_import_csv",
+        {"csv": r"C:\temp\order.csv", "has_header": False},
+    )
+
+
+def test_remote_session_import_cdm_preview_material_group_params() -> None:
+    client = RemoteSession()
+    client._call = MagicMock(return_value={"success": True})  # type: ignore[method-assign]
+    client.import_cdm_preview(
+        r"C:\temp\order.csv", material_group="MDF_18", include_offcuts=True, sheets="2:0"
+    )
+    client._call.assert_called_once_with(
+        "cdm_import_preview",
+        {
+            "csv": r"C:\temp\order.csv",
+            "has_header": False,
+            "material_group": "MDF_18",
+            "include_offcuts": True,
+            "sheets": "2:0",
+        },
     )
 
 
@@ -775,6 +965,37 @@ def test_remote_session_create_cdm_job_all_params() -> None:
             "description": "opis",
         },
     )
+
+
+def test_remote_session_create_cdm_job_material_group_params() -> None:
+    client = RemoteSession()
+    client._call = MagicMock(return_value={"success": True})  # type: ignore[method-assign]
+    client.create_cdm_job(
+        job_name="J",
+        material_group="MDF_18",
+        include_offcuts=True,
+        prefer_offcuts=True,
+        sheets="2:0,7:1",
+        sheet_order="picked",
+    )
+    client._call.assert_called_once_with(
+        "create_cdm_job",
+        {
+            "job_name": "J",
+            "material_group": "MDF_18",
+            "include_offcuts": True,
+            "prefer_offcuts": True,
+            "sheets": "2:0,7:1",
+            "sheet_order": "picked",
+        },
+    )
+
+
+def test_remote_session_create_cdm_job_group_defaults_omitted() -> None:
+    client = RemoteSession()
+    client._call = MagicMock(return_value={"success": True})  # type: ignore[method-assign]
+    client.create_cdm_job(job_name="J")
+    client._call.assert_called_once_with("create_cdm_job", {"job_name": "J"})
 
 
 def test_remote_process_cdm_job() -> None:

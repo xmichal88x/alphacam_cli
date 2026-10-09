@@ -236,9 +236,9 @@ The gateway uses **JSON-RPC 2.0** over TCP with length-prefixed frames.
 | `list_posts` | `{}` | `[{name, path}]` |
 | `select_post` | `name` | `success` |
 | `run_nest` | `parts, sheet_width, sheet_height` | `{count, success}` |
-| `create_cdm_job` | `job_name, config, material, customer, po, due_date, description` | `{success, job_name, config, material, warnings}` |
-| `import_cdm_csv` | `csv, job, name, config, separator, has_header, material, import_setting, preview` | `{success, items, ...}` |
-| `import_cdm_preview` | `csv, job, name, config, separator, has_header, material, import_setting` | `{success, setting, field_map, job_name, config, material, items, rows, errors, job}` |
+| `create_cdm_job` | `job_name, config, material, customer, po, due_date, description, material_group, include_offcuts, prefer_offcuts, sheets, sheet_order` | `{success, job_name, config, material, warnings}` |
+| `import_cdm_csv` | `csv, job, name, config, separator, has_header, material, material_group, include_offcuts, prefer_offcuts, sheets, sheet_order, import_setting, preview` | `{success, items, ...}` |
+| `import_cdm_preview` | `csv, job, name, config, separator, has_header, material, material_group, include_offcuts, prefer_offcuts, sheets, import_setting` | `{success, setting, field_map, job_name, config, material, items, rows, errors, fatal_error, job}` |
 | `process_cdm_job` | `job_name, timeout_seconds, output_root` | `{success, job_name, status, processed, method: "inproc", elapsed_s, log, detail, report, warnings?}` |
 | `cdm_stock_offcut_create` | `material_name, thickness, width, height, quantity, name?` | `{success, status, error/reason?, sheet_id?}`; `status: "blocked"` is an explicit failed result |
 | `cdm_stock_offcut_delete` | `sheet_id` (positive stable integer ID only) | `{success, status, sheet_id, error?}` |
@@ -266,6 +266,18 @@ not found: <name>"}`, and a COM failure raises `stock: material delete failed: <
 `thicknesses` and `sheets` are counted before deletion (`sheets` = whole sheets + offcuts);
 after `Delete()` the core verifies by `id` that the material is gone, returning `{success:
 false, error: "delete material failed: <name> still in database"}` on a silent failure.
+
+`import_cdm_csv` / `import_cdm_preview` / `create_cdm_job` accept the material-group
+parameters:
+`material_group` selects ALL sheets of a sheet-database material (the nester picks among
+them by the job configuration); `include_offcuts` adds the group's offcuts as candidates
+(they are never added automatically) and `prefer_offcuts` also orders them first and forces
+picked order; `sheets` is an explicit `id:qty,id:qty` list (mutually exclusive with
+`material_group`); `sheet_order` (`best`/`picked`) sets the configuration's global
+`Nesting_SheetOrderType`. Conflicts and unknown groups/sheet ids are validated in the core
+and surface as `COMError`. Nesting does not delete consumed offcuts — that stays an explicit
+operator/`cdm_stock_offcut_delete` step. `import_cdm_preview` accepts the four group
+parameters but not `sheet_order` (a preview does not touch configuration).
 
 > `process_cdm_job` is synchronous and may run long (geometry + toolpaths + nesting). The client automatically extends the socket timeout for the duration of the call to `max(self.timeout, timeout_seconds + 30)` and restores it in `finally` — no manual timeout adjustment is needed. The gateway serves one request at a time: `process_cdm_job` blocks the only STA thread for its whole duration, so other requests wait until it finishes. The only execution method is `inproc`: the macro `ApplyMachiningAfterNesting.Events.HeadlessProcess` runs in-proc on the gateway's held COM reference (Session 0) — the legacy VBScript/PsExec path was removed. `process_cdm_job` must be invoked on the gateway's STA thread like all handlers (`_com_call`) — otherwise COM raises `RPC_E_WRONG_THREAD`.
 >

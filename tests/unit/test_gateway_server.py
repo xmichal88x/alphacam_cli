@@ -1303,6 +1303,11 @@ def test_create_cdm_job_handler(server_app: MagicMock) -> None:
         po="PO-1",
         due_date="2026-08-10",
         description="opis",
+        material_group=None,
+        include_offcuts=False,
+        prefer_offcuts=False,
+        sheets=None,
+        sheet_order=None,
     )
 
 
@@ -1319,6 +1324,11 @@ def test_create_cdm_job_handler_defaults(server_app: MagicMock) -> None:
         po=None,
         due_date=None,
         description=None,
+        material_group=None,
+        include_offcuts=False,
+        prefer_offcuts=False,
+        sheets=None,
+        sheet_order=None,
     )
 
 
@@ -1344,6 +1354,40 @@ def test_create_cdm_job_handler_blank_params(server_app: MagicMock) -> None:
         po=None,
         due_date=None,
         description=None,
+        material_group=None,
+        include_offcuts=False,
+        prefer_offcuts=False,
+        sheets=None,
+        sheet_order=None,
+    )
+
+
+def test_create_cdm_job_handler_material_group(server_app: MagicMock) -> None:
+    server_app.create_cdm_job.return_value = {"success": True}
+    gw = GatewayServer()
+    gw._handler_create_cdm_job(
+        {
+            "job_name": "JOB-001",
+            "material_group": " MDF_18 ",
+            "include_offcuts": "true",
+            "prefer_offcuts": 1,
+            "sheets": " 2:0,7:1 ",
+            "sheet_order": "picked",
+        }
+    )
+    server_app.create_cdm_job.assert_called_once_with(
+        job_name="JOB-001",
+        config=None,
+        material=None,
+        customer=None,
+        po=None,
+        due_date=None,
+        description=None,
+        material_group="MDF_18",
+        include_offcuts=True,
+        prefer_offcuts=True,
+        sheets="2:0,7:1",
+        sheet_order="picked",
     )
 
 
@@ -1516,6 +1560,11 @@ def test_cdm_import_csv_handler_delegates(server_app: MagicMock, tmp_path: pathl
         material=None,
         import_setting=None,
         preview=False,
+        material_group=None,
+        include_offcuts=False,
+        prefer_offcuts=False,
+        sheets=None,
+        sheet_order=None,
     )
 
 
@@ -1555,6 +1604,81 @@ def test_cdm_import_csv_handler_full_params_delegation(
         material="MDF_18",
         import_setting=3,
         preview=False,
+        material_group=None,
+        include_offcuts=False,
+        prefer_offcuts=False,
+        sheets=None,
+        sheet_order=None,
+    )
+
+
+def test_cdm_import_csv_handler_material_group_delegation(
+    server_app: MagicMock, tmp_path: pathlib.Path
+) -> None:
+    csv_file = tmp_path / "order.csv"
+    csv_file.write_text("P003,1,500,500,1;2;3\n", encoding="utf-8")
+    server_app.import_cdm_csv.return_value = {"success": True, "items": 1}
+    gw = GatewayServer()
+    result = gw._handler_cdm_import_csv(
+        {
+            "csv": str(csv_file),
+            "material_group": "  MDF_18  ",
+            "include_offcuts": "true",
+            "prefer_offcuts": 1,
+            "sheets": None,
+            "sheet_order": "picked",
+        }
+    )
+    assert result["success"] is True
+    server_app.import_cdm_csv.assert_called_once_with(
+        csv=str(csv_file),
+        job=None,
+        name=None,
+        config=None,
+        separator=None,
+        has_header=False,
+        material=None,
+        import_setting=None,
+        preview=False,
+        material_group="MDF_18",
+        include_offcuts=True,
+        prefer_offcuts=True,
+        sheets=None,
+        sheet_order="picked",
+    )
+
+
+def test_cdm_import_csv_handler_sheets_and_sheet_order_delegation(
+    server_app: MagicMock, tmp_path: pathlib.Path
+) -> None:
+    csv_file = tmp_path / "order.csv"
+    csv_file.write_text("P003,1,500,500,1;2;3\n", encoding="utf-8")
+    server_app.import_cdm_csv.return_value = {"success": True, "items": 1}
+    gw = GatewayServer()
+    result = gw._handler_cdm_import_csv(
+        {
+            "csv": str(csv_file),
+            "sheets": "  2:0,7:1 ",
+            "sheet_order": "best",
+            "include_offcuts": "off",
+        }
+    )
+    assert result["success"] is True
+    server_app.import_cdm_csv.assert_called_once_with(
+        csv=str(csv_file),
+        job=None,
+        name=None,
+        config=None,
+        separator=None,
+        has_header=False,
+        material=None,
+        import_setting=None,
+        preview=False,
+        material_group=None,
+        include_offcuts=False,
+        prefer_offcuts=False,
+        sheets="2:0,7:1",
+        sheet_order="best",
     )
 
 
@@ -1579,6 +1703,11 @@ def test_cdm_import_csv_handler_preview_delegates(
         material=None,
         import_setting="Fronty CSV",
         preview=True,
+        material_group=None,
+        include_offcuts=False,
+        prefer_offcuts=False,
+        sheets=None,
+        sheet_order=None,
     )
 
 
@@ -1603,6 +1732,11 @@ def test_cdm_import_csv_handler_whitespace_params_normalized(
         material=None,
         import_setting=None,
         preview=False,
+        material_group=None,
+        include_offcuts=False,
+        prefer_offcuts=False,
+        sheets=None,
+        sheet_order=None,
     )
 
 
@@ -1714,6 +1848,43 @@ def test_cdm_import_preview_handler_delegates(
         name=None,
         config=None,
         material=None,
+        material_group=None,
+        include_offcuts=False,
+        prefer_offcuts=False,
+        sheets=None,
+    )
+
+
+def test_cdm_import_preview_handler_material_group_delegation(
+    server_app: MagicMock, tmp_path: pathlib.Path
+) -> None:
+    csv_file = tmp_path / "order.csv"
+    csv_file.write_text(_MAPPED_CSV_ROW + "\n", encoding="utf-8")
+    server_app.import_cdm_preview.return_value = {"success": True, "items": 1}
+    gw = GatewayServer()
+    result = gw._handler_cdm_import_preview(
+        {
+            "csv": str(csv_file),
+            "material_group": " MDF_18 ",
+            "include_offcuts": True,
+            "prefer_offcuts": "off",
+            "sheets": "2:0",
+        }
+    )
+    assert result["success"] is True
+    server_app.import_cdm_preview.assert_called_once_with(
+        csv=str(csv_file),
+        import_setting=None,
+        separator=None,
+        has_header=False,
+        job=None,
+        name=None,
+        config=None,
+        material=None,
+        material_group="MDF_18",
+        include_offcuts=True,
+        prefer_offcuts=False,
+        sheets="2:0",
     )
 
 

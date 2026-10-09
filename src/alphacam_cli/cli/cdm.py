@@ -53,6 +53,37 @@ def create(
     po: str | None = typer.Option(None, "--po", help="Purchase order number"),
     due_date: str | None = typer.Option(None, "--due-date", help="Due date (YYYY-MM-DD)"),
     description: str | None = typer.Option(None, "--description", help="Job description"),
+    material_group: str | None = typer.Option(
+        None,
+        "--material-group",
+        help=(
+            "Nest using a material group (all whole sheets, AlphaCAM picks); "
+            "mutually exclusive with --material"
+        ),
+    ),
+    include_offcuts: bool = typer.Option(
+        False,
+        "--include-offcuts",
+        help="Include the material's offcuts as candidates (requires --material-group)",
+    ),
+    prefer_offcuts: bool = typer.Option(
+        False,
+        "--prefer-offcuts",
+        help=(
+            "Use offcuts first: offcuts first (qty 1), whole sheets after (qty 0), "
+            "forces picked order (requires --material-group)"
+        ),
+    ),
+    sheets: str | None = typer.Option(
+        None,
+        "--sheets",
+        help="Explicit sheets 'id:qty,id:qty' (mutually exclusive with --material-group)",
+    ),
+    sheet_order: str | None = typer.Option(
+        None,
+        "--sheet-order",
+        help="Sheet order for the job configuration: best (0) or picked (1)",
+    ),
 ) -> None:
     """Create an empty CDM job (no order details; add patterns via cdm import)."""
     require_platform()
@@ -62,6 +93,35 @@ def create(
         except RuntimeError as exc:
             console.print(f"[red]Error:[/red] {exc}")
             raise typer.Exit(code=2) from None
+    material_group = (material_group or "").strip() or None
+    sheets = (sheets or "").strip() or None
+    sheet_order = (sheet_order or "").strip().lower() or None
+    if material and material_group:
+        console.print(
+            "[red]Error:[/red] cdm: --material and --material-group are mutually exclusive"
+        )
+        raise typer.Exit(code=2)
+    if material and sheets:
+        console.print("[red]Error:[/red] cdm: --material and --sheets are mutually exclusive")
+        raise typer.Exit(code=2)
+    if material_group and sheets:
+        console.print("[red]Error:[/red] cdm: --material-group and --sheets are mutually exclusive")
+        raise typer.Exit(code=2)
+    if prefer_offcuts and not material_group:
+        console.print("[red]Error:[/red] cdm: --prefer-offcuts requires --material-group")
+        raise typer.Exit(code=2)
+    if include_offcuts and not material_group:
+        console.print("[red]Error:[/red] cdm: --include-offcuts requires --material-group")
+        raise typer.Exit(code=2)
+    if prefer_offcuts and sheet_order == "best":
+        console.print("[red]Error:[/red] cdm: --prefer-offcuts conflicts with --sheet-order best")
+        raise typer.Exit(code=2)
+    if sheet_order is not None and sheet_order not in ("best", "picked"):
+        console.print(
+            f"[red]Error:[/red] cdm: invalid --sheet-order: {sheet_order!r} "
+            "(expected best or picked)"
+        )
+        raise typer.Exit(code=2)
     with alphacam_context(visible=get_visible()) as raw:
         ac = resolve_app(raw)
         result = ac.create_cdm_job(
@@ -72,6 +132,11 @@ def create(
             po=po,
             due_date=due_date,
             description=description,
+            material_group=material_group,
+            include_offcuts=include_offcuts,
+            prefer_offcuts=prefer_offcuts,
+            sheets=sheets,
+            sheet_order=sheet_order,
         )
         if not result.get("success"):
             console.print(
@@ -82,7 +147,10 @@ def create(
             raise typer.Exit(code=1)
         console.print(f"[green]OK:[/green] CDM job created: {result.get('job_name') or job_name}")
         console.print(f"     Config: {result.get('config') or '-'}")
-        console.print(f"     Material: {result.get('material') or '-'}")
+        if result.get("material_group"):
+            console.print(f"     Group: {result['material_group']}", markup=False)
+        else:
+            console.print(f"     Material: {result.get('material') or '-'}", markup=False)
         for warning in result.get("warnings", []):
             console.print(f"[yellow]WARNING:[/yellow] {warning}")
 
@@ -239,6 +307,37 @@ def import_csv(
         "--material",
         help="Material name (AM_Materials) for the job; overrides the mapped material column",
     ),
+    material_group: str | None = typer.Option(
+        None,
+        "--material-group",
+        help=(
+            "Nest using a material group (all whole sheets, AlphaCAM picks); "
+            "mutually exclusive with --material"
+        ),
+    ),
+    include_offcuts: bool = typer.Option(
+        False,
+        "--include-offcuts",
+        help="Include the material's offcuts as candidates (requires --material-group)",
+    ),
+    prefer_offcuts: bool = typer.Option(
+        False,
+        "--prefer-offcuts",
+        help=(
+            "Use offcuts first: offcuts first (qty 1), whole sheets after (qty 0), "
+            "forces picked order (requires --material-group)"
+        ),
+    ),
+    sheets: str | None = typer.Option(
+        None,
+        "--sheets",
+        help="Explicit sheets 'id:qty,id:qty' (mutually exclusive with --material-group)",
+    ),
+    sheet_order: str | None = typer.Option(
+        None,
+        "--sheet-order",
+        help="Sheet order for the job configuration: best (0) or picked (1)",
+    ),
     import_setting: str | None = typer.Option(
         None,
         "--import-setting",
@@ -254,6 +353,37 @@ def import_csv(
     job = (job or "").strip() or None
     if job and name:
         console.print("[red]Error:[/red] cdm: --name and --job are mutually exclusive")
+        raise typer.Exit(code=2)
+    material_group = (material_group or "").strip() or None
+    sheets = (sheets or "").strip() or None
+    sheet_order = (sheet_order or "").strip().lower() or None
+    if material and material_group:
+        console.print(
+            "[red]Error:[/red] cdm: --material and --material-group are mutually exclusive"
+        )
+        raise typer.Exit(code=2)
+    if material and sheets:
+        console.print("[red]Error:[/red] cdm: --material and --sheets are mutually exclusive")
+        raise typer.Exit(code=2)
+    if material_group and sheets:
+        console.print("[red]Error:[/red] cdm: --material-group and --sheets are mutually exclusive")
+        raise typer.Exit(code=2)
+    if prefer_offcuts and not material_group:
+        console.print("[red]Error:[/red] cdm: --prefer-offcuts requires --material-group")
+        raise typer.Exit(code=2)
+    if include_offcuts and not material_group:
+        console.print("[red]Error:[/red] cdm: --include-offcuts requires --material-group")
+        raise typer.Exit(code=2)
+    if prefer_offcuts and sheet_order == "best":
+        console.print(
+            "[red]Error:[/red] cdm: --prefer-offcuts forces picked order; remove --sheet-order best"
+        )
+        raise typer.Exit(code=2)
+    if sheet_order is not None and sheet_order not in ("best", "picked"):
+        console.print(
+            f"[red]Error:[/red] cdm: invalid --sheet-order: {sheet_order!r} "
+            "(expected best or picked)"
+        )
         raise typer.Exit(code=2)
     import_setting_key: str | int | None = (
         int(import_setting)
@@ -272,6 +402,10 @@ def import_csv(
                 name=name,
                 config=config,
                 material=material,
+                material_group=material_group,
+                include_offcuts=include_offcuts,
+                prefer_offcuts=prefer_offcuts,
+                sheets=sheets,
             )
             _print_import_preview(result)
             return
@@ -284,6 +418,11 @@ def import_csv(
             has_header=header,
             material=material,
             import_setting=import_setting_key,
+            material_group=material_group,
+            include_offcuts=include_offcuts,
+            prefer_offcuts=prefer_offcuts,
+            sheets=sheets,
+            sheet_order=sheet_order,
         )
         if not result.get("success"):
             errors = result.get("errors", [])
@@ -299,10 +438,22 @@ def import_csv(
             f"[green]OK:[/green] CDM job {verb}: {job_display} ({result.get('items', 0)} item(s))"
         )
         console.print(f"     Imported: {csv}")
-        if result.get("material"):
-            console.print(f"     Material: {result['material']}")
+        if result.get("material_group"):
+            console.print(f"     Group: {result['material_group']}", markup=False)
+        elif result.get("material"):
+            console.print(f"     {_material_line(result)}", markup=False)
         for err in result.get("errors", []):
             console.print(f"[yellow]WARNING:[/yellow] {err}")
+
+
+def _material_line(result: dict[str, Any]) -> str:
+    label = result.get("material") or "-"
+    source = result.get("material_source")
+    if source == "job":
+        return f"Material: {label} (from job)"
+    if source == "database-default":
+        return f"Material: {label} (database default)"
+    return f"Material: {label}"
 
 
 @app.command("delete")

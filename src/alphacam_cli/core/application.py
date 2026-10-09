@@ -6,7 +6,7 @@ import re
 import time
 from collections.abc import Iterator
 from datetime import datetime
-from typing import TYPE_CHECKING, Any, ClassVar, cast
+from typing import TYPE_CHECKING, Any, ClassVar, NoReturn, cast
 
 if TYPE_CHECKING:
     import win32com.client as win32  # type: ignore[import-untyped]
@@ -677,19 +677,29 @@ class Application:
         po: str | None = None,
         due_date: str | None = None,
         description: str | None = None,
+        *,
+        material_group: str | None = None,
+        include_offcuts: bool = False,
+        prefer_offcuts: bool = False,
+        sheets: str | None = None,
+        sheet_order: str | None = None,
     ) -> dict[str, Any]:
         """Create an empty CDM job (headless, no dialogs; no order details).
 
-        Config and material are required at creation: explicit arguments win,
-        otherwise the database defaults (AM_Settings); when neither exists the
-        job is not created (fail-fast). Metadata (customer/po/due date/
-        description) is best-effort: a COM setter on the job object is tried
-        first (before the single DB save), then a VistaDB UPDATE; failures
-        become warnings, never abort the creation.         Material is stored via a
-        VistaDB UPDATE after the save; when it fails the job is removed and
-        the creation aborts. The job is finalized (JobType + default sheets)
-        via a VistaDB UPDATE afterwards; when it fails the job is removed and
-        the creation aborts.
+        Config is required at creation: explicit argument wins, otherwise the
+        database default (AM_Settings); when neither exists the job is not
+        created (fail-fast). Material selection is explicit (``material``), a
+        material group (``material_group`` + offcuts/sheet-order options) or an
+        explicit sheet spec (``sheets``); otherwise the database default is
+        used. In group mode the job gets ``fkMaterialID=0`` plus
+        ``AM_SelectedSheets`` so the nester picks among them. Metadata
+        (customer/po/due date/description) is best-effort: a COM setter on the
+        job object is tried first (before the single DB save), then a VistaDB
+        UPDATE; failures become warnings, never abort the creation. Material is
+        stored via a VistaDB UPDATE after the save; when it fails the job is
+        removed and the creation aborts. The job is finalized (JobType + default
+        sheets) via a VistaDB UPDATE afterwards; when it fails the job is
+        removed and the creation aborts.
         """
         job_name = _validate_job_name(job_name)
         if due_date is not None:
@@ -710,25 +720,69 @@ class Application:
             config_name = str(defaults.get("config_name") or "").strip()
             if not config_name:
                 raise RuntimeError("cdm: no default configuration found")  # noqa: TRY003
-        materials = cdm_db.sheet_materials()
         material_name = (material or "").strip()
+        group_option = (material_group or "").strip() or None
+        sheets_option = (sheets or "").strip() or None
+        sheet_order = (sheet_order or "").strip().lower() or None
+        _validate_group_options(
+            material_name or None,
+            group_option,
+            sheets_option,
+            include_offcuts,
+            prefer_offcuts,
+            sheet_order,
+        )
+        group_sheets: list[dict[str, Any]] | None = None
+        material_group_label: str | None = None
         material_id: int | None = None
-        if material_name:
-            material_id = materials.get(material_name)
-            if material_id is None:
-                raise RuntimeError(f"cdm: material not found: {material_name}")  # noqa: TRY003
-        else:
-            if defaults is None:
-                defaults = cdm_db.vdb5_job_defaults()
-            material_id = defaults.get("material_id")
-            if material_id is None:
-                raise RuntimeError("cdm: no default material found")  # noqa: TRY003
-        material_label: str | None = material_name or None
-        if material_label is None and material_id is not None:
-            material_label = next(
-                (n for n, mid in materials.items() if mid == material_id),
-                f"id:{material_id}",
+        material_label: str | None = None
+        if group_option:
+            group_sheets = cdm_db.resolve_material_group(
+                group_option,
+                include_offcuts=(include_offcuts or prefer_offcuts),
+                offcuts_first=prefer_offcuts,
+                whole_quantity=0,
+                offcut_quantity=1,
             )
+            material_group_label = (
+                f"{group_option} (group: "
+                + ", ".join(
+                    f"{s['name']}#{s['id']}" + (" (offcut)" if s.get("offcut") else "")
+                    for s in group_sheets
+                )
+                + ")"
+            )
+        elif sheets_option:
+            parsed_sheets = _parse_sheets_spec(sheets_option)
+            valid_ids = {int(s["id"]) for group in cdm_db.material_groups().values() for s in group}
+            unknown = sorted({s["id"] for s in parsed_sheets if s["id"] not in valid_ids})
+            if unknown:
+                raise RuntimeError(  # noqa: TRY003
+                    "cdm: unknown sheet id(s): " + ", ".join(str(i) for i in unknown)
+                )
+            group_sheets = parsed_sheets
+            material_group_label = f"sheets: {sheets_option}"
+        else:
+            materials = cdm_db.sheet_materials()
+            if material_name:
+                material_id = materials.get(material_name)
+                if material_id is None:
+                    raise RuntimeError(  # noqa: TRY003
+                        f"cdm: material not found: {material_name}"
+                    )
+            else:
+                if defaults is None:
+                    defaults = cdm_db.vdb5_job_defaults()
+                material_id = defaults.get("material_id")
+                if material_id is None:
+                    raise RuntimeError("cdm: no default material found")  # noqa: TRY003
+            material_label = material_name or None
+            if material_label is None and material_id is not None:
+                material_label = next(
+                    (n for n, mid in materials.items() if mid == material_id),
+                    f"id:{material_id}",
+                )
+        effective_sheet_order = "picked" if prefer_offcuts else sheet_order
         try:
             job = am.NewCDMJob()
             job.JobName = job_name
@@ -770,7 +824,8 @@ class Application:
             job.SaveToDatabase()
         except Exception as e:
             raise RuntimeError(f"cdm: create job failed: {e}") from e  # noqa: TRY003
-        if not cdm_db.set_job_material(job_name, material_id):
+
+        def _cleanup_and_raise(message: str) -> NoReturn:
             deleted, reason = cdm_db.cleanup_created_job(
                 am,
                 job,
@@ -778,20 +833,33 @@ class Application:
                 log=lambda msg: logger.warning("cdm: cleanup failed: %s", msg),
             )
             note = "job removed" if deleted else f"cleanup failed: {reason}"
-            raise RuntimeError(  # noqa: TRY003
-                f"cdm: failed to set material for job {job_name} ({note})"
-            )
-        if not cdm_db.finalize_cdm_job(job_name):
-            deleted, reason = cdm_db.cleanup_created_job(
-                am,
-                job,
-                job_name,
-                log=lambda msg: logger.warning("cdm: cleanup failed: %s", msg),
-            )
-            note = "job removed" if deleted else f"cleanup failed: {reason}"
-            raise RuntimeError(  # noqa: TRY003
-                f"cdm: failed to finalize job {job_name} ({note})"
-            )
+            raise RuntimeError(f"cdm: {message} ({note})")  # noqa: TRY003
+
+        if group_sheets is not None:
+            if not cdm_db.set_job_material(job_name, 0):
+                _cleanup_and_raise(f"failed to set material for job {job_name}")
+            if not cdm_db.finalize_cdm_job(job_name):
+                _cleanup_and_raise(f"failed to finalize job {job_name}")
+            if not cdm_db.set_selected_sheets(job_name, group_sheets):
+                _cleanup_and_raise(f"failed to set selected sheets for job {job_name}")
+            if effective_sheet_order is not None:
+                order_value = 0 if effective_sheet_order == "best" else 1
+                if cdm_db.set_sheet_order(config_name, order_value):
+                    warnings.append(
+                        f"sheet order set to {'picked' if order_value else 'best'} globally "
+                        f"for configuration '{config_name}' (affects all its jobs)"
+                    )
+                else:
+                    warnings.append(
+                        "failed to set sheet order (affects all jobs of this configuration)"
+                    )
+            material_label = material_group_label
+        else:
+            material_id = cast(int, material_id)
+            if not cdm_db.set_job_material(job_name, material_id):
+                _cleanup_and_raise(f"failed to set material for job {job_name}")
+            if not cdm_db.finalize_cdm_job(job_name):
+                _cleanup_and_raise(f"failed to finalize job {job_name}")
         if (
             customer_id is not None
             and "customer" not in com_set
@@ -825,6 +893,7 @@ class Application:
             "job_name": job_name,
             "config": config_name,
             "material": material_label,
+            "material_group": material_group_label,
             "warnings": warnings,
         }
 
@@ -1094,6 +1163,12 @@ class Application:
         material: str | None = None,
         import_setting: str | int | None = None,
         preview: bool = False,
+        *,
+        material_group: str | None = None,
+        include_offcuts: bool = False,
+        prefer_offcuts: bool = False,
+        sheets: str | None = None,
+        sheet_order: str | None = None,
     ) -> dict[str, Any]:
         """Import a CSV door order into a single CDM job (headless, no dialogs).
 
@@ -1108,11 +1183,26 @@ class Application:
         otherwise a new job is created only when the setting has
         CreateJob=Yes (name from --name, the mapped job name or the CSV
         basename, max 60 chars) — when CreateJob=No ``job`` is required.
+
+        ``material_group`` (or an explicit ``sheets`` spec) selects a group of
+        sheets instead of a single material: the job and details get material
+        id 0 and the sheet list is written to AM_SelectedSheets so the nester
+        picks among them. ``include_offcuts``/``prefer_offcuts`` add the
+        material's offcuts to the group (the latter also orders them first and
+        forces picked order). ``sheet_order`` (``best``/``picked``) sets the
+        configuration's Nesting_SheetOrderType globally.
         """
         job = (job or "").strip() or None
         name = (name or "").strip() or None
+        material = (material or "").strip() or None
+        material_group = (material_group or "").strip() or None
+        sheets = (sheets or "").strip() or None
+        sheet_order = (sheet_order or "").strip().lower() or None
         if job and name:
             raise RuntimeError("cdm: --name and --job are mutually exclusive")  # noqa: TRY003
+        _validate_group_options(
+            material, material_group, sheets, include_offcuts, prefer_offcuts, sheet_order
+        )
         if not csv.strip():
             raise RuntimeError("cdm: csv path is required")  # noqa: TRY003
         if not os.path.exists(csv):
@@ -1127,6 +1217,10 @@ class Application:
                 name=name,
                 config=config,
                 material=material,
+                material_group=material_group,
+                include_offcuts=include_offcuts,
+                prefer_offcuts=prefer_offcuts,
+                sheets=sheets,
             )
         return self._import_cdm_csv_mapped(
             csv=csv,
@@ -1137,6 +1231,11 @@ class Application:
             has_header=has_header,
             material=material,
             import_setting=import_setting,
+            material_group=material_group,
+            include_offcuts=include_offcuts,
+            prefer_offcuts=prefer_offcuts,
+            sheets=sheets,
+            sheet_order=sheet_order,
         )
 
     def _import_cdm_csv_mapped(
@@ -1149,6 +1248,11 @@ class Application:
         has_header: bool,
         material: str | None,
         import_setting: str | int | None,
+        material_group: str | None = None,
+        include_offcuts: bool = False,
+        prefer_offcuts: bool = False,
+        sheets: str | None = None,
+        sheet_order: str | None = None,
     ) -> dict[str, Any]:
         setting = _resolve_import_setting(import_setting)
         setting_name = str(setting.get("name") or "")
@@ -1167,32 +1271,84 @@ class Application:
         )
         material_name = _cdm_material_name(details, material)
         defaults: dict[str, Any] | None = None
-        materials = cdm_db.sheet_materials()
+        materials: dict[str, int] = {}
         material_id: int | None = None
-        if material_name:
-            material_id = materials.get(material_name)
-            if material_id is None:
-                raise RuntimeError(f"cdm: material not found: {material_name}")  # noqa: TRY003
+        material_source: str | None = None
+        group_sheets: list[dict[str, Any]] | None = None
+        material_label: str | None = None
+        material_group_label: str | None = None
+        if material_group or sheets:
+            if material_group:
+                group_sheets = cdm_db.resolve_material_group(
+                    material_group,
+                    include_offcuts=(include_offcuts or prefer_offcuts),
+                    offcuts_first=prefer_offcuts,
+                    whole_quantity=0,
+                    offcut_quantity=1,
+                )
+                material_group_label = (
+                    f"{material_group} (group: "
+                    + ", ".join(
+                        f"{s['name']}#{s['id']}" + (" (offcut)" if s.get("offcut") else "")
+                        for s in group_sheets
+                    )
+                    + ")"
+                )
+            else:
+                parsed_sheets = _parse_sheets_spec(sheets or "")
+                valid_ids = {
+                    int(s["id"]) for group in cdm_db.material_groups().values() for s in group
+                }
+                unknown = sorted({s["id"] for s in parsed_sheets if s["id"] not in valid_ids})
+                if unknown:
+                    raise RuntimeError(  # noqa: TRY003
+                        "cdm: unknown sheet id(s): " + ", ".join(str(i) for i in unknown)
+                    )
+                group_sheets = parsed_sheets
+                material_group_label = f"sheets: {sheets}"
         else:
-            defaults = cdm_db.vdb5_job_defaults()
-            material_id = defaults.get("material_id")
-        material_label: str | None = material_name
-        if material_label is None and material_id is not None:
-            material_label = next(
-                (n for n, mid in materials.items() if mid == material_id),
-                None,
-            )
+            materials = cdm_db.sheet_materials()
+            if material_name:
+                material_id = materials.get(material_name)
+                if material_id is None:
+                    raise RuntimeError(f"cdm: material not found: {material_name}")  # noqa: TRY003
+                material_source = "explicit"
+            elif job:
+                job_mat = cdm_db.job_material_id(job)
+                if job_mat is None:
+                    defaults = cdm_db.vdb5_job_defaults()
+                    material_id = defaults.get("material_id")
+                    material_source = "database-default"
+                    errors.append(f"job {job}: failed to read job material; using database default")
+                elif job_mat == 0:
+                    material_source = "job-group"
+                else:
+                    material_id = job_mat
+                    material_source = "job"
+            else:
+                defaults = cdm_db.vdb5_job_defaults()
+                material_id = defaults.get("material_id")
+                material_source = "database-default"
+            material_label = material_name
+            if material_label is None and material_id is not None:
+                material_label = next(
+                    (n for n, mid in materials.items() if mid == material_id),
+                    None,
+                )
         if not details:
             return {
                 "success": False,
                 "job_name": job or "",
                 "items": 0,
                 "material": material_label,
+                "material_group": material_group_label,
+                "material_source": material_source,
                 "errors": errors,
                 "import_setting": setting_name,
             }
         am = self.get_cdm_automation_manager()
         cdm_job: Any = None
+        config_name: str | None = None
         if job:
             try:
                 cdm_job = cdm_db.find_cdm_job(am, job)
@@ -1287,7 +1443,51 @@ class Application:
             ok_details.append(d)
         if com_active_failed and not cdm_db.set_order_details_active(job_name):
             errors.append(f"job {job_name}: failed to set order details active")
-        if material_id is not None:
+        effective_sheet_order = "picked" if prefer_offcuts else sheet_order
+        group_ok = True
+        if group_sheets is not None:
+            material_ok = cdm_db.set_job_material(job_name, 0)
+            finalize_ok = cdm_db.finalize_cdm_job(job_name)
+            sheets_ok = cdm_db.set_selected_sheets(job_name, group_sheets)
+            group_ok = material_ok and finalize_ok and sheets_ok
+            if not group_ok:
+                if not job:
+                    cdm_db.cleanup_created_job(
+                        am,
+                        cdm_job,
+                        job_name,
+                        log=lambda msg: logger.warning("cdm import: cleanup failed: %s", msg),
+                    )
+                    raise RuntimeError(  # noqa: TRY003
+                        f"cdm: failed to configure material group for job {job_name}"
+                    )
+                errors.append(f"job {job_name}: failed to configure material group")
+            if effective_sheet_order is not None:
+                order_config = config_name if not job else _cdm_job_config_name(job_name)
+                order_value = 0 if effective_sheet_order == "best" else 1
+                if not order_config:
+                    errors.append(
+                        f"job {job_name}: failed to set sheet order (job configuration not found)"
+                    )
+                elif cdm_db.set_sheet_order(order_config, order_value):
+                    errors.append(
+                        f"job {job_name}: sheet order set to "
+                        f"{'picked' if order_value else 'best'} globally for configuration "
+                        f"'{order_config}' (affects all its jobs)"
+                    )
+                else:
+                    errors.append(
+                        f"job {job_name}: failed to set sheet order "
+                        "(affects all jobs of this configuration)"
+                    )
+        elif material_source == "job-group":
+            if not cdm_db.set_order_detail_material(job_name, 0):
+                errors.append(f"job {job_name}: failed to set order detail material")
+            material_label = "from job (group)"
+        elif material_source == "job" and material_id is not None:
+            if not cdm_db.set_order_detail_material(job_name, material_id):
+                errors.append(f"job {job_name}: failed to set order detail material")
+        elif material_id is not None:
             if not cdm_db.set_job_material(job_name, material_id):
                 errors.append(f"job {job_name}: failed to set material")
             if not cdm_db.set_order_detail_material(job_name, material_id):
@@ -1312,10 +1512,12 @@ class Application:
             else:
                 errors.append(f"job {job_name}: no valid order details, cleanup unverified")
         return {
-            "success": items > 0,
+            "success": items > 0 and group_ok,
             "job_name": job_name,
             "items": items,
             "material": material_label,
+            "material_group": material_group_label,
+            "material_source": material_source,
             "errors": errors,
             "import_setting": setting_name,
         }
@@ -1330,6 +1532,11 @@ class Application:
         name: str | None = None,
         config: str | None = None,
         material: str | None = None,
+        *,
+        material_group: str | None = None,
+        include_offcuts: bool = False,
+        prefer_offcuts: bool = False,
+        sheets: str | None = None,
     ) -> dict[str, Any]:
         """Dry-run import preview without touching COM (read, parse, map only).
 
@@ -1339,8 +1546,14 @@ class Application:
         """
         job = (job or "").strip() or None
         name = (name or "").strip() or None
+        material = (material or "").strip() or None
+        material_group = (material_group or "").strip() or None
+        sheets = (sheets or "").strip() or None
         if job and name:
             raise RuntimeError("cdm: --name and --job are mutually exclusive")  # noqa: TRY003
+        _validate_group_options(
+            material, material_group, sheets, include_offcuts, prefer_offcuts, None
+        )
         if not csv.strip():
             raise RuntimeError("cdm: csv path is required")  # noqa: TRY003
         if not os.path.exists(csv):
@@ -1361,25 +1574,56 @@ class Application:
             rows, field_map, has_header or bool(setting.get("ignore_header", False))
         )
         defaults = cdm_db.vdb5_job_defaults()
-        materials = cdm_db.sheet_materials()
+        materials: dict[str, int] = {}
         material_name = _cdm_material_name(details, material)
         material_id: int | None = None
         fatal_error = False
-        if material_name:
-            material_id = materials.get(material_name)
-            if material_id is None:
-                errors.append(f"cdm: material not found: {material_name}")
+        group_info: dict[str, Any] | None = None
+        if material_group or sheets:
+            try:
+                if material_group:
+                    resolved_sheets = cdm_db.resolve_material_group(
+                        material_group,
+                        include_offcuts=(include_offcuts or prefer_offcuts),
+                        offcuts_first=prefer_offcuts,
+                        whole_quantity=0,
+                        offcut_quantity=1,
+                    )
+                    group_info = {"name": material_group, "sheets": resolved_sheets}
+                else:
+                    parsed_sheets = _parse_sheets_spec(sheets or "")
+                    valid_ids = {
+                        int(s["id"]) for group in cdm_db.material_groups().values() for s in group
+                    }
+                    unknown = sorted({s["id"] for s in parsed_sheets if s["id"] not in valid_ids})
+                    if unknown:
+                        errors.append(
+                            "cdm: unknown sheet id(s): " + ", ".join(str(i) for i in unknown)
+                        )
+                        fatal_error = True
+                    group_info = {"name": None, "sheets": parsed_sheets}
+            except RuntimeError as e:
+                errors.append(str(e))
                 fatal_error = True
+            material_name = None
         else:
-            material_id = defaults.get("material_id")
+            materials = cdm_db.sheet_materials()
+            if material_name:
+                material_id = materials.get(material_name)
+                if material_id is None:
+                    errors.append(f"cdm: material not found: {material_name}")
+                    fatal_error = True
+            else:
+                material_id = defaults.get("material_id")
         job_name = job if job is not None else _cdm_job_name(details, name, csv)
-        if material_name is None and material_id is None:
-            errors.append(f"job {job_name}: no material set (required for processing)")
-        elif material_name is None and material_id is not None:
-            material_name = next(
-                (n for n, mid in materials.items() if mid == material_id),
-                None,
-            )
+        if group_info is None:
+            if material_name is None and material_id is None:
+                errors.append(f"job {job_name}: no material set (required for processing)")
+            elif material_name is None and material_id is not None:
+                material_name = next(
+                    (n for n, mid in materials.items() if mid == material_id),
+                    None,
+                )
         config_name = None
         if not job:
             config_name = _cdm_config_name(details, config)
@@ -1402,9 +1646,11 @@ class Application:
             "job_name": job_name,
             "config": config_name,
             "material": material_name,
+            "material_group": group_info,
             "items": len(details),
             "rows": details,
             "errors": errors,
+            "fatal_error": fatal_error,
             "job": job,
         }
 
@@ -2006,3 +2252,83 @@ def _cdm_config_name(details: list[dict[str, Any]], config: str | None) -> str |
         if isinstance(raw, str) and raw.strip():
             return raw.strip()
     return None
+
+
+def _validate_group_options(
+    material: str | None,
+    material_group: str | None,
+    sheets: str | None,
+    include_offcuts: bool,
+    prefer_offcuts: bool,
+    sheet_order: str | None,
+) -> None:
+    """Validate mutually exclusive material/sheet-selection options for cdm import."""
+    if material and material_group:
+        raise RuntimeError(  # noqa: TRY003
+            "cdm: --material and --material-group are mutually exclusive"
+        )
+    if material and sheets:
+        raise RuntimeError("cdm: --material and --sheets are mutually exclusive")  # noqa: TRY003
+    if material_group and sheets:
+        raise RuntimeError(  # noqa: TRY003
+            "cdm: --material-group and --sheets are mutually exclusive"
+        )
+    if (include_offcuts or prefer_offcuts) and not material_group:
+        raise RuntimeError(  # noqa: TRY003
+            "cdm: --include-offcuts/--prefer-offcuts require --material-group"
+        )
+    if sheet_order is not None and sheet_order not in ("best", "picked"):
+        raise RuntimeError(  # noqa: TRY003
+            "cdm: --sheet-order must be 'best' or 'picked'"
+        )
+    if prefer_offcuts and sheet_order == "best":
+        raise RuntimeError(  # noqa: TRY003
+            "cdm: --prefer-offcuts forces picked order; remove --sheet-order best"
+        )
+
+
+def _parse_sheets_spec(spec: str) -> list[dict[str, Any]]:
+    """Parse an explicit sheet spec ``"id:quantity,id:quantity"``.
+
+    Whitespace around entries and numbers is tolerated. Raises RuntimeError
+    for a malformed entry or an empty spec (both would silently select no
+    sheets and hang AM processing).
+    """
+    sheets: list[dict[str, Any]] = []
+    for part in spec.split(","):
+        item = part.strip()
+        if not item:
+            continue
+        if item.count(":") != 1:
+            raise RuntimeError(  # noqa: TRY003
+                f"cdm: invalid --sheets value: {spec!r} (expected id:quantity,...)"
+            )
+        id_str, qty_str = (piece.strip() for piece in item.split(":"))
+        try:
+            sheet_id = int(id_str)
+            quantity = int(qty_str)
+        except ValueError:
+            raise RuntimeError(  # noqa: TRY003
+                f"cdm: invalid --sheets value: {spec!r} (non-numeric id/quantity)"
+            ) from None
+        if sheet_id <= 0:
+            raise RuntimeError(  # noqa: TRY003
+                f"cdm: invalid --sheets value: {spec!r} (id must be > 0)"
+            )
+        if quantity < 0:
+            raise RuntimeError(  # noqa: TRY003
+                f"cdm: invalid --sheets value: {spec!r} (quantity must be >= 0)"
+            )
+        sheets.append({"id": sheet_id, "quantity": quantity})
+    if not sheets:
+        raise RuntimeError(f"cdm: invalid --sheets value: {spec!r} (no sheets given)")  # noqa: TRY003
+    return sheets
+
+
+def _cdm_job_config_name(job_name: str) -> str | None:
+    """Resolve the configuration name of an existing job's configuration.
+
+    Reads ``ConfigurationSettingName`` via :func:`cdm_db.job_config_name`;
+    None when unavailable.
+    """
+    return cdm_db.job_config_name(job_name)

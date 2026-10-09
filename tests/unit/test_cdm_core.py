@@ -1543,6 +1543,7 @@ def test_create_cdm_job_empty_job(monkeypatch: pytest.MonkeyPatch) -> None:
         "job_name": "JOB-001",
         "config": "Fronty",
         "material": "MDF18 - 2800 x 2070",
+        "material_group": None,
         "warnings": [],
     }
     assert job.JobName == "JOB-001"

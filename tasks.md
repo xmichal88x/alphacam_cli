@@ -1218,3 +1218,161 @@ Zawieszone poprzednie wywołanie makra HeadlessProcess — log `C:\temp\ama_macr
 ### Diagnostyka / ręczny reset
 - Sprawdź log makra: `Get-Content C:\temp\ama_macro_log.txt -Tail 10` — ostatni wpis `got` bez `r` = zawieszenie.
 - Reset: `taskkill /F /IM Acam.exe` → `sc stop AlphaCAMGateway` → `sc start AlphaCAMGateway` → ~50s.
+
+## 2026-10-06 SESSION — AM: NAZEWNICTWO PLIKÓW (FILE/BASE NAME CONFIGURATION) — ANALIZA READ-ONLY
+
+### Cel
+Wyjaśnić pola "Konfiguracja podstawowej nazwy" i "Konfiguracja nazwy pliku" w Menadżerze Automatyzacji (AlphaCAM 2025.2, laptop-monika) i ich wpływ na output oraz automatyzację (kolejka nestingu, `cdm manifest`, NC discovery).
+
+### Ustalenia (skrót; pełny raport: `docs/raporty/2026-10-06-am-file-name-configuration.md`)
+- Na laptopie wszystkie konfiguracje (1/40/41) mają puste `AM_ConfigurationSettings.CompiledFileName`/`CompiledBaseName`, a `AM_FileNameConfiguration` ma 0 wierszy → aktywne domyślne nazewnictwo AM. Nic nie zmieniano (read-only).
+- Pomoc ACAM4.chm 2025.2 i help online NIE opisują tych pól. Jedyne wzmianki: What's New 2021.0 (dialogi "File Name Configuration" w Output Settings), release notes 2025.3 ("Some File Naming options can delete ALL files. Fixed."), wideo 2025.1 ("increased control over output file names").
+- Mechanizm (z dekompilacji AcamAddIns.dll 2025.1): format z kafelków — Job Fields (JobName, CustomerName, JobMaterial, PurchaseOrderNumber, WorkOrderNumber, JobDescription), Job File Fields (PartName, JobFileMaterial, ItemNumber, Length, Width, Thickness), Free Text 1–4, Custom Field 1–25; zapis w `AM_FileNameConfiguration` + skompilowany string w `AM_ConfigurationSettings.CompiledFileName`/`CompiledBaseName`.
+- Skutki: File Name Configuration zmienia nazwę pliku każdej części (rysunek + NC); Base Name Configuration zastępuje `<JobName>` w ścieżkach wyjściowych (drawing/NC/reports/nested), przy wielu jobach fallback do JobName. Domyślnie (puste) bez zmian: `root/<JobName>/...`, części `<PartName>_<n>` (CDM: `<JobName>_<TypeName>_<n>`).
+
+### Wpływ na automatyzację
+- Puste pola (stan obecny): `find_nc_files`/`cdm manifest` działają jak dotąd.
+- Custom File Name → ryzyko `nc_missing`/`nc_unmatched` (dopasowanie po nazwie arkusza/materiału/stem przestaje trafiać).
+- Custom Base Name → `root/<JobName>` przestaje istnieć → discovery skanuje zły katalog i zwraca pusty wynik.
+
+### Backlog (osobne zadania)
+- [ ] P2: `cdm config show` — dodać wiersz "Compiled base name" (obecnie tylko "Compiled file name", `src/alphacam_cli/cli/cdm.py:1318`).
+- [ ] P2: NC discovery/manifest — wykrywać niepuste `CompiledFileName`/`CompiledBaseName` (lub wiersze `AM_FileNameConfiguration`) i logować ostrzeżenie, zanim wynik będzie pusty (punkt wejścia: `_enrich_manifest_nc`, `src/alphacam_cli/core/application.py:1751`).
+- [ ] P3 (opcjonalnie): `cdm config naming <NAME>` — odczyt wierszy `AM_FileNameConfiguration` jako JSON do diagnostyki.
+
+### Jak zweryfikowano
+- SSH laptop-monika: odczyt VistaDB5 (PowerShell + `C:\Program Files\Hexagon\ALPHACAM 2025\VistaDB.5.NET40.dll`), `hh.exe -decompile` ACAM4.chm + grep, ikdasm `AcamAddIns.dll` (2025.1.0.1), analiza `AcamAddIns.po`/`.poeng`, wersje plików (Acam.exe 2025.2.0.103).
+- Artefakty lokalne (NIE w repo): `/tmp/opencode/AcamAddIns.ildasm`, `/tmp/opencode/vdb5_configs.json`.
+
+## 2026-10-09 SESSION — WYBÓR MATERIAŁU/ARKUSZA W JOBIE (nesting) — ZWERYFIKOWANE E2E NA VM125
+
+**Cel:** zbadać opcje wyboru materiału przy tworzeniu joba (materiał joba vs per-element), grupę materiałów (kilka arkuszy), oraz regułę, wg której AlphaCAM wybiera arkusz z listy. Testy na żywej VM125 (192.168.100.60, AlphaCAM 2025 Router, gateway Session 0).
+
+### KLUCZOWY WNIOSEK — `fkMaterialID` to ID ARKUSZA, nie materiału
+- `AM_JobDetails.fkMaterialID` (materiał joba) i `CDM_OrderDetails.fkMaterialID` (materiał elementu/wzoru) wskazują **`sheets.id`** z `C:\ALPHACAM\LICOMDAT\sheet_database_v2.db` (SQLite), **nie** wiersz materiału.
+- Dowód: `--material MDF_18` → `fkMaterialID=2` → arkusz „MDF_18" 2440×1220; `--material MDF18` → `fkMaterialID=7` → arkusz „MDF18" 2800×2070 (oba w materiale MDF_18). Nazwa ARKUSZA steruje wyborem.
+- `AM_Materials` (VistaDB, id 1..4, „Not Selected"/„MDF_18" 2070×2800) to **legacy — nesting jej NIE używa**.
+
+### Wybór arkusza = wskazany arkusz (nie kolejność / nie rozmiar)
+- AlphaCAM **nie iteruje po arkuszach materiału** i nie stosuje „best utilisation". Nester używa DOKŁADNIE arkusza o `id = fkMaterialID`.
+- `Nesting_SheetOrderType` (0=Best Utilisation, 1=Picked Order — enum potwierdzony w .anl: „Priorytet arkusza") **nie wpływa** na wynik headless (0 vs 1 → identyczny arkusz).
+- `AM_SelectedSheets` (`SelectedSheetID`+`Quantity`) **jest IGNOROWANE** w headless `cdm process` (wpis SelectedSheetID=7 nie zmienił wyboru — nadal arkusz 2). COM `job.NestMaterialDatabaseSheets` = Count 0 (DB nie zasila tej kolekcji).
+- **HAZARD:** jeśli `fkMaterialID` nie wskazuje istniejącego arkusza (np. samo id materiału bez arkusza, albo 0/NULL) → `cdm process` **WISI** (log makra `got` bez `r`, błąd 0x800ADF09 przy kolejnym wywołaniu); wymaga resetu gatewaya. Nie ma fallbacku ani czytelnego błędu.
+
+### Per-element override DZIAŁA (scenariusz użytkownika)
+- Job ustawiony na MDF_18 (arkusz 2), jeden detal ustawiony na 17mm (arkusz 1) → nester rozdzielił części na **osobne materiały/arkusze**: 2 rysunki nestingu (`Arkusz A1` MDF_18 2440×1220 oraz `Arkusz B1` „Arkusz 1" 17mm 1220×2440), 2 pliki `.anl`, 2 `.nc`, 2 manifesty. Materiał DETALU ma priorytet nad materiałem JOBA.
+- Materiał detalu musi być ustawiony — brak (0/NULL) → HANG (dotyczy też joba: sam materiał joba bez detalu nie wystarcza).
+
+### Ograniczenia obecnego CLI
+- `cdm import` ustawia JEDEN materiał dla joba I wszystkich detali (z `--material` lub defaults); brak obsługi materiału/arkusza per wiersz CSV. `--material <nazwa>` rozwiązuje nazwę przez `sheet_materials()` (`core/cdm_db.py:70-89`, priorytet arkusze > materiały) → można wskazać arkusz po jego nazwie.
+- `cdm import` bez `--material` nadpisuje materiał joba domyślnym z DB (nie zachowuje `create --material`).
+
+### Rekomendacje (do wdrożenia — osobne zadania)
+- [ ] CLI: walidować, że rozwiązany `fkMaterialID` istnieje w `sheets.id` — jeśli nie, czytelny błąd zamiast wiszenia (punkt: `core/application.py` create/import + `cdm_db.sheet_materials`).
+- [ ] CLI: `cdm import` — obsługa arkusza/materiału per wiersz (kolumna CSV) — nester to respektuje (`CDM_OrderDetails.fkMaterialID`).
+- [ ] CLI/API: jawne `--sheet`/`--sheet-id` (obok `--material`), bo „materiał" de facto = arkusz; udokumentować w README/gateway.md.
+- [ ] Zbadać, czy GUI AM oferuje wybór arkusza per element inaczej (kolekcja COM `IAutomationManagerJobFile.NestMaterialDatabaseSheet(s)` istnieje) — headless nie jest zasilana z `AM_SelectedSheets`.
+
+### Testy E2E (na VM125, wszystko posprzątane; joby=10, MDF_18=2 whole, 17mm=1 whole)
+- A: `AM_SelectedSheets` ignorowane. B: per-element materiał działa (2 materiały). C/D/E/F: reguła wyboru = wskazany arkusz (odparte: kolejność listy, rozmiar, nazwa=materiał; wyjaśnione jako sheet-id). G: `--material MDF18`→id7→arkusz 2800×2070, `--material MDF_18`→id2→2440×1220.
+- Uwaga operacyjna: po zawieszonym `cdm process` reset: `taskkill /F /IM Acam.exe` → `sc stop AlphaCAMGateway` → 10s → `sc start AlphaCAMGateway` → ~55s.
+
+### 2026-10-09 (cd.) — MECHANIZM GRUPY MATERIAŁÓW (wiele arkuszy) — POTWIERDZONY (IL + E2E)
+
+**Pytanie:** czy AlphaCAM pozwala wybrać „grupę materiału" (wiele arkuszy) i czy da się to zrobić headless/CLI. **Odpowiedź: TAK** (GUI i headless tą samą ścieżką).
+
+**Mechanizm (z dekompilacji IL `AcamAddIns.dll` 2025.1.0.1 + E2E, zweryfikowane):**
+- Gałąź per część (`AutomationManagerProcessing`):
+  - `JobFile.FkMaterialID != 0` → nester używa **jednego** arkusza `GetByID("m"+FkMaterialID)` (sheet id) — ścieżka naszego obecnego CLI.
+  - `FkMaterialID == 0` → bierze `selectedSheetList = GetSelectedSheetFromDBAsList(job)` z **`AM_SelectedSheets`**; jeśli pusta → **modalny komunikat = HANG w Session 0**; jeśli niepusta → `ConfigureNestMaterialMultipleSheets` → obiekt `MultiMateriał` (`MultiMaterialsIds`) → `CreateMultiNestingSheetList` wstawia **WSZYSTKIE** arkusze jako kandydatów.
+- `NestSheet.Required = AM_SelectedSheets.Quantity` per arkusz.
+- `Nesting_SheetOrderType` **ma znaczenie tylko w ścieżce grupowej**: 0=Best Utilisation (wybiera najlepiej pasujący), 1=Picked Order (wg kolejności `AM_SelectedSheets`).
+- Persystencja grupy = **tabela `AM_SelectedSheets(fkJobDetailID, SelectedSheetID, Quantity)`**. COM `job.NestMaterialDatabaseSheets` jest `IDatabaseSheets` ładowaną z tej tabeli; `.Add()`+`SaveToDatabase()` **NIE utrwala** — jedyny stabilny interfejs to VistaDB.
+- GUI: dropdown/„siatka materiałów" to lista **PO ARKUSZU** (etykieta `MATERIAL - THICK : SHEET - WxH`); wielokrotny wybór arkuszy → `MultiMateriał`/„Wiele materiałów". Nie ma osobnego wiersza „grupa".
+
+**E2E headless (na VM125, posprzątane):**
+- `CDM_OrderDetails.fkMaterialID=0` + `AM_SelectedSheets`{2:qty1, 7:qty1} → **SUKCES**, użyte OBA arkusze: `MDF_18 2440×1220` (4 cz.) + `MDF18 2800×2070` (6 cz.), 10/10, „Wiele materiałów".
+- `Nesting_SheetOrderType`: grupa+0 → wybiera best-fit (id7); grupa+1 → wg kolejności (id2).
+- **HAZARD:** detal `fkMaterialID≠0` + wiele wierszy `AM_SelectedSheets` → nest ZEPSUTY („Wiele materiałów", arkusz `None`, 0 części). Detal `=0` + brak `AM_SelectedSheets` → HANG.
+
+**Projekt opcji CLI (do wdrożenia — nowy, samodzielny blok):**
+- `cdm import --material-group <NAZWA>` (albo `cdm create`/`cm import --sheets 2:100,7:100`): rozwiąż materiał→wszystkie `sheets.id` (rozszerzyć `core/cdm_db.py:sheet_materials()` o mapę materiał→arkusze) → zapisz `AM_SelectedSheets(fkJobDetailID, SelectedSheetID, Quantity)` + ustaw `CDM_OrderDetails.fkMaterialID=0` dla pozycji.
+- `--material <nazwa>` zostaje jako ścieżka pojedynczego arkusza; udokumentować, że „materiał" de facto = arkusz.
+- **Walidacja obowiązkowa:** każdy `SelectedSheetID` musi istnieć w `sheets.id` (inaczej HANG); gdy `fkMaterialID=0` wymuś niepuste `AM_SelectedSheets`; opcjonalnie `--sheet-order best|picked` → `Nesting_SheetOrderType` (per konfiguracja, ostrożnie).
+- Miejsca zmian: `core/application.py` (create/import/process), `core/cdm_db.py`, `scripts/vdb5_*.ps1`, `cli/cdm.py`, `docs/gateway.md`, testy.
+- [ ] TODO: zaimplementować blok `--material-group` (+ `--sheet-order`), walidacja, E2E.
+
+### 2026-10-09 (cd.) — PRIORYTET ARKUSZY W GRUPIE + OFFCUTY (ZWERYFIKOWANE E2E + IL)
+
+**Pytanie:** czy AlphaCAM sam dobiera arkusz z grupy, jaki priorytet, czy offcuty pierwsze.
+
+**Wyniki (E2E na VM125, posprzątane):**
+- **AlphaCAM sam decyduje** — steruje `Nesting_SheetOrderType`:
+  - `0 = Best Utilisation` → wybiera arkusz o najlepszym wypełnieniu (najmniejszy wystarczający), **ignoruje kolejność listy** (test: lista [2800,2440] → wybrał 2440).
+  - `1 = Picked Order` → wybiera wg **kolejności wierszy `AM_SelectedSheets`** (zmiana kolejności zmienia arkusz).
+- **Offcuty NIE mają wrodzonego priorytetu** — używane tylko gdy jawnie w `AM_SelectedSheets`; Best-Util często je bierze (małe → dobre wypełnienie), Picked-Order gdy pierwsze. „Najpierw offcuty" = `SheetOrderType=1` + offcuty pierwsze na liście.
+- **Offcuty NIE są auto-dodawane** — grupa z samych całych arkuszy ich nie użyje, mimo obecności w bazie.
+- `Nesting_OffcutPreference` = tylko kierunek generowanego odcinka (0=Vertical,1=Horizontal), **nie priorytet**.
+- **Offcut w bazie:** `sheets.offcut=1`, `width=height=0`, geometria w polu `shape` (poligon). Do `AM_SelectedSheets` wystarcza `id`.
+- **`AM_SelectedSheets.Quantity` = `NestSheet.Required`:** 0 = brak limitu (bezpieczne); N≥1 = maks. liczba arkuszy danego typu; zbyt mały limit przy niedoborze → **twardy crash `0x800ADF09`** (bez czytelnego błędu, reset gatewaya). **Domyślnie 0.**
+
+**Wniosek do CLI:** `--material-group NAME` enumeruje arkusze do `AM_SelectedSheets` (domyślnie całe; `--include-offcuts` dodaje offcuty) + `CDM_OrderDetails.fkMaterialID=0` → AlphaCAM decyduje. Opcjonalnie `--sheet-order best|picked` (globalne per konfiguracja — ostrożnie). Quantity=0. Plan: `docs/plans/2026-10-09-cdm-material-group.md`.
+
+### 2026-10-09 (cd.) — PRZEPIS GWARANTUJĄCY ZUŻYCIE OFFCUTÓW (ZWERYFIKOWANE E2E)
+
+**Cel:** zamówienie, które mieści się na ~2 pełnych arkuszach; offcuty z biblioteki mają być zużyte NAJPIERW, reszta na pełnym arkuszu.
+
+**GWARANTOWANY przepis (E2E C1/C5):**
+1. `CDM_OrderDetails.fkMaterialID=0` **oraz** `AM_JobDetails.fkMaterialID=0`.
+2. `AM_SelectedSheets`: **offcuty PIERWSZE, każdy `Quantity=1`**; **całe arkusze NA KOŃCU, każdy `Quantity=0`** (bez limitu → przejmą resztę).
+3. `Nesting_SheetOrderType=1` (**Picked Order**).
+
+Efekt: offcuty wypełniane po kolei i w całości, potem pełny arkusz.
+
+**Czego NIE używać (potwierdzone):**
+- **Best Utilisation (0) NIE gwarantuje** — dla 10 części POMINĄŁ offcuty i wybrał pełny arkusz (optymalizuje liczbę/wypełnienie arkuszy).
+- `Quantity=0` dla offcutu = nieskończone kopie TYPU (błędne) — offcuty zawsze `Quantity=1`.
+- `Quantity≥1` przy niedoborze arkuszy → crash `0x800ADF09` (reset gatewaya); całe arkusze trzymać na `Quantity=0`.
+
+**Ważne:** nesting NIE usuwa zużytych offcutów z `sheet_database_v2.db` — i **nasze narzędzie tego NIE robi** (usuwanie = przepływ pracy, poza zakresem; robi to operator lub osobny blok `stock offcut-delete`).
+**Uwaga:** `Nesting_SheetOrderType` jest GLOBALNY (per konfiguracja) → „picked" wpływa na wszystkie joby tej konfiguracji; docelowo dedykowana konfiguracja (np. „Fronty (offcuts)") lub przywracanie po procesie.
+
+**Propozycja opcji CLI:** `--material-group NAME --prefer-offcuts` = offcuty pierwsze (Q=1) + całe arkusze (Q=0) + wymuszone `sheet-order picked` (z warningiem). BEZ usuwania offcutów.
+
+### 2026-10-09 (cd.) — IMPLEMENTACJA `--material-group` (WDROŻONA, E2E PASS)
+
+Zrealizowano wg planu `docs/plans/2026-10-09-cdm-material-group.md` (subagent-driven, T1–T6 + poprawki po code-review). Bramka: `ruff` OK, `mypy` OK, `pytest` 1413 passed / 3 skipped.
+
+**Dodane/zmienione:**
+- `core/cdm_db.py`: `material_groups()`, `resolve_material_group(name, *, include_offcuts, offcuts_first, whole_quantity=0, offcut_quantity=1)`, `set_selected_sheets(job, sheets)`, `set_sheet_order(config, value)`, `job_config_name(job)`.
+- `scripts/`: `sheet_material_groups.py`, `vdb5_set_selected_sheets.ps1` (DELETE+INSERT w transakcji), `vdb5_set_sheet_order.ps1`, `vdb5_job_config_name.ps1`.
+- `core/application.py`: opcje grupowe w `import_cdm_csv`/`import_cdm_preview` + wspólny helper walidacji `_validate_group_options`; tryb grupowy: `set_job_material(job,0)` → `set_selected_sheets` → `finalize_cdm_job` → opcjonalnie `set_sheet_order` (+ warning o globalnej zmianie).
+- `gateway/{server,client,remote}.py`: parametry RPC; `cli/cdm.py`: `--material-group/--include-offcuts/--prefer-offcuts/--sheets/--sheet-order`.
+- `docs/gateway.md`; `tests/unit/*` (+~250 testów).
+- **`scripts/vdb5_job_output_root.ps1` NIETKNIĘTY** (cofnięto próbę dodania `config:` — sprzęgała heurystykę `job_config()`).
+
+**E2E na VM125 (nowy kod wdrożony na `C:\alphacam_cli`, usługa zrestartowana):** `cdm create "E2E Grp 01" --material MDF_18` → `cdm import <csv> --job ... --material-group MDF_18 --prefer-offcuts` → DB: `AM_JobDetails.fkMaterialID=0`, `CDM_OrderDetails.fkMaterialID=0`, `AM_SelectedSheets` = offcuty(118,119) Q=1 PIERWSZE + całe(2,7) Q=0, config 42 `SheetOrderType=1`. `cdm process` → manifest: offcut 118 (2 cz.) + offcut 119 (2 cz.) + MDF_18 ×2 (3+3 cz.), 10/10, 0 unmatched → **offcuty zużyte pierwsze i w pełni**, reszta na pełnym arkuszu. Testy negatywne (nieznana grupa, konflikt flag) → czytelne błędy, brak HANG.
+
+**Uwagi operacyjne/środowiskowe (VM125):**
+- Setting importu ID1 ma `CreateJob=False` → `--name` nie tworzy joba; flow to `cdm create` + `cdm import --job`.
+- CSV musi mieć ≥7 kolumn (setting ID1 mapuje 1–7).
+- `--prefer-offcuts` ustawia `Nesting_SheetOrderType=1` GLOBALNIE dla konfiguracji (ostrzeżenie w wyniku). `Quantity`: całe arkusze 0 (bez limitu), offcuty 1.
+- Uwaga: po wdrożeniu nowego kodu na VM trzeba zrestartować usługę gateway.
+
+**Kaizen (backlog, drobne):** typy w untracked `scripts/sheet_material_groups.py` (`int(object)`); migracja `_cdm_job_config_name` poza prywatne API (zrobione: `cdm_db.job_config_name`).
+
+### 2026-10-09 (cd.) — „FROM JOB" + GRUPA W `cdm create` (WDROŻONE, E2E PASS)
+
+Plan: `docs/plans/2026-10-09-from-job-and-create-group.md`. Bramka: ruff OK, mypy 41 plików OK, pytest 1447 passed / 3 skipped.
+
+**Zmiany:**
+- **From Job (`cdm import --job` bez jawnego materiału):** import zachowuje materiał joba (`CDM_OrderDetails.fkMaterialID = AM_JobDetails.fkMaterialID`), NIE nadpisuje domyślnym z bazy. Priorytet: jawny `--material`/kolumna CSV > materiał joba > domyślny z bazy (tylko nowy job). Job grupowy (`fkMaterialID=0`) → import zachowuje grupę (detale 0, `AM_SelectedSheets` nietknięte). Nowe: `cdm_db.job_material_id()` + `scripts/vdb5_job_material.ps1`; wynik zawiera `material_source`.
+- **Grupa w `cdm create`:** opcje `--material-group/--include-offcuts/--prefer-offcuts/--sheets/--sheet-order` → `set_job_material(0)` + `finalize_cdm_job` + `set_selected_sheets` (offcuty pierwsze Q=1, całe Q=0) + opcjonalnie `set_sheet_order` (globalny, warning). RPC (`create_cdm_job`) i CLI rozszerzone.
+- **Anty-HANG (po code-review):** w imporcie grupowym kolejność `set_job_material(0)` → `finalize` → `set_selected_sheets`; przy niepowodzeniu — nowy job: `cleanup_created_job` + raise; istniejący: `success=False`. Preview łapie `RuntimeError` grupy → raport z `fatal_error` (bez crashu). Normalizacja `material.strip()` przed walidacją.
+
+**E2E na VM125 (kod wdrożony, gateway zrestartowany):**
+- From Job: `create "E2E FJ 01" --material 17mm` + `import --job` (bez materiału) → DB: job i detale `fkMaterialID=1` (17mm), NIE domyślny 2 (MDF_18). PASS.
+- Grupa w create: `create "E2E CJ 01" --material-group MDF_18 --prefer-offcuts` → job=0, `AM_SelectedSheets` = offcuty(118,119,124) Q=1 pierwsze + całe(2,7) Q=0, config 42 order=1. `import --job` (bez materiału) → grupa zachowana (detale 0, selected niezmienione). `process` → część na offcucie (offcuts first). PASS.
+- Negatywne: `--material`+`--material-group` → exit 2; `--prefer-offcuts` bez grupy → exit 2; nieznana grupa → czytelny błąd bez HANG. Config przywrócony (order=0), joby/offcuty posprzątane.
+
+**Uwagi:** domyślny materiał bazy (AM_Settings) = 2 (MDF_18), config 42 „Fronty". CLI nie renderuje `material_source` (kosmetyka, backlog).

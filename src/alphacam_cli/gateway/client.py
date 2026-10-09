@@ -303,6 +303,12 @@ class RemoteSession:
         po: str | None = None,
         due_date: str | None = None,
         description: str | None = None,
+        *,
+        material_group: str | None = None,
+        include_offcuts: bool = False,
+        prefer_offcuts: bool = False,
+        sheets: str | None = None,
+        sheet_order: str | None = None,
     ) -> dict[str, Any]:
         params: dict[str, Any] = {"job_name": job_name}
         if config is not None:
@@ -317,6 +323,16 @@ class RemoteSession:
             params["due_date"] = due_date
         if description is not None:
             params["description"] = description
+        if material_group is not None:
+            params["material_group"] = material_group
+        if include_offcuts:
+            params["include_offcuts"] = True
+        if prefer_offcuts:
+            params["prefer_offcuts"] = True
+        if sheets is not None:
+            params["sheets"] = sheets
+        if sheet_order is not None:
+            params["sheet_order"] = sheet_order
         return self._call("create_cdm_job", params)  # type: ignore[no-any-return]
 
     def process_cdm_job(
@@ -354,6 +370,12 @@ class RemoteSession:
         material: str | None = None,
         import_setting: str | int | None = None,
         preview: bool = False,
+        *,
+        material_group: str | None = None,
+        include_offcuts: bool = False,
+        prefer_offcuts: bool = False,
+        sheets: str | None = None,
+        sheet_order: str | None = None,
     ) -> dict[str, Any]:
         params: dict[str, Any] = {"csv": csv, "has_header": has_header}
         if separator is not None:
@@ -372,6 +394,16 @@ class RemoteSession:
             )
         if preview:
             params["preview"] = True
+        if material_group is not None:
+            params["material_group"] = material_group
+        if include_offcuts:
+            params["include_offcuts"] = True
+        if prefer_offcuts:
+            params["prefer_offcuts"] = True
+        if sheets is not None:
+            params["sheets"] = sheets
+        if sheet_order is not None:
+            params["sheet_order"] = sheet_order
         return self._call("cdm_import_csv", params)  # type: ignore[no-any-return]
 
     def import_cdm_preview(
@@ -384,6 +416,11 @@ class RemoteSession:
         name: str | None = None,
         config: str | None = None,
         material: str | None = None,
+        *,
+        material_group: str | None = None,
+        include_offcuts: bool = False,
+        prefer_offcuts: bool = False,
+        sheets: str | None = None,
     ) -> dict[str, Any]:
         params: dict[str, Any] = {"csv": csv, "has_header": has_header}
         if import_setting is not None:
@@ -400,6 +437,14 @@ class RemoteSession:
             params["config"] = config
         if material is not None:
             params["material"] = material
+        if material_group is not None:
+            params["material_group"] = material_group
+        if include_offcuts:
+            params["include_offcuts"] = True
+        if prefer_offcuts:
+            params["prefer_offcuts"] = True
+        if sheets is not None:
+            params["sheets"] = sheets
         return self._call("cdm_import_preview", params)  # type: ignore[no-any-return]
 
     def cdm_import_settings(self) -> dict[str, Any]:

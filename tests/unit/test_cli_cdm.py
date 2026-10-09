@@ -55,6 +55,11 @@ def test_cdm_create_command() -> None:
         po=None,
         due_date=None,
         description=None,
+        material_group=None,
+        include_offcuts=False,
+        prefer_offcuts=False,
+        sheets=None,
+        sheet_order=None,
     )
 
 
@@ -600,6 +605,11 @@ def test_cdm_create_command_config_material() -> None:
         po=None,
         due_date=None,
         description=None,
+        material_group=None,
+        include_offcuts=False,
+        prefer_offcuts=False,
+        sheets=None,
+        sheet_order=None,
     )
 
 
@@ -644,6 +654,11 @@ def test_cdm_create_command_metadata() -> None:
         po="PO-1",
         due_date="2026-08-10",
         description="opis",
+        material_group=None,
+        include_offcuts=False,
+        prefer_offcuts=False,
+        sheets=None,
+        sheet_order=None,
     )
 
 
@@ -742,6 +757,147 @@ def test_cdm_create_error() -> None:
     assert "config not found" in result.stderr
 
 
+def test_cdm_create_command_material_group() -> None:
+    from tests.unit.test_cli import _mock_com
+
+    with (
+        _mock_com(),
+        patch(
+            "alphacam_cli.core.application.Application.create_cdm_job",
+            return_value={
+                "success": True,
+                "job_name": "JOB-001",
+                "config": "Fronty",
+                "material": None,
+                "material_group": "MDF_18",
+                "warnings": [],
+            },
+        ) as mock_create,
+    ):
+        result = runner.invoke(app, ["cdm", "create", "JOB-001", "--material-group", "MDF_18"])
+    assert result.exit_code == 0
+    assert "Group: MDF_18" in result.stderr
+    assert "Material:" not in result.stderr
+    mock_create.assert_called_once_with(
+        job_name="JOB-001",
+        config=None,
+        material=None,
+        customer=None,
+        po=None,
+        due_date=None,
+        description=None,
+        material_group="MDF_18",
+        include_offcuts=False,
+        prefer_offcuts=False,
+        sheets=None,
+        sheet_order=None,
+    )
+
+
+def test_cdm_create_command_material_and_group_conflict() -> None:
+    from tests.unit.test_cli import _mock_com
+
+    with (
+        _mock_com(),
+        patch(
+            "alphacam_cli.core.application.Application.create_cdm_job",
+        ) as mock_create,
+    ):
+        result = runner.invoke(
+            app,
+            ["cdm", "create", "JOB-001", "--material", "MDF_18", "--material-group", "MDF_18"],
+        )
+    assert result.exit_code == 2
+    assert "mutually exclusive" in result.stderr
+    mock_create.assert_not_called()
+
+
+def test_cdm_create_command_group_and_sheets_conflict() -> None:
+    from tests.unit.test_cli import _mock_com
+
+    with (
+        _mock_com(),
+        patch(
+            "alphacam_cli.core.application.Application.create_cdm_job",
+        ) as mock_create,
+    ):
+        result = runner.invoke(
+            app,
+            ["cdm", "create", "JOB-001", "--material-group", "MDF_18", "--sheets", "1:2"],
+        )
+    assert result.exit_code == 2
+    assert "mutually exclusive" in result.stderr
+    mock_create.assert_not_called()
+
+
+def test_cdm_create_command_prefer_offcuts_requires_group() -> None:
+    from tests.unit.test_cli import _mock_com
+
+    with (
+        _mock_com(),
+        patch(
+            "alphacam_cli.core.application.Application.create_cdm_job",
+        ) as mock_create,
+    ):
+        result = runner.invoke(app, ["cdm", "create", "JOB-001", "--prefer-offcuts"])
+    assert result.exit_code == 2
+    assert "requires --material-group" in result.stderr
+    mock_create.assert_not_called()
+
+
+def test_cdm_create_command_invalid_sheet_order() -> None:
+    from tests.unit.test_cli import _mock_com
+
+    with (
+        _mock_com(),
+        patch(
+            "alphacam_cli.core.application.Application.create_cdm_job",
+        ) as mock_create,
+    ):
+        result = runner.invoke(app, ["cdm", "create", "JOB-001", "--sheet-order", "x"])
+    assert result.exit_code == 2
+    assert "invalid --sheet-order" in result.stderr
+    mock_create.assert_not_called()
+
+
+def test_cdm_create_command_sheet_order_picked() -> None:
+    from tests.unit.test_cli import _mock_com
+
+    with (
+        _mock_com(),
+        patch(
+            "alphacam_cli.core.application.Application.create_cdm_job",
+            return_value={
+                "success": True,
+                "job_name": "JOB-001",
+                "config": "Fronty",
+                "material": None,
+                "material_group": "MDF_18",
+                "warnings": [],
+            },
+        ) as mock_create,
+    ):
+        result = runner.invoke(
+            app,
+            ["cdm", "create", "JOB-001", "--material-group", "MDF_18", "--sheet-order", "picked"],
+        )
+    assert result.exit_code == 0
+    mock_create.assert_called_once_with(
+        job_name="JOB-001",
+        config=None,
+        material=None,
+        customer=None,
+        po=None,
+        due_date=None,
+        description=None,
+        material_group="MDF_18",
+        include_offcuts=False,
+        prefer_offcuts=False,
+        sheets=None,
+        sheet_order="picked",
+    )
+
+
 def test_cdm_types_command() -> None:
     from tests.unit.test_cli import _mock_com
 
@@ -838,6 +994,11 @@ def test_cdm_import_command_success() -> None:
         has_header=False,
         material=None,
         import_setting=None,
+        material_group=None,
+        include_offcuts=False,
+        prefer_offcuts=False,
+        sheets=None,
+        sheet_order=None,
     )
 
 
@@ -868,6 +1029,11 @@ def test_cdm_import_command_update_existing_job() -> None:
         has_header=False,
         material=None,
         import_setting=None,
+        material_group=None,
+        include_offcuts=False,
+        prefer_offcuts=False,
+        sheets=None,
+        sheet_order=None,
     )
 
 
@@ -909,6 +1075,11 @@ def test_cdm_import_command_name_and_config() -> None:
         has_header=False,
         material=None,
         import_setting=None,
+        material_group=None,
+        include_offcuts=False,
+        prefer_offcuts=False,
+        sheets=None,
+        sheet_order=None,
     )
 
 
@@ -941,6 +1112,11 @@ def test_cdm_import_command_header_flag() -> None:
         has_header=True,
         material=None,
         import_setting=None,
+        material_group=None,
+        include_offcuts=False,
+        prefer_offcuts=False,
+        sheets=None,
+        sheet_order=None,
     )
 
 
@@ -994,7 +1170,106 @@ def test_cdm_import_command_material() -> None:
         has_header=False,
         material="MDF_18",
         import_setting=None,
+        material_group=None,
+        include_offcuts=False,
+        prefer_offcuts=False,
+        sheets=None,
+        sheet_order=None,
     )
+
+
+def test_cdm_import_command_material_source_job() -> None:
+    from tests.unit.test_cli import _mock_com
+
+    with (
+        _mock_com(),
+        patch(
+            "alphacam_cli.core.application.Application.import_cdm_csv",
+            return_value={
+                "success": True,
+                "job_name": "JOB-001",
+                "items": 1,
+                "material": "MDF_18",
+                "material_source": "job",
+                "errors": [],
+            },
+        ),
+    ):
+        result = runner.invoke(app, ["cdm", "import", r"C:\temp\order.csv", "--job", "JOB-001"])
+    assert result.exit_code == 0
+    assert "Material: MDF_18 (from job)" in result.stderr
+
+
+def test_cdm_import_command_material_source_database_default() -> None:
+    from tests.unit.test_cli import _mock_com
+
+    with (
+        _mock_com(),
+        patch(
+            "alphacam_cli.core.application.Application.import_cdm_csv",
+            return_value={
+                "success": True,
+                "job_name": "order",
+                "items": 1,
+                "material": "MDF_18",
+                "material_source": "database-default",
+                "errors": [],
+            },
+        ),
+    ):
+        result = runner.invoke(app, ["cdm", "import", r"C:\temp\order.csv"])
+    assert result.exit_code == 0
+    assert "Material: MDF_18 (database default)" in result.stderr
+
+
+def test_cdm_import_command_material_source_explicit_has_no_suffix() -> None:
+    from tests.unit.test_cli import _mock_com
+
+    with (
+        _mock_com(),
+        patch(
+            "alphacam_cli.core.application.Application.import_cdm_csv",
+            return_value={
+                "success": True,
+                "job_name": "order",
+                "items": 1,
+                "material": "MDF_18",
+                "material_source": "explicit",
+                "errors": [],
+            },
+        ),
+    ):
+        result = runner.invoke(app, ["cdm", "import", r"C:\temp\order.csv", "--material", "MDF_18"])
+    assert result.exit_code == 0
+    assert "Material: MDF_18" in result.stderr
+    assert "(from job)" not in result.stderr
+    assert "(database default)" not in result.stderr
+
+
+def test_cdm_import_command_material_group_prints_group_only() -> None:
+    from tests.unit.test_cli import _mock_com
+
+    with (
+        _mock_com(),
+        patch(
+            "alphacam_cli.core.application.Application.import_cdm_csv",
+            return_value={
+                "success": True,
+                "job_name": "order",
+                "items": 1,
+                "material": None,
+                "material_group": "MDF_18 (group: Sheet#1)",
+                "material_source": "explicit",
+                "errors": [],
+            },
+        ),
+    ):
+        result = runner.invoke(
+            app, ["cdm", "import", r"C:\temp\order.csv", "--material-group", "MDF_18"]
+        )
+    assert result.exit_code == 0
+    assert "Group: MDF_18 (group: Sheet#1)" in result.stderr
+    assert "Material:" not in result.stderr
 
 
 def test_cdm_import_command_failure() -> None:
@@ -1016,6 +1291,80 @@ def test_cdm_import_command_failure() -> None:
     assert result.exit_code == 1
     assert "ERROR" in result.stderr
     assert "door type not found" in result.stderr
+
+
+def test_cdm_import_command_prefer_offcuts_best_sheet_order_exit2() -> None:
+    from tests.unit.test_cli import _mock_com
+
+    with (
+        _mock_com(),
+        patch(
+            "alphacam_cli.core.application.Application.import_cdm_csv",
+        ) as mock_import,
+    ):
+        result = runner.invoke(
+            app,
+            [
+                "cdm",
+                "import",
+                r"C:\temp\order.csv",
+                "--material-group",
+                "MDF_18",
+                "--prefer-offcuts",
+                "--sheet-order",
+                "best",
+            ],
+        )
+    assert result.exit_code == 2
+    assert "prefer-offcuts" in result.stderr
+    assert "remove --sheet-order best" in result.stderr
+    mock_import.assert_not_called()
+
+
+def test_cdm_import_command_prefer_offcuts_picked_sheet_order_ok() -> None:
+    from tests.unit.test_cli import _mock_com
+
+    with (
+        _mock_com(),
+        patch(
+            "alphacam_cli.core.application.Application.import_cdm_csv",
+            return_value={
+                "success": True,
+                "job_name": "order",
+                "items": 1,
+                "errors": [],
+            },
+        ) as mock_import,
+    ):
+        result = runner.invoke(
+            app,
+            [
+                "cdm",
+                "import",
+                r"C:\temp\order.csv",
+                "--material-group",
+                "MDF_18",
+                "--prefer-offcuts",
+                "--sheet-order",
+                "picked",
+            ],
+        )
+    assert result.exit_code == 0
+    mock_import.assert_called_once_with(
+        csv=r"C:\temp\order.csv",
+        job=None,
+        name=None,
+        config=None,
+        separator=None,
+        has_header=False,
+        material=None,
+        import_setting=None,
+        material_group="MDF_18",
+        include_offcuts=False,
+        prefer_offcuts=True,
+        sheets=None,
+        sheet_order="picked",
+    )
 
 
 def test_cdm_import_command_name_job_conflict() -> None:
@@ -1130,6 +1479,11 @@ def test_cdm_import_command_import_setting() -> None:
         has_header=False,
         material=None,
         import_setting=3,
+        material_group=None,
+        include_offcuts=False,
+        prefer_offcuts=False,
+        sheets=None,
+        sheet_order=None,
     )
 
 
@@ -1161,6 +1515,11 @@ def test_cdm_import_command_import_setting_name() -> None:
         has_header=False,
         material=None,
         import_setting="sklep CSV",
+        material_group=None,
+        include_offcuts=False,
+        prefer_offcuts=False,
+        sheets=None,
+        sheet_order=None,
     )
 
 
@@ -1201,6 +1560,11 @@ def test_cdm_import_command_import_setting_separator_override() -> None:
         has_header=False,
         material=None,
         import_setting=3,
+        material_group=None,
+        include_offcuts=False,
+        prefer_offcuts=False,
+        sheets=None,
+        sheet_order=None,
     )
 
 
@@ -1265,6 +1629,10 @@ def test_cdm_import_command_preview() -> None:
         name=None,
         config=None,
         material=None,
+        material_group=None,
+        include_offcuts=False,
+        prefer_offcuts=False,
+        sheets=None,
     )
 
 
@@ -1356,6 +1724,10 @@ def test_cdm_import_command_preview_no_setting() -> None:
         name=None,
         config=None,
         material=None,
+        material_group=None,
+        include_offcuts=False,
+        prefer_offcuts=False,
+        sheets=None,
     )
 
 
@@ -3580,3 +3952,232 @@ def test_cdm_process_command_plain_failure_still_exit1() -> None:
     assert "Status: failed" in result.stderr
     assert "Detail:" in result.stderr
     assert "auto-restarting" not in result.stderr
+
+
+def test_cdm_import_command_material_group() -> None:
+    from tests.unit.test_cli import _mock_com
+
+    with (
+        _mock_com(),
+        patch(
+            "alphacam_cli.core.application.Application.import_cdm_csv",
+            return_value={"success": True, "job_name": "order", "items": 1, "errors": []},
+        ) as mock_import,
+    ):
+        result = runner.invoke(
+            app, ["cdm", "import", r"C:\temp\order.csv", "--material-group", "MDF_18"]
+        )
+    assert result.exit_code == 0
+    mock_import.assert_called_once_with(
+        csv=r"C:\temp\order.csv",
+        job=None,
+        name=None,
+        config=None,
+        separator=None,
+        has_header=False,
+        material=None,
+        import_setting=None,
+        material_group="MDF_18",
+        include_offcuts=False,
+        prefer_offcuts=False,
+        sheets=None,
+        sheet_order=None,
+    )
+
+
+def test_cdm_import_command_material_and_group_conflict() -> None:
+    from tests.unit.test_cli import _mock_com
+
+    with (
+        _mock_com(),
+        patch("alphacam_cli.core.application.Application.import_cdm_csv") as mock_import,
+    ):
+        result = runner.invoke(
+            app,
+            [
+                "cdm",
+                "import",
+                r"C:\temp\order.csv",
+                "--material",
+                "MDF_18",
+                "--material-group",
+                "MDF_18",
+            ],
+        )
+    assert result.exit_code == 2
+    assert "mutually exclusive" in result.stderr
+    mock_import.assert_not_called()
+
+
+def test_cdm_import_command_group_and_sheets_conflict() -> None:
+    from tests.unit.test_cli import _mock_com
+
+    with (
+        _mock_com(),
+        patch("alphacam_cli.core.application.Application.import_cdm_csv") as mock_import,
+    ):
+        result = runner.invoke(
+            app,
+            [
+                "cdm",
+                "import",
+                r"C:\temp\order.csv",
+                "--material-group",
+                "MDF_18",
+                "--sheets",
+                "2:0,7:1",
+            ],
+        )
+    assert result.exit_code == 2
+    assert "mutually exclusive" in result.stderr
+    mock_import.assert_not_called()
+
+
+def test_cdm_import_command_material_and_sheets_conflict() -> None:
+    from tests.unit.test_cli import _mock_com
+
+    with (
+        _mock_com(),
+        patch("alphacam_cli.core.application.Application.import_cdm_csv") as mock_import,
+    ):
+        result = runner.invoke(
+            app,
+            [
+                "cdm",
+                "import",
+                r"C:\temp\order.csv",
+                "--material",
+                "MDF_18",
+                "--sheets",
+                "2:0,7:1",
+            ],
+        )
+    assert result.exit_code == 2
+    assert "mutually exclusive" in result.stderr
+    mock_import.assert_not_called()
+
+
+def test_cdm_import_command_prefer_offcuts_requires_group() -> None:
+    from tests.unit.test_cli import _mock_com
+
+    with (
+        _mock_com(),
+        patch("alphacam_cli.core.application.Application.import_cdm_csv") as mock_import,
+    ):
+        result = runner.invoke(app, ["cdm", "import", r"C:\temp\order.csv", "--prefer-offcuts"])
+    assert result.exit_code == 2
+    assert "requires --material-group" in result.stderr
+    mock_import.assert_not_called()
+
+
+def test_cdm_import_command_include_offcuts_requires_group() -> None:
+    from tests.unit.test_cli import _mock_com
+
+    with (
+        _mock_com(),
+        patch("alphacam_cli.core.application.Application.import_cdm_csv") as mock_import,
+    ):
+        result = runner.invoke(app, ["cdm", "import", r"C:\temp\order.csv", "--include-offcuts"])
+    assert result.exit_code == 2
+    assert "requires --material-group" in result.stderr
+    mock_import.assert_not_called()
+
+
+def test_cdm_import_command_sheet_order_invalid() -> None:
+    from tests.unit.test_cli import _mock_com
+
+    with (
+        _mock_com(),
+        patch("alphacam_cli.core.application.Application.import_cdm_csv") as mock_import,
+    ):
+        result = runner.invoke(app, ["cdm", "import", r"C:\temp\order.csv", "--sheet-order", "x"])
+    assert result.exit_code == 2
+    assert "invalid --sheet-order" in result.stderr
+    mock_import.assert_not_called()
+
+
+def test_cdm_import_command_sheet_order_picked() -> None:
+    from tests.unit.test_cli import _mock_com
+
+    with (
+        _mock_com(),
+        patch(
+            "alphacam_cli.core.application.Application.import_cdm_csv",
+            return_value={"success": True, "job_name": "order", "items": 1, "errors": []},
+        ) as mock_import,
+    ):
+        result = runner.invoke(
+            app, ["cdm", "import", r"C:\temp\order.csv", "--sheet-order", "picked"]
+        )
+    assert result.exit_code == 0
+    assert mock_import.call_args.kwargs["sheet_order"] == "picked"
+
+
+def test_cdm_import_command_preview_material_group() -> None:
+    from tests.unit.test_cli import _mock_com
+
+    with (
+        _mock_com(),
+        patch(
+            "alphacam_cli.core.application.Application.import_cdm_preview",
+            return_value={
+                "success": True,
+                "setting": None,
+                "field_map": [],
+                "job_name": "order",
+                "config": None,
+                "material": None,
+                "material_group": {"name": "MDF_18", "sheets": []},
+                "items": 1,
+                "rows": [
+                    {"row": 1, "style": "P003", "quantity": 1, "width": 500.0, "length": 500.0}
+                ],
+                "errors": [],
+                "job": None,
+            },
+        ) as mock_preview,
+    ):
+        result = runner.invoke(
+            app,
+            ["cdm", "import", r"C:\temp\order.csv", "--preview", "--material-group", "MDF_18"],
+        )
+    assert result.exit_code == 0
+    mock_preview.assert_called_once_with(
+        csv=r"C:\temp\order.csv",
+        import_setting=None,
+        separator=None,
+        has_header=False,
+        job=None,
+        name=None,
+        config=None,
+        material=None,
+        material_group="MDF_18",
+        include_offcuts=False,
+        prefer_offcuts=False,
+        sheets=None,
+    )
+
+
+def test_cdm_import_command_material_group_output() -> None:
+    from tests.unit.test_cli import _mock_com
+
+    with (
+        _mock_com(),
+        patch(
+            "alphacam_cli.core.application.Application.import_cdm_csv",
+            return_value={
+                "success": True,
+                "job_name": "order",
+                "items": 1,
+                "material": "MDF_18 (group: OFF#9 (offcut), MDF_18#2)",
+                "material_group": "MDF_18 (group: OFF#9 (offcut), MDF_18#2)",
+                "errors": [],
+            },
+        ),
+    ):
+        result = runner.invoke(
+            app, ["cdm", "import", r"C:\temp\order.csv", "--material-group", "MDF_18"]
+        )
+    assert result.exit_code == 0
+    assert "Group: MDF_18 (group: OFF#9 (offcut), MDF_18#2)" in result.stderr
+    assert "Material:" not in result.stderr
