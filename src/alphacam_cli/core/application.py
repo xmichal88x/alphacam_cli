@@ -1277,6 +1277,8 @@ class Application:
         group_sheets: list[dict[str, Any]] | None = None
         material_label: str | None = None
         material_group_label: str | None = None
+        row_ids: list[int] = []
+        row_label_pre: str | None = None
         if material_group or sheets:
             if material_group:
                 group_sheets = cdm_db.resolve_material_group(
@@ -1308,20 +1310,38 @@ class Application:
                 material_group_label = f"sheets: {sheets}"
         else:
             materials = cdm_db.sheet_materials()
-            if material_name:
+            row_material = material is None and any(
+                isinstance(d.get("material"), str) and d["material"].strip() for d in details
+            )
+            explicit_material = material_name is not None and not row_material
+            job_mat = cdm_db.job_material_id(job) if (job and not explicit_material) else None
+            if material_name is not None and not row_material:
                 material_id = materials.get(material_name)
                 if material_id is None:
                     raise RuntimeError(f"cdm: material not found: {material_name}")  # noqa: TRY003
                 material_source = "explicit"
-            elif job:
-                job_mat = cdm_db.job_material_id(job)
+            elif job is not None and job_mat == 0:
+                material_source = "job-group"
+            elif row_material:
+                material_source = "row"
+                for d in details:
+                    raw = d.get("material")
+                    row_name = raw.strip() if isinstance(raw, str) else ""
+                    if not row_name:
+                        row_ids.append(0)
+                        continue
+                    row_material_id = materials.get(row_name)
+                    if not row_material_id:
+                        raise RuntimeError(f"cdm: material not found: {row_name}")  # noqa: TRY003
+                    row_ids.append(row_material_id)
+                    if row_label_pre is None:
+                        row_label_pre = row_name
+            elif job is not None:
                 if job_mat is None:
                     defaults = cdm_db.vdb5_job_defaults()
                     material_id = defaults.get("material_id")
                     material_source = "database-default"
                     errors.append(f"job {job}: failed to read job material; using database default")
-                elif job_mat == 0:
-                    material_source = "job-group"
                 else:
                     material_id = job_mat
                     material_source = "job"
@@ -1329,7 +1349,7 @@ class Application:
                 defaults = cdm_db.vdb5_job_defaults()
                 material_id = defaults.get("material_id")
                 material_source = "database-default"
-            material_label = material_name
+            material_label = None if material_source == "row" else material_name
             if material_label is None and material_id is not None:
                 material_label = next(
                     (n for n, mid in materials.items() if mid == material_id),
@@ -1484,6 +1504,10 @@ class Application:
             if not cdm_db.set_order_detail_material(job_name, 0):
                 errors.append(f"job {job_name}: failed to set order detail material")
             material_label = "from job (group)"
+        elif material_source == "row":
+            material_label = row_label_pre
+            if any(row_ids) and not cdm_db.set_detail_materials(job_name, row_ids):
+                errors.append(f"job {job_name}: failed to set order detail material")
         elif material_source == "job" and material_id is not None:
             if not cdm_db.set_order_detail_material(job_name, material_id):
                 errors.append(f"job {job_name}: failed to set order detail material")

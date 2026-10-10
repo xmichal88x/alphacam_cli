@@ -263,6 +263,33 @@ def test_set_order_detail_material_subprocess_failure(
     assert cdm_db.set_order_detail_material("order", 4) is False
 
 
+def test_set_detail_materials_rows_updated(monkeypatch: pytest.MonkeyPatch) -> None:
+    run = _mock_run(monkeypatch, stdout="rows: 3")
+    assert cdm_db.set_detail_materials("order", [2, 1, 0]) is True
+    args, _ = run.call_args
+    assert "-JobName:order" in args[0]
+    assert "-MaterialIDs:2;1;0" in args[0]
+    assert args[0][args[0].index("-JobName:order") : args[0].index("-MaterialIDs:2;1;0") + 1] == [
+        "-JobName:order",
+        "-MaterialIDs:2;1;0",
+    ]
+
+
+def test_set_detail_materials_no_rows(monkeypatch: pytest.MonkeyPatch) -> None:
+    _mock_run(monkeypatch, stdout="rows: 0")
+    assert cdm_db.set_detail_materials("order", [0, 0]) is False
+
+
+def test_set_detail_materials_nonzero_returncode(monkeypatch: pytest.MonkeyPatch) -> None:
+    _mock_run(monkeypatch, stdout="", returncode=1)
+    assert cdm_db.set_detail_materials("order", [2]) is False
+
+
+def test_set_detail_materials_subprocess_failure(monkeypatch: pytest.MonkeyPatch) -> None:
+    _mock_run(monkeypatch).side_effect = FileNotFoundError("powershell")
+    assert cdm_db.set_detail_materials("order", [2]) is False
+
+
 def test_set_order_details_active_rows_updated(monkeypatch: pytest.MonkeyPatch) -> None:
     run = _mock_run(monkeypatch, stdout="rows: 2")
     assert cdm_db.set_order_details_active("order") is True

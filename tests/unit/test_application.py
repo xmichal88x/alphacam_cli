@@ -1052,6 +1052,7 @@ def _mock_import(
     job_material: int | None = 2,
     default_material_id: int | None = 5,
     materials: dict[str, int] | None = None,
+    details: list[dict[str, Any]] | None = None,
 ) -> tuple[Application, dict[str, MagicMock]]:
     setting: dict[str, object] = {
         "id": 3,
@@ -1064,19 +1065,21 @@ def _mock_import(
         "is_cdm_import": True,
     }
     detail = {"style": "PS_03", "row": 1, "width": 500.0, "length": 400.0, "quantity": 1}
+    parsed_details = [detail] if details is None else details
     app, am = _new_job_app()
     job_obj = am.NewCDMJob.return_value
     mocks = {
         "job_material_id": MagicMock(return_value=job_material),
         "set_job_material": MagicMock(return_value=True),
         "set_order_detail_material": MagicMock(return_value=True),
+        "set_detail_materials": MagicMock(return_value=True),
         "set_selected_sheets": MagicMock(return_value=True),
     }
     monkeypatch.setattr("alphacam_cli.core.application._resolve_import_setting", lambda _s: setting)
     monkeypatch.setattr("alphacam_cli.core.cdm_db.field_map_from_setting", lambda _s: {})
     monkeypatch.setattr("alphacam_cli.core.cdm_db.read_cdm_csv", lambda *_a, **_k: [["row"]])
     monkeypatch.setattr(
-        "alphacam_cli.core.cdm_db.parse_cdm_rows_mapped", lambda *_a, **_k: ([detail], [])
+        "alphacam_cli.core.cdm_db.parse_cdm_rows_mapped", lambda *_a, **_k: (parsed_details, [])
     )
     monkeypatch.setattr("alphacam_cli.core.cdm_db.find_cdm_job", lambda _am, _name: job_obj)
     monkeypatch.setattr("alphacam_cli.core.cdm_db.job_count", MagicMock(return_value=0))
@@ -1092,6 +1095,9 @@ def _mock_import(
     monkeypatch.setattr("alphacam_cli.core.cdm_db.set_job_material", mocks["set_job_material"])
     monkeypatch.setattr(
         "alphacam_cli.core.cdm_db.set_order_detail_material", mocks["set_order_detail_material"]
+    )
+    monkeypatch.setattr(
+        "alphacam_cli.core.cdm_db.set_detail_materials", mocks["set_detail_materials"]
     )
     monkeypatch.setattr(
         "alphacam_cli.core.cdm_db.set_selected_sheets", mocks["set_selected_sheets"]
@@ -1169,6 +1175,163 @@ def test_import_cdm_csv_explicit_material_overrides_job(
     mocks["set_job_material"].assert_called_once_with("J1", 2)
     mocks["set_order_detail_material"].assert_called_once_with("J1", 2)
     assert result["material_source"] == "explicit"
+
+
+def _row_details(*materials: str) -> list[dict[str, Any]]:
+    return [
+        {
+            "style": "PS_03",
+            "row": i + 1,
+            "width": 500.0,
+            "length": 400.0,
+            "quantity": 1,
+            "material": name,
+        }
+        for i, name in enumerate(materials)
+    ]
+
+
+def test_import_cdm_csv_row_materials_per_detail(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: pathlib.Path
+) -> None:
+    app, mocks = _mock_import(
+        monkeypatch,
+        details=_row_details("MDF_18", "DAB_17"),
+        materials={"MDF_18": 2, "DAB_17": 17},
+    )
+    csv_file = tmp_path / "order.csv"
+    csv_file.write_text("x", encoding="utf-8")
+    result = app.import_cdm_csv(str(csv_file), name="J1", config="Fronty")
+    assert result["success"] is True
+    mocks["set_detail_materials"].assert_called_once_with("J1", [2, 17])
+    mocks["set_job_material"].assert_not_called()
+    mocks["set_order_detail_material"].assert_not_called()
+    assert result["material_source"] == "row"
+    assert result["material"] == "MDF_18"
+
+
+def test_import_cdm_csv_row_material_single_consistent(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: pathlib.Path
+) -> None:
+    app, mocks = _mock_import(
+        monkeypatch,
+        details=_row_details("MDF_18"),
+        materials={"MDF_18": 2},
+    )
+    csv_file = tmp_path / "order.csv"
+    csv_file.write_text("x", encoding="utf-8")
+    result = app.import_cdm_csv(str(csv_file), name="J1", config="Fronty")
+    assert result["success"] is True
+    mocks["set_detail_materials"].assert_called_once_with("J1", [2])
+    mocks["set_job_material"].assert_not_called()
+    assert result["material_source"] == "row"
+    assert result["material"] == "MDF_18"
+
+
+def test_import_cdm_csv_row_material_unknown_raises(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: pathlib.Path
+) -> None:
+    app, _mocks = _mock_import(
+        monkeypatch,
+        details=_row_details("NOPE"),
+        materials={"MDF_18": 2},
+    )
+    csv_file = tmp_path / "order.csv"
+    csv_file.write_text("x", encoding="utf-8")
+    with pytest.raises(RuntimeError, match="material not found: NOPE"):
+        app.import_cdm_csv(str(csv_file), name="J1", config="Fronty")
+
+
+def test_import_cdm_csv_explicit_material_beats_row(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: pathlib.Path
+) -> None:
+    app, mocks = _mock_import(
+        monkeypatch,
+        details=_row_details("MDF_18", "DAB_17"),
+        materials={"MDF_18": 2, "DAB_17": 17},
+    )
+    csv_file = tmp_path / "order.csv"
+    csv_file.write_text("x", encoding="utf-8")
+    result = app.import_cdm_csv(str(csv_file), name="J1", config="Fronty", material="MDF_18")
+    assert result["success"] is True
+    mocks["set_detail_materials"].assert_not_called()
+    mocks["set_order_detail_material"].assert_called_once_with("J1", 2)
+    assert result["material_source"] == "explicit"
+
+
+def test_import_cdm_csv_group_skips_row_materials(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: pathlib.Path
+) -> None:
+    group = [{"id": 2, "name": "MDF_18", "offcut": False, "quantity": 0}]
+    _mock_group_import(monkeypatch, group)
+    set_detail_materials = MagicMock(return_value=True)
+    monkeypatch.setattr("alphacam_cli.core.cdm_db.set_detail_materials", set_detail_materials)
+    app, _am = _new_job_app()
+    csv_file = tmp_path / "order.csv"
+    csv_file.write_text("x", encoding="utf-8")
+    result = app.import_cdm_csv(
+        str(csv_file), name="J1", config="Fronty", material_group="MDF_18"
+    )
+    assert result["success"] is True
+    set_detail_materials.assert_not_called()
+
+
+def test_import_cdm_csv_job_group_beats_row_materials(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: pathlib.Path
+) -> None:
+    app, mocks = _mock_import(
+        monkeypatch,
+        job_material=0,
+        details=_row_details("MDF_18", "MDF_17"),
+        materials={"MDF_18": 2, "MDF_17": 1},
+    )
+    csv_file = tmp_path / "order.csv"
+    csv_file.write_text("x", encoding="utf-8")
+    result = app.import_cdm_csv(str(csv_file), job="J1")
+    assert result["success"] is True
+    assert result["material_source"] != "row"
+    assert result["material_source"] == "job-group"
+    mocks["job_material_id"].assert_called_once_with("J1")
+    mocks["set_detail_materials"].assert_not_called()
+    mocks["set_order_detail_material"].assert_called_once_with("J1", 0)
+
+
+def test_import_cdm_csv_job_non_group_uses_row_materials(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: pathlib.Path
+) -> None:
+    app, mocks = _mock_import(
+        monkeypatch,
+        job_material=2,
+        details=_row_details("MDF_18", "MDF_17"),
+        materials={"MDF_18": 2, "MDF_17": 1},
+    )
+    csv_file = tmp_path / "order.csv"
+    csv_file.write_text("x", encoding="utf-8")
+    result = app.import_cdm_csv(str(csv_file), job="J1")
+    assert result["success"] is True
+    assert result["material_source"] == "row"
+    mocks["set_detail_materials"].assert_called_once_with("J1", [2, 1])
+    mocks["set_order_detail_material"].assert_not_called()
+    mocks["set_job_material"].assert_not_called()
+
+
+def test_import_cdm_csv_row_unknown_material_aborts_before_create(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: pathlib.Path
+) -> None:
+    app, _mocks = _mock_import(
+        monkeypatch,
+        details=_row_details("NOPE"),
+        materials={"MDF_18": 2},
+    )
+    cleanup = MagicMock(return_value=(True, ""))
+    monkeypatch.setattr("alphacam_cli.core.cdm_db.cleanup_created_job", cleanup)
+    am = app.get_cdm_automation_manager()
+    csv_file = tmp_path / "order.csv"
+    csv_file.write_text("x", encoding="utf-8")
+    with pytest.raises(RuntimeError, match="material not found: NOPE"):
+        app.import_cdm_csv(str(csv_file), name="J1", config="Fronty")
+    am.NewCDMJob.assert_not_called()
+    cleanup.assert_not_called()
 
 
 def _mock_create_group(

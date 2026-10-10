@@ -339,6 +339,43 @@ def set_order_detail_material(job_name: str, material_id: int) -> bool:
     return bool(match and int(match.group(1)) > 0)
 
 
+def set_detail_materials(job_name: str, material_ids: list[int]) -> bool:
+    """Set CDM_OrderDetails.fkMaterialID per detail (in order) for a job.
+
+    ``material_ids`` is matched to the job's order details in
+    ``CDMOrderDetailID ASC`` order; 0/empty ids are skipped server-side
+    (material left untouched). True when at least one row was updated.
+    """
+    script_path = os.path.join(_scripts_dir(), "vdb5_set_detail_material.ps1")
+    try:
+        proc = subprocess.run(
+            [
+                "powershell",
+                "-NoProfile",
+                "-ExecutionPolicy",
+                "Bypass",
+                "-File",
+                script_path,
+                f"-JobName:{job_name}",
+                f"-MaterialIDs:{';'.join(str(int(m)) for m in material_ids)}",
+            ],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=20,
+            check=False,
+        )
+    except Exception as e:
+        logger.warning("cdm detail material: vdb5 update failed: %r", e)
+        return False
+    if proc.returncode != 0:
+        logger.warning("cdm detail material: vdb5 update failed: %s", proc.stdout.strip())
+        return False
+    match = re.search(r"(?m)^rows:\s*(\d+)", proc.stdout)
+    return bool(match and int(match.group(1)) > 0)
+
+
 def set_order_details_active(job_name: str) -> bool:
     """Set CDM_OrderDetails.ActiveInProcess=1 for a job by name; True when rows updated."""
     script_path = os.path.join(_scripts_dir(), "vdb5_set_order_details_active.ps1")
