@@ -1413,6 +1413,50 @@ def test_create_cdm_job_material_group_prefer_offcuts(monkeypatch: pytest.Monkey
     assert "failed to set sheet order" not in " ".join(result["warnings"])
 
 
+def test_create_cdm_job_material_group_exclude_offcuts(monkeypatch: pytest.MonkeyPatch) -> None:
+    group = [
+        {"id": 2, "name": "MDF_18", "offcut": False, "quantity": 0},
+        {"id": 118, "name": "MDF_18, Odciecie 1", "offcut": True, "quantity": 1},
+    ]
+    mocks = _mock_create_group(monkeypatch, group)
+    app, _am = _new_job_app()
+    result = app.create_cdm_job(
+        "JOB-001",
+        config="Fronty",
+        material_group="MDF_18",
+        include_offcuts=True,
+        exclude_offcuts=["118"],
+    )
+    assert result["success"] is True
+    assert mocks["resolve"].call_args.args == ("MDF_18",)
+    kwargs = mocks["resolve"].call_args.kwargs
+    assert kwargs["include_offcuts"] is True
+    assert kwargs["exclude_offcuts"] == ["118"]
+    assert isinstance(kwargs["warnings"], list)
+    mocks["set_selected"].assert_called_once_with("JOB-001", group)
+
+
+def test_create_cdm_job_exclude_offcuts_requires_group(monkeypatch: pytest.MonkeyPatch) -> None:
+    _mock_create_group(monkeypatch, [])
+    app, am = _new_job_app()
+    with pytest.raises(RuntimeError, match="require --material-group"):
+        app.create_cdm_job("JOB-001", config="Fronty", exclude_offcuts=["118"])
+    am.NewCDMJob.assert_not_called()
+
+
+def test_create_cdm_job_exclude_offcuts_without_offcuts_warns(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    group = [{"id": 2, "name": "MDF_18", "offcut": False, "quantity": 0}]
+    mocks = _mock_create_group(monkeypatch, group)
+    app, _am = _new_job_app()
+    result = app.create_cdm_job(
+        "JOB-001", config="Fronty", material_group="MDF_18", exclude_offcuts=["118"]
+    )
+    assert any("no effect" in w for w in result["warnings"])
+    assert "exclude_offcuts" not in mocks["resolve"].call_args.kwargs
+
+
 def test_create_cdm_job_group_validations(monkeypatch: pytest.MonkeyPatch) -> None:
     _mock_create_group(monkeypatch, [])
     app, am = _new_job_app()

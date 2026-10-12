@@ -307,6 +307,7 @@ class RemoteSession:
         material_group: str | None = None,
         include_offcuts: bool = False,
         prefer_offcuts: bool = False,
+        exclude_offcuts: list[str] | None = None,
         sheets: str | None = None,
         sheet_order: str | None = None,
     ) -> dict[str, Any]:
@@ -329,6 +330,8 @@ class RemoteSession:
             params["include_offcuts"] = True
         if prefer_offcuts:
             params["prefer_offcuts"] = True
+        if exclude_offcuts:
+            params["exclude_offcuts"] = exclude_offcuts
         if sheets is not None:
             params["sheets"] = sheets
         if sheet_order is not None:

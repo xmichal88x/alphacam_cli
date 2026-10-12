@@ -743,6 +743,12 @@ class GatewayServer:
         material_group = str(params.get("material_group") or "").strip() or None
         include_offcuts = _as_bool(params.get("include_offcuts"))
         prefer_offcuts = _as_bool(params.get("prefer_offcuts"))
+        raw_exclude = params.get("exclude_offcuts")
+        exclude_offcuts: list[str] | None = None
+        if isinstance(raw_exclude, list):
+            exclude_offcuts = [
+                str(token).strip() for token in raw_exclude if str(token).strip()
+            ] or None
         sheets = str(params.get("sheets") or "").strip() or None
         sheet_order = str(params.get("sheet_order") or "").strip() or None
         if due_date is not None:
@@ -752,21 +758,24 @@ class GatewayServer:
                 raise COMError(str(exc)) from None
         from alphacam_cli.gateway.server import _app as com_app
 
+        create_kwargs: dict[str, Any] = {
+            "job_name": job_name,
+            "config": config,
+            "material": material,
+            "customer": customer,
+            "po": po,
+            "due_date": due_date,
+            "description": description,
+            "material_group": material_group,
+            "include_offcuts": include_offcuts,
+            "prefer_offcuts": prefer_offcuts,
+            "sheets": sheets,
+            "sheet_order": sheet_order,
+        }
+        if exclude_offcuts:
+            create_kwargs["exclude_offcuts"] = exclude_offcuts
         try:
-            return com_app.create_cdm_job(  # type: ignore[no-any-return]
-                job_name=job_name,
-                config=config,
-                material=material,
-                customer=customer,
-                po=po,
-                due_date=due_date,
-                description=description,
-                material_group=material_group,
-                include_offcuts=include_offcuts,
-                prefer_offcuts=prefer_offcuts,
-                sheets=sheets,
-                sheet_order=sheet_order,
-            )
+            return com_app.create_cdm_job(**create_kwargs)  # type: ignore[no-any-return]
         except Exception as e:
             raise COMError(str(e)) from e
 

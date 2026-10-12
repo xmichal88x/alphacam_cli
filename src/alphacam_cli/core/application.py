@@ -681,6 +681,7 @@ class Application:
         material_group: str | None = None,
         include_offcuts: bool = False,
         prefer_offcuts: bool = False,
+        exclude_offcuts: list[str] | None = None,
         sheets: str | None = None,
         sheet_order: str | None = None,
     ) -> dict[str, Any]:
@@ -731,19 +732,29 @@ class Application:
             include_offcuts,
             prefer_offcuts,
             sheet_order,
+            exclude_offcuts,
         )
+        warnings: list[str] = []
+        if exclude_offcuts and not (include_offcuts or prefer_offcuts):
+            warnings.append(
+                "cdm: --exclude-offcuts has no effect without "
+                "--include-offcuts/--prefer-offcuts"
+            )
         group_sheets: list[dict[str, Any]] | None = None
         material_group_label: str | None = None
         material_id: int | None = None
         material_label: str | None = None
         if group_option:
-            group_sheets = cdm_db.resolve_material_group(
-                group_option,
-                include_offcuts=(include_offcuts or prefer_offcuts),
-                offcuts_first=prefer_offcuts,
-                whole_quantity=0,
-                offcut_quantity=1,
-            )
+            resolve_kwargs: dict[str, Any] = {
+                "include_offcuts": (include_offcuts or prefer_offcuts),
+                "offcuts_first": prefer_offcuts,
+                "whole_quantity": 0,
+                "offcut_quantity": 1,
+            }
+            if exclude_offcuts and (include_offcuts or prefer_offcuts):
+                resolve_kwargs["exclude_offcuts"] = exclude_offcuts
+                resolve_kwargs["warnings"] = warnings
+            group_sheets = cdm_db.resolve_material_group(group_option, **resolve_kwargs)
             material_group_label = (
                 f"{group_option} (group: "
                 + ", ".join(
@@ -792,7 +803,6 @@ class Application:
             job.ConfigurationSetting = am.ConfigurationSettings.GetByName(config_name)
         except Exception as e:
             raise RuntimeError(f"cdm: config not found: {config_name}") from e  # noqa: TRY003
-        warnings: list[str] = []
         customer_name: str | None = None
         customer_id: int | None = None
         if customer is not None:
@@ -2285,6 +2295,7 @@ def _validate_group_options(
     include_offcuts: bool,
     prefer_offcuts: bool,
     sheet_order: str | None,
+    exclude_offcuts: list[str] | None = None,
 ) -> None:
     """Validate mutually exclusive material/sheet-selection options for cdm import."""
     if material and material_group:
@@ -2297,9 +2308,10 @@ def _validate_group_options(
         raise RuntimeError(  # noqa: TRY003
             "cdm: --material-group and --sheets are mutually exclusive"
         )
-    if (include_offcuts or prefer_offcuts) and not material_group:
+    if (include_offcuts or prefer_offcuts or exclude_offcuts) and not material_group:
         raise RuntimeError(  # noqa: TRY003
-            "cdm: --include-offcuts/--prefer-offcuts require --material-group"
+            "cdm: --include-offcuts/--prefer-offcuts/--exclude-offcuts "
+            "require --material-group"
         )
     if sheet_order is not None and sheet_order not in ("best", "picked"):
         raise RuntimeError(  # noqa: TRY003

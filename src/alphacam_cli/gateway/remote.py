@@ -270,23 +270,27 @@ class RemoteApplication:
         material_group: str | None = None,
         include_offcuts: bool = False,
         prefer_offcuts: bool = False,
+        exclude_offcuts: list[str] | None = None,
         sheets: str | None = None,
         sheet_order: str | None = None,
     ) -> dict[str, Any]:
-        return self._session.create_cdm_job(  # type: ignore[no-any-return]
-            job_name=job_name,
-            config=config,
-            material=material,
-            customer=customer,
-            po=po,
-            due_date=due_date,
-            description=description,
-            material_group=material_group,
-            include_offcuts=include_offcuts,
-            prefer_offcuts=prefer_offcuts,
-            sheets=sheets,
-            sheet_order=sheet_order,
-        )
+        kwargs: dict[str, Any] = {
+            "job_name": job_name,
+            "config": config,
+            "material": material,
+            "customer": customer,
+            "po": po,
+            "due_date": due_date,
+            "description": description,
+            "material_group": material_group,
+            "include_offcuts": include_offcuts,
+            "prefer_offcuts": prefer_offcuts,
+            "sheets": sheets,
+            "sheet_order": sheet_order,
+        }
+        if exclude_offcuts is not None:
+            kwargs["exclude_offcuts"] = exclude_offcuts
+        return self._session.create_cdm_job(**kwargs)  # type: ignore[no-any-return]
 
     def process_cdm_job(
         self,

@@ -37,6 +37,37 @@ def _require_abs_windows_path(value: str | None, name: str) -> str | None:
     return path
 
 
+def _parse_exclude_offcuts(raw: str | None) -> list[str] | None:
+    """Parse ``--exclude-offcuts`` into offcut IDs/names.
+
+    Entries are comma-separated; pure-digit entries are IDs, while runs of
+    non-numeric entries are re-joined with ``", "`` so offcut names that
+    themselves contain commas (e.g. ``MDF_18, Odciecie 1``) survive the comma
+    separator. Empty entries are dropped; None when nothing is given.
+    """
+    if raw is None:
+        return None
+    tokens: list[str] = []
+    name_run: list[str] = []
+
+    def _flush_name() -> None:
+        if name_run:
+            tokens.append(", ".join(name_run))
+            name_run.clear()
+
+    for part in raw.split(","):
+        item = part.strip()
+        if not item:
+            continue
+        if item.isdigit():
+            _flush_name()
+            tokens.append(item)
+        else:
+            name_run.append(item)
+    _flush_name()
+    return tokens or None
+
+
 @app.command()
 @handle_com_errors
 def create(
@@ -74,6 +105,14 @@ def create(
             "forces picked order (requires --material-group)"
         ),
     ),
+    exclude_offcuts: str | None = typer.Option(
+        None,
+        "--exclude-offcuts",
+        help=(
+            "Offcut IDs or names to drop from the material group, comma-separated "
+            "(requires --material-group and --include-offcuts/--prefer-offcuts)"
+        ),
+    ),
     sheets: str | None = typer.Option(
         None,
         "--sheets",
@@ -96,6 +135,7 @@ def create(
     material_group = (material_group or "").strip() or None
     sheets = (sheets or "").strip() or None
     sheet_order = (sheet_order or "").strip().lower() or None
+    exclude_offcuts_list = _parse_exclude_offcuts(exclude_offcuts)
     if material and material_group:
         console.print(
             "[red]Error:[/red] cdm: --material and --material-group are mutually exclusive"
@@ -113,6 +153,9 @@ def create(
     if include_offcuts and not material_group:
         console.print("[red]Error:[/red] cdm: --include-offcuts requires --material-group")
         raise typer.Exit(code=2)
+    if exclude_offcuts_list and not material_group:
+        console.print("[red]Error:[/red] cdm: --exclude-offcuts requires --material-group")
+        raise typer.Exit(code=2)
     if prefer_offcuts and sheet_order == "best":
         console.print("[red]Error:[/red] cdm: --prefer-offcuts conflicts with --sheet-order best")
         raise typer.Exit(code=2)
@@ -124,20 +167,23 @@ def create(
         raise typer.Exit(code=2)
     with alphacam_context(visible=get_visible()) as raw:
         ac = resolve_app(raw)
-        result = ac.create_cdm_job(
-            job_name=job_name,
-            config=config,
-            material=material,
-            customer=customer,
-            po=po,
-            due_date=due_date,
-            description=description,
-            material_group=material_group,
-            include_offcuts=include_offcuts,
-            prefer_offcuts=prefer_offcuts,
-            sheets=sheets,
-            sheet_order=sheet_order,
-        )
+        create_kwargs: dict[str, Any] = {
+            "job_name": job_name,
+            "config": config,
+            "material": material,
+            "customer": customer,
+            "po": po,
+            "due_date": due_date,
+            "description": description,
+            "material_group": material_group,
+            "include_offcuts": include_offcuts,
+            "prefer_offcuts": prefer_offcuts,
+            "sheets": sheets,
+            "sheet_order": sheet_order,
+        }
+        if exclude_offcuts_list:
+            create_kwargs["exclude_offcuts"] = exclude_offcuts_list
+        result = ac.create_cdm_job(**create_kwargs)
         if not result.get("success"):
             console.print(
                 f"[red]Error:[/red] CDM job creation failed: {result.get('job_name') or job_name}"

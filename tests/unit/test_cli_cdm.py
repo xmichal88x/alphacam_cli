@@ -794,6 +794,59 @@ def test_cdm_create_command_material_group() -> None:
     )
 
 
+def test_cdm_create_command_exclude_offcuts() -> None:
+    from tests.unit.test_cli import _mock_com
+
+    with (
+        _mock_com(),
+        patch(
+            "alphacam_cli.core.application.Application.create_cdm_job",
+            return_value={
+                "success": True,
+                "job_name": "JOB-001",
+                "config": "Fronty",
+                "material": None,
+                "material_group": "MDF_18",
+                "warnings": [],
+            },
+        ) as mock_create,
+    ):
+        result = runner.invoke(
+            app,
+            [
+                "cdm",
+                "create",
+                "JOB-001",
+                "--material-group",
+                "MDF_18",
+                "--prefer-offcuts",
+                "--exclude-offcuts",
+                "118, MDF_18, Odciecie 1 , 128",
+            ],
+        )
+    assert result.exit_code == 0
+    kwargs = mock_create.call_args.kwargs
+    assert kwargs["exclude_offcuts"] == ["118", "MDF_18, Odciecie 1", "128"]
+    assert kwargs["prefer_offcuts"] is True
+
+
+def test_cdm_create_command_exclude_offcuts_requires_group() -> None:
+    from tests.unit.test_cli import _mock_com
+
+    with (
+        _mock_com(),
+        patch(
+            "alphacam_cli.core.application.Application.create_cdm_job",
+        ) as mock_create,
+    ):
+        result = runner.invoke(
+            app, ["cdm", "create", "JOB-001", "--exclude-offcuts", "118"]
+        )
+    assert result.exit_code == 2
+    assert "requires --material-group" in result.stderr
+    mock_create.assert_not_called()
+
+
 def test_cdm_create_command_material_and_group_conflict() -> None:
     from tests.unit.test_cli import _mock_com
 

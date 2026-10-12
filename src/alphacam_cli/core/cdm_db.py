@@ -147,6 +147,56 @@ def material_groups() -> dict[str, list[dict[str, Any]]]:
     return groups
 
 
+def _filter_excluded_offcuts(
+    offcut_sheets: list[dict[str, Any]],
+    whole_sheets: list[dict[str, Any]],
+    exclude_offcuts: list[str],
+    material_key: str,
+    warnings: list[str] | None,
+) -> list[dict[str, Any]]:
+    """Drop offcuts matching an ID or name in ``exclude_offcuts``.
+
+    Tokens are trimmed; empty tokens are ignored. A token matches an offcut by
+    its numeric ``id`` (as string) or its ``name`` (case-insensitive). Whole
+    sheets are never removed; a token naming a whole sheet, or matching nothing
+    in the group, is reported as a non-fatal warning (never an error).
+    """
+    wanted = [token.strip() for token in exclude_offcuts if token and token.strip()]
+    if not wanted:
+        return offcut_sheets
+    whole_ids = {str(int(sheet["id"])) for sheet in whole_sheets}
+    whole_names = {str(sheet.get("name") or "").strip().casefold() for sheet in whole_sheets}
+    kept: list[dict[str, Any]] = []
+    matched: set[str] = set()
+    for sheet in offcut_sheets:
+        sheet_id = str(int(sheet["id"]))
+        sheet_name = str(sheet.get("name") or "").strip().casefold()
+        hit = next(
+            (token for token in wanted if token == sheet_id or token.casefold() == sheet_name),
+            None,
+        )
+        if hit is not None:
+            matched.add(hit)
+            continue
+        kept.append(sheet)
+    for token in wanted:
+        if token in matched:
+            continue
+        if token in whole_ids or token.casefold() in whole_names:
+            message = (
+                f"cdm: --exclude-offcuts entry {token!r} is a whole sheet; "
+                "whole sheets are never excluded"
+            )
+        else:
+            message = (
+                f"cdm: --exclude-offcuts entry {token!r} not found in material group {material_key}"
+            )
+        logger.warning("%s", message)
+        if warnings is not None:
+            warnings.append(message)
+    return kept
+
+
 def resolve_material_group(
     material_name: str,
     *,
@@ -154,6 +204,8 @@ def resolve_material_group(
     offcuts_first: bool = False,
     whole_quantity: int = 0,
     offcut_quantity: int = 1,
+    exclude_offcuts: list[str] | None = None,
+    warnings: list[str] | None = None,
 ) -> list[dict[str, Any]]:
     """Resolve a material group into selectable sheets with quantities.
 
@@ -161,8 +213,12 @@ def resolve_material_group(
     ``include_offcuts`` is set, offcuts get ``offcut_quantity`` (default 1 =
     one physical sheet). ``offcuts_first`` puts offcuts before whole sheets;
     otherwise whole sheets come first. Rows from :func:`material_groups` are
-    never mutated. Raises RuntimeError for an unknown material or a group
-    without selectable sheets (both would hang AM processing).
+    never mutated. ``exclude_offcuts`` drops matching offcuts (by numeric ID or
+    name, case-insensitive) from the candidate list before it is returned;
+    whole sheets are never removed and unmatched/whole-sheet tokens become
+    warnings (also appended to ``warnings`` when given). Raises RuntimeError for
+    an unknown material, a group without selectable sheets, or a candidate list
+    left empty by ``exclude_offcuts`` (an empty group hangs AM processing).
     """
     groups = material_groups()
     key = material_name.strip()
@@ -189,8 +245,17 @@ def resolve_material_group(
         for row in rows
         if row.get("offcut") and include_offcuts
     ]
+    if exclude_offcuts:
+        offcut_sheets = _filter_excluded_offcuts(
+            offcut_sheets, whole_sheets, exclude_offcuts, key, warnings
+        )
     result = [*offcut_sheets, *whole_sheets] if offcuts_first else [*whole_sheets, *offcut_sheets]
     if not result:
+        if exclude_offcuts and include_offcuts and not offcut_sheets:
+            raise RuntimeError(  # noqa: TRY003
+                f"cdm: material group has no candidate sheets left after "
+                f"--exclude-offcuts (all offcuts excluded): {key}"
+            )
         if any(row.get("offcut") for row in rows):
             raise RuntimeError(  # noqa: TRY003
                 f"cdm: material group has no whole sheets (use --include-offcuts): {key}"

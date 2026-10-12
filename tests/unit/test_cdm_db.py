@@ -186,6 +186,100 @@ def test_material_groups_subprocess_failure(monkeypatch: pytest.MonkeyPatch) -> 
     assert cdm_db.material_groups() == {}
 
 
+def _mock_material_groups(
+    monkeypatch: pytest.MonkeyPatch, groups: dict[str, list[dict[str, Any]]]
+) -> None:
+    monkeypatch.setattr(cdm_db, "material_groups", lambda: groups)
+
+
+_MDF_GROUP = {
+    "MDF_18": [
+        {"id": 2, "name": "MDF_18", "offcut": False},
+        {"id": 7, "name": "MDF18", "offcut": False},
+        {"id": 118, "name": "MDF_18, Odciecie 1", "offcut": True},
+        {"id": 128, "name": "MDF_18, Odciecie 2", "offcut": True},
+    ]
+}
+
+
+def test_resolve_material_group_exclude_offcuts_by_id(monkeypatch: pytest.MonkeyPatch) -> None:
+    _mock_material_groups(monkeypatch, _MDF_GROUP)
+    result = cdm_db.resolve_material_group(
+        "MDF_18", include_offcuts=True, exclude_offcuts=["118"]
+    )
+    assert [s["id"] for s in result] == [2, 7, 128]
+
+
+def test_resolve_material_group_exclude_offcuts_by_name(monkeypatch: pytest.MonkeyPatch) -> None:
+    _mock_material_groups(monkeypatch, _MDF_GROUP)
+    result = cdm_db.resolve_material_group(
+        "MDF_18", include_offcuts=True, exclude_offcuts=["mdf_18, odciecie 2"]
+    )
+    assert [s["id"] for s in result] == [2, 7, 118]
+
+
+def test_resolve_material_group_exclude_offcuts_keeps_whole_sheets(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _mock_material_groups(monkeypatch, _MDF_GROUP)
+    warnings: list[str] = []
+    result = cdm_db.resolve_material_group(
+        "MDF_18",
+        include_offcuts=True,
+        exclude_offcuts=["2", "MDF18"],
+        warnings=warnings,
+    )
+    assert [s["id"] for s in result] == [2, 7, 118, 128]
+    assert len(warnings) == 2
+    assert all("whole sheet" in w for w in warnings)
+
+
+def test_resolve_material_group_exclude_offcuts_unknown_warns(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    _mock_material_groups(monkeypatch, _MDF_GROUP)
+    warnings: list[str] = []
+    with caplog.at_level("WARNING", logger="alphacam_cli.core.cdm_db"):
+        result = cdm_db.resolve_material_group(
+            "MDF_18",
+            include_offcuts=True,
+            exclude_offcuts=["999", "Nope"],
+            warnings=warnings,
+        )
+    assert [s["id"] for s in result] == [2, 7, 118, 128]
+    assert len(warnings) == 2
+    assert all("not found" in w for w in warnings)
+    assert len(caplog.records) == 2
+
+
+def test_resolve_material_group_exclude_offcuts_empty_result_raises(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _mock_material_groups(
+        monkeypatch, {"OFF": [{"id": 9, "name": "OFF", "offcut": True}]}
+    )
+    with pytest.raises(RuntimeError, match="exclude-offcuts"):
+        cdm_db.resolve_material_group("OFF", include_offcuts=True, exclude_offcuts=["9"])
+
+
+def test_resolve_material_group_exclude_all_offcuts_falls_back_to_whole(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _mock_material_groups(monkeypatch, _MDF_GROUP)
+    result = cdm_db.resolve_material_group(
+        "MDF_18", include_offcuts=True, exclude_offcuts=["118", "128"]
+    )
+    assert [s["id"] for s in result] == [2, 7]
+
+
+def test_resolve_material_group_exclude_offcuts_noop_without_offcuts(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _mock_material_groups(monkeypatch, _MDF_GROUP)
+    result = cdm_db.resolve_material_group("MDF_18", exclude_offcuts=["118"])
+    assert [s["id"] for s in result] == [2, 7]
+
+
 def test_vdb5_job_defaults_parses(monkeypatch: pytest.MonkeyPatch) -> None:
     _mock_run(monkeypatch, stdout='{"config_name": "Fronty", "material_id": "4"}')
     assert cdm_db.vdb5_job_defaults() == {"config_name": "Fronty", "material_id": 4}

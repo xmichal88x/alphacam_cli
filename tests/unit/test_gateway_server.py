@@ -1391,6 +1391,34 @@ def test_create_cdm_job_handler_material_group(server_app: MagicMock) -> None:
     )
 
 
+def test_create_cdm_job_handler_exclude_offcuts(server_app: MagicMock) -> None:
+    server_app.create_cdm_job.return_value = {"success": True}
+    gw = GatewayServer()
+    gw._handler_create_cdm_job(
+        {
+            "job_name": "JOB-001",
+            "material_group": "MDF_18",
+            "include_offcuts": True,
+            "exclude_offcuts": ["118", " 128 ", ""],
+        }
+    )
+    server_app.create_cdm_job.assert_called_once_with(
+        job_name="JOB-001",
+        config=None,
+        material=None,
+        customer=None,
+        po=None,
+        due_date=None,
+        description=None,
+        material_group="MDF_18",
+        include_offcuts=True,
+        prefer_offcuts=False,
+        sheets=None,
+        sheet_order=None,
+        exclude_offcuts=["118", "128"],
+    )
+
+
 def test_create_cdm_job_handler_missing_job_name(server_app: MagicMock) -> None:
     gw = GatewayServer()
     with pytest.raises(COMError, match="cdm: job_name is required"):

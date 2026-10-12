@@ -424,6 +424,33 @@ def test_remote_create_cdm_job() -> None:
     )
 
 
+def test_remote_create_cdm_job_exclude_offcuts() -> None:
+    session = MagicMock()
+    session.create_cdm_job.return_value = {"success": True}
+    app = RemoteApplication(session)
+    app.create_cdm_job(
+        job_name="JOB-001",
+        material_group="MDF_18",
+        include_offcuts=True,
+        exclude_offcuts=["118", "MDF_18, Odciecie 1"],
+    )
+    session.create_cdm_job.assert_called_once_with(
+        job_name="JOB-001",
+        config=None,
+        material=None,
+        customer=None,
+        po=None,
+        due_date=None,
+        description=None,
+        material_group="MDF_18",
+        include_offcuts=True,
+        prefer_offcuts=False,
+        sheets=None,
+        sheet_order=None,
+        exclude_offcuts=["118", "MDF_18, Odciecie 1"],
+    )
+
+
 def test_remote_create_cdm_job_defaults() -> None:
     session = MagicMock()
     session.create_cdm_job.return_value = {"success": True}
