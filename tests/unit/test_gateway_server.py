@@ -2918,3 +2918,22 @@ def test_handler_health_stale_com_no_restart_when_job_queued(
     }
     assert _FakeTimer.instances == []
     mock_exit.assert_not_called()
+
+
+def test_cdm_set_sheet_order_handler(server_app: MagicMock) -> None:
+    server_app.cdm_set_sheet_order.return_value = {
+        "success": True,
+        "config": "Fronty",
+        "sheet_order": "best",
+        "value": 0,
+    }
+    result = GatewayServer()._handler_cdm_set_sheet_order(
+        {"config_name": "Fronty", "order": "best"}
+    )
+    assert result == {
+        "success": True,
+        "config": "Fronty",
+        "sheet_order": "best",
+        "value": 0,
+    }
+    server_app.cdm_set_sheet_order.assert_called_once_with("Fronty", "best")

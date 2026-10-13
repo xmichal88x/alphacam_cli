@@ -458,6 +458,11 @@ class RemoteApplication:
     def cdm_configs(self, show: str | None = None) -> dict[str, Any]:
         return self._session.cdm_configs(show=show)  # type: ignore[no-any-return]
 
+    def cdm_set_sheet_order(self, config_name: str, order: str) -> dict[str, Any]:
+        return self._session.cdm_set_sheet_order(  # type: ignore[no-any-return]
+            config_name, order
+        )
+
     def cdm_lookups(self) -> dict[str, Any]:
         return self._session.cdm_lookups()  # type: ignore[no-any-return]
 

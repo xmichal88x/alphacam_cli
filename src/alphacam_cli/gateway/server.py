@@ -1009,6 +1009,15 @@ class GatewayServer:
         except Exception as e:
             raise COMError(f"cdm: read configs failed: {e}") from e
 
+    def _handler_cdm_set_sheet_order(self, params: dict[str, Any]) -> dict[str, Any]:
+        try:
+            return _app.cdm_set_sheet_order(  # type: ignore[no-any-return]
+                str(params["config_name"]),
+                str(params["order"]),
+            )
+        except Exception as e:
+            raise COMError(f"cdm: set sheet order failed: {e}") from e
+
     def _handler_cdm_lookups(self, params: dict[str, Any]) -> dict[str, Any]:
         try:
             return {"lookups": cdm_db.lookups()}

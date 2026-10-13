@@ -552,6 +552,12 @@ class RemoteSession:
             params["show"] = show
         return self._call("cdm_configs", params)  # type: ignore[no-any-return]
 
+    def cdm_set_sheet_order(self, config_name: str, order: str) -> dict[str, Any]:
+        return self._call(  # type: ignore[no-any-return]
+            "cdm_set_sheet_order",
+            {"config_name": config_name, "order": order},
+        )
+
     def cdm_lookups(self) -> dict[str, Any]:
         return self._call("cdm_lookups")  # type: ignore[no-any-return]
 

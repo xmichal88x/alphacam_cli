@@ -1127,3 +1127,31 @@ def test_remote_application_health() -> None:
     result = app.health()
     assert result == {"ok": True, "version": "9.0.1", "name": "AlphaCAM"}
     session.health.assert_called_once_with()
+
+
+def test_remote_session_cdm_set_sheet_order() -> None:
+    client = RemoteSession()
+    client._call = MagicMock(return_value={"success": True})  # type: ignore[method-assign]
+    client.cdm_set_sheet_order("Fronty", "picked")
+    client._call.assert_called_once_with(
+        "cdm_set_sheet_order", {"config_name": "Fronty", "order": "picked"}
+    )
+
+
+def test_remote_cdm_set_sheet_order_delegates() -> None:
+    session = MagicMock()
+    session.cdm_set_sheet_order.return_value = {
+        "success": True,
+        "config": "Fronty",
+        "sheet_order": "picked",
+        "value": 1,
+    }
+    app = RemoteApplication(session)
+    result = app.cdm_set_sheet_order("Fronty", "picked")
+    assert result == {
+        "success": True,
+        "config": "Fronty",
+        "sheet_order": "picked",
+        "value": 1,
+    }
+    session.cdm_set_sheet_order.assert_called_once_with("Fronty", "picked")

@@ -4406,3 +4406,34 @@ def test_cdm_import_command_material_group_output() -> None:
     assert result.exit_code == 0
     assert "Group: MDF_18 (group: OFF#9 (offcut), MDF_18#2)" in result.stderr
     assert "Material:" not in result.stderr
+
+
+def test_cdm_config_set_sheet_order_remote_delegates() -> None:
+    """BUG-WL-3: remote --remote must reach RemoteApplication.cdm_set_sheet_order."""
+    from unittest.mock import MagicMock
+
+    from alphacam_cli.gateway.remote import RemoteApplication
+    from tests.unit.test_cli import _mock_com
+
+    session = MagicMock()
+    session.cdm_set_sheet_order.return_value = {
+        "success": True,
+        "config": "Fronty",
+        "value": 1,
+        "sheet_order": "picked",
+    }
+    remote_app = RemoteApplication(session)
+
+    @contextmanager
+    def fake_context(visible: bool = False) -> Iterator[RemoteApplication]:  # noqa: ARG001
+        yield remote_app
+
+    with (
+        _mock_com(),
+        patch("alphacam_cli.cli.cdm.alphacam_context", fake_context),
+    ):
+        result = runner.invoke(
+            app, ["cdm", "config", "set-sheet-order", "Fronty", "picked"]
+        )
+    assert result.exit_code == 0
+    session.cdm_set_sheet_order.assert_called_once_with("Fronty", "picked")
