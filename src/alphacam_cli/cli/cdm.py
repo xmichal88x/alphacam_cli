@@ -1262,17 +1262,21 @@ def stock_add_cmd(
     quantity: int = typer.Argument(..., help="Quantity"),
     name: str | None = typer.Option(None, "--name", help="Sheet name"),
     grain: int = typer.Option(0, "--grain", help="Grain direction (0=none, 1=x, 2=y)"),
+    json_output: bool = typer.Option(False, "--json", help="Output deterministic JSON"),
 ) -> None:
     """Add a new sheet to the database."""
     require_platform()
     with alphacam_context(visible=get_visible()) as raw:
         ac = resolve_app(raw)
         result = ac.stock_add(material_name, thickness, width, height, quantity, name, grain)
-        if result.get("success"):
-            console.print(f"[green]OK:[/green] added '{result['name']}' to {material_name}")
-        else:
-            console.print(f"[red]Error:[/red] {result.get('error')}")
-            raise typer.Exit(code=1)
+    if json_output:
+        console.print(json.dumps(result, indent=2, sort_keys=True))
+    elif result.get("success"):
+        console.print(f"[green]OK:[/green] added '{result['name']}' to {material_name}")
+    else:
+        console.print(f"[red]Error:[/red] {result.get('error')}")
+    if not result.get("success"):
+        raise typer.Exit(code=1)
 
 
 @stock_app.command("offcut-add")

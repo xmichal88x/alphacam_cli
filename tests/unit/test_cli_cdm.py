@@ -94,6 +94,78 @@ def test_stock_offcut_add_json_preserves_blocked_status() -> None:
     create.assert_called_once_with("MDF", 18.0, 100.0, 200.0, 1, "offcut")
 
 
+def test_stock_add_json_success() -> None:
+    from tests.unit.test_cli import _mock_com
+
+    payload = {
+        "success": True,
+        "sheet_id": 235,
+        "name": "ZZ_TEST",
+        "material": "MDF",
+        "thickness": 18.0,
+        "width": 100.0,
+        "height": 200.0,
+        "quantity": 5,
+    }
+    with (
+        _mock_com(),
+        patch(
+            "alphacam_cli.core.application.Application.stock_add",
+            return_value=payload,
+        ) as add,
+    ):
+        result = runner.invoke(
+            app,
+            ["cdm", "stock", "add", "MDF", "18", "100", "200", "5", "--name", "ZZ_TEST", "--json"],
+        )
+    assert result.exit_code == 0
+    data = json.loads(result.stderr)
+    assert data["success"] is True
+    assert data["sheet_id"] == 235
+    assert data == payload
+    add.assert_called_once_with("MDF", 18.0, 100.0, 200.0, 5, "ZZ_TEST", 0)
+
+
+def test_stock_add_default_output_unchanged() -> None:
+    from tests.unit.test_cli import _mock_com
+
+    payload = {"success": True, "sheet_id": 235, "name": "ZZ_TEST"}
+    with (
+        _mock_com(),
+        patch(
+            "alphacam_cli.core.application.Application.stock_add",
+            return_value=payload,
+        ) as add,
+    ):
+        result = runner.invoke(app, ["cdm", "stock", "add", "MDF", "18", "100", "200", "5"])
+    assert result.exit_code == 0
+    assert "OK:" in result.stderr
+    assert "added 'ZZ_TEST' to MDF" in result.stderr
+    assert "sheet_id" not in result.stderr
+    add.assert_called_once_with("MDF", 18.0, 100.0, 200.0, 5, None, 0)
+
+
+def test_stock_add_failure_json_has_nonzero_exit() -> None:
+    from tests.unit.test_cli import _mock_com
+
+    failure = {"success": False, "error": "material not found: MDF"}
+    with (
+        _mock_com(),
+        patch(
+            "alphacam_cli.core.application.Application.stock_add",
+            return_value=failure,
+        ) as add,
+    ):
+        result = runner.invoke(
+            app, ["cdm", "stock", "add", "MDF", "18", "100", "200", "5", "--json"]
+        )
+    assert result.exit_code == 1
+    data, _ = json.JSONDecoder().raw_decode(result.stderr)
+    assert data["success"] is False
+    assert data["error"] == "material not found: MDF"
+    add.assert_called_once_with("MDF", 18.0, 100.0, 200.0, 5, None, 0)
+
+
 def test_stock_offcut_delete_uses_stable_id_and_json() -> None:
     from tests.unit.test_cli import _mock_com
 
