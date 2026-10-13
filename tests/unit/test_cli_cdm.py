@@ -2314,6 +2314,106 @@ def test_cdm_config_show_command() -> None:
     assert "Yes" in result.stderr
 
 
+def test_cdm_config_show_json_includes_sheet_order() -> None:
+    """T7.1: `cdm config show <name> --json` emituje nesting_sheet_order_type."""
+    import json
+
+    from tests.unit.test_cli import _mock_com
+
+    with (
+        _mock_com(),
+        patch(
+            "alphacam_cli.core.application.Application.cdm_configs",
+            return_value={
+                "configs": [
+                    {
+                        "id": 1,
+                        "name": "Fronty",
+                        "nesting_sheet_order_type": 1,
+                    }
+                ],
+                "show": "Fronty",
+            },
+        ),
+    ):
+        result = runner.invoke(app, ["cdm", "config", "show", "Fronty", "--json"])
+    assert result.exit_code == 0
+    payload = json.loads(result.stderr[result.stderr.index("{"):])
+    assert payload["nesting_sheet_order_type"] == 1
+
+
+def test_cdm_config_show_json_not_found() -> None:
+    from tests.unit.test_cli import _mock_com
+
+    with (
+        _mock_com(),
+        patch(
+            "alphacam_cli.core.application.Application.cdm_configs",
+            return_value={"configs": [], "show": "NOPE"},
+        ),
+    ):
+        result = runner.invoke(app, ["cdm", "config", "show", "NOPE", "--json"])
+    assert result.exit_code == 1
+
+
+def test_cdm_config_set_sheet_order_command() -> None:
+    """T7.2: `cdm config set-sheet-order <name> picked` -> sukces (restore)."""
+    from tests.unit.test_cli import _mock_com
+
+    with (
+        _mock_com(),
+        patch(
+            "alphacam_cli.core.application.Application.cdm_set_sheet_order",
+            return_value={
+                "success": True,
+                "config": "Fronty",
+                "value": 1,
+                "sheet_order": "picked",
+            },
+        ) as mock_set,
+    ):
+        result = runner.invoke(
+            app, ["cdm", "config", "set-sheet-order", "Fronty", "picked"]
+        )
+    assert result.exit_code == 0
+    mock_set.assert_called_once_with("Fronty", "picked")
+
+
+def test_cdm_config_set_sheet_order_json() -> None:
+    import json
+
+    from tests.unit.test_cli import _mock_com
+
+    with (
+        _mock_com(),
+        patch(
+            "alphacam_cli.core.application.Application.cdm_set_sheet_order",
+            return_value={
+                "success": True,
+                "config": "Fronty",
+                "value": 0,
+                "sheet_order": "best",
+            },
+        ),
+    ):
+        result = runner.invoke(
+            app, ["cdm", "config", "set-sheet-order", "Fronty", "best", "--json"]
+        )
+    assert result.exit_code == 0
+    payload = json.loads(result.stderr[result.stderr.index("{"):])
+    assert payload["value"] == 0
+
+
+def test_cdm_config_set_sheet_order_invalid_value() -> None:
+    from tests.unit.test_cli import _mock_com
+
+    with _mock_com():
+        result = runner.invoke(
+            app, ["cdm", "config", "set-sheet-order", "Fronty", "sideways"]
+        )
+    assert result.exit_code != 0
+
+
 def test_cdm_config_show_not_found() -> None:
     from tests.unit.test_cli import _mock_com
 

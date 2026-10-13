@@ -1725,6 +1725,45 @@ class Application:
         """Read job configurations from the vdb5 database (headless-safe)."""
         return {"configs": cdm_db.configs(show), "show": show}
 
+    def cdm_set_sheet_order(self, config_name: str, order: str) -> dict[str, Any]:
+        """Set ``Nesting_SheetOrderType`` for a config (best=0, picked=1).
+
+        Read/write counterpart of ``cdm create --sheet-order``; used to restore
+        the global baseline (RQ-PA-164). Returns ``success``/``config``/
+        ``sheet_order``/``value``/``error``; never raises for a bad order value
+        (fail-fast dict) — the CLI maps it to a non-zero exit.
+        """
+        normalized = (order or "").strip().lower()
+        if normalized not in ("best", "picked"):
+            return {
+                "success": False,
+                "config": config_name,
+                "error": f"cdm: invalid sheet order: {order!r} (best|picked)",
+            }
+        value = 0 if normalized == "best" else 1
+        try:
+            updated = cdm_db.set_sheet_order(config_name, value)
+        except Exception as e:  # noqa: BLE001 - VistaDB/COM error -> dict, no traceback
+            return {
+                "success": False,
+                "config": config_name,
+                "error": f"cdm: sheet order update failed: {e}",
+            }
+        if not updated:
+            return {
+                "success": False,
+                "config": config_name,
+                "sheet_order": normalized,
+                "value": value,
+                "error": "cdm: configuration not found or no rows updated",
+            }
+        return {
+            "success": True,
+            "config": config_name,
+            "sheet_order": normalized,
+            "value": value,
+        }
+
     def cdm_lookups(self) -> dict[str, Any]:
         """Read CDM lookup tables from the vdb5 database (headless-safe)."""
         return {"lookups": cdm_db.lookups()}

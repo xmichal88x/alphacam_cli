@@ -1486,6 +1486,7 @@ def config_list() -> None:
 @handle_com_errors
 def config_show(
     name: str = typer.Argument(..., help="Configuration name"),
+    json_output: bool = typer.Option(False, "--json", help="Output deterministic JSON"),
 ) -> None:
     """Show a single CDM configuration (basic, nesting and CDM settings)."""
     require_platform()
@@ -1500,6 +1501,9 @@ def config_show(
             console.print(f"[red]Configuration not found: {name}[/red]")
             raise typer.Exit(code=1)
         cfg = rows[0]
+        if json_output:
+            console.print(json.dumps(cfg, indent=2, sort_keys=True, default=str))
+            return
         cdm = cfg.get("cdm") or {}
         display_name = str(cfg.get("name", "") or name)
         _print_config_section(
@@ -1562,6 +1566,43 @@ def config_show(
                 ("Custom macro", cdm.get("custom_macro")),
             ],
         )
+
+
+@config_app.command("set-sheet-order")
+@handle_com_errors
+def config_set_sheet_order(
+    name: str = typer.Argument(..., help="Configuration name"),
+    order: str = typer.Argument(..., help="Sheet order: best or picked"),
+    json_output: bool = typer.Option(False, "--json", help="Output deterministic JSON"),
+) -> None:
+    """Set ``Nesting_SheetOrderType`` for a configuration (best=0, picked=1).
+
+    Read/write counterpart of ``cdm create --sheet-order``; used to restore the
+    global baseline (RQ-PA-164) so a picked order does not leak to other jobs.
+    """
+    require_platform()
+    order_value = (order or "").strip().lower()
+    if order_value not in ("best", "picked"):
+        console.print(
+            f"[red]Error:[/red] cdm: invalid sheet order: {order!r} (best|picked)"
+        )
+        raise typer.Exit(code=2)
+    if not name or not name.strip():
+        console.print("[red]ERROR:[/red] Configuration name is required")
+        raise typer.Exit(code=1)
+    with alphacam_context(visible=get_visible()) as raw:
+        ac = resolve_app(raw)
+        result = ac.cdm_set_sheet_order(name, order_value)
+    if json_output:
+        console.print(json.dumps(result, indent=2, sort_keys=True, default=str))
+    elif result.get("success"):
+        console.print(
+            f"[green]OK:[/green] {name} sheet order -> {result.get('sheet_order')}"
+        )
+    else:
+        console.print(f"[red]Error:[/red] {result.get('error')}")
+    if not result.get("success"):
+        raise typer.Exit(code=1)
 
 
 setups_app = typer.Typer(help="CDM setups")
