@@ -1194,7 +1194,7 @@ def stock_list_cmd(
         if json_output:
             import json
 
-            console.print(json.dumps(result, indent=2))
+            typer.echo(json.dumps(result, indent=2))
             return
         for mat_data in result.get("materials", []):
             t = Table(
@@ -1270,7 +1270,7 @@ def stock_add_cmd(
         ac = resolve_app(raw)
         result = ac.stock_add(material_name, thickness, width, height, quantity, name, grain)
     if json_output:
-        console.print(json.dumps(result, indent=2, sort_keys=True))
+        typer.echo(json.dumps(result, indent=2, sort_keys=True))
     elif result.get("success"):
         console.print(f"[green]OK:[/green] added '{result['name']}' to {material_name}")
     else:
@@ -1296,7 +1296,7 @@ def stock_offcut_add_cmd(
         ac = resolve_app(raw)
         result = ac.stock_offcut_create(material_name, thickness, width, height, quantity, name)
     if json_output:
-        console.print(json.dumps(result, indent=2, sort_keys=True))
+        typer.echo(json.dumps(result, indent=2, sort_keys=True))
     elif result.get("success"):
         console.print(f"[green]OK:[/green] offcut added: {result.get('name', name or '-')}")
     else:
@@ -1345,7 +1345,7 @@ def stock_offcut_delete_cmd(
         ac = resolve_app(raw)
         result = ac.stock_offcut_delete(sheet_id)
     if json_output:
-        console.print(json.dumps(result, indent=2, sort_keys=True))
+        typer.echo(json.dumps(result, indent=2, sort_keys=True))
     elif result.get("success"):
         console.print(f"[green]OK:[/green] offcut deleted: {result.get('sheet_id', sheet_id)}")
     else:
@@ -1386,7 +1386,7 @@ def stock_material_add_cmd(
         console.print(f"[red]Error:[/red] {e}")
         raise typer.Exit(code=1) from e
     if json_output:
-        console.print(json.dumps(result, indent=2, sort_keys=True))
+        typer.echo(json.dumps(result, indent=2, sort_keys=True))
     elif result.get("success"):
         console.print(
             f"[green]OK:[/green] added material '{result.get('material', name)}' "
@@ -1431,7 +1431,7 @@ def stock_material_delete_cmd(
         console.print(f"[red]Error:[/red] {e}")
         raise typer.Exit(code=1) from e
     if json_output:
-        console.print(json.dumps(result, indent=2, sort_keys=True))
+        typer.echo(json.dumps(result, indent=2, sort_keys=True))
     elif result.get("success"):
         console.print(
             f"[green]OK:[/green] deleted material '{result.get('deleted', name)}' "
@@ -1502,7 +1502,7 @@ def config_show(
             raise typer.Exit(code=1)
         cfg = rows[0]
         if json_output:
-            console.print(json.dumps(cfg, indent=2, sort_keys=True, default=str))
+            typer.echo(json.dumps(cfg, indent=2, sort_keys=True, default=str))
             return
         cdm = cfg.get("cdm") or {}
         display_name = str(cfg.get("name", "") or name)
@@ -1583,9 +1583,7 @@ def config_set_sheet_order(
     require_platform()
     order_value = (order or "").strip().lower()
     if order_value not in ("best", "picked"):
-        console.print(
-            f"[red]Error:[/red] cdm: invalid sheet order: {order!r} (best|picked)"
-        )
+        console.print(f"[red]Error:[/red] cdm: invalid sheet order: {order!r} (best|picked)")
         raise typer.Exit(code=2)
     if not name or not name.strip():
         console.print("[red]ERROR:[/red] Configuration name is required")
@@ -1594,11 +1592,9 @@ def config_set_sheet_order(
         ac = resolve_app(raw)
         result = ac.cdm_set_sheet_order(name, order_value)
     if json_output:
-        console.print(json.dumps(result, indent=2, sort_keys=True, default=str))
+        typer.echo(json.dumps(result, indent=2, sort_keys=True, default=str))
     elif result.get("success"):
-        console.print(
-            f"[green]OK:[/green] {name} sheet order -> {result.get('sheet_order')}"
-        )
+        console.print(f"[green]OK:[/green] {name} sheet order -> {result.get('sheet_order')}")
     else:
         console.print(f"[red]Error:[/red] {result.get('error')}")
     if not result.get("success"):

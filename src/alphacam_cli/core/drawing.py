@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import contextlib
+import math
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
@@ -9,6 +11,44 @@ if TYPE_CHECKING:
     from alphacam_cli.core.nesting import NestInformation
 
 from alphacam_cli.com.constants import ACAM_OUT_NC_FILE
+from alphacam_cli.core.geolint import (
+    LintBudgetExceeded,
+    PathInput,
+    Segment,
+    Thresholds,
+    analyze_paths,
+)
+
+
+class UnreadableGeometryError(RuntimeError):
+    pass
+
+
+@dataclass(frozen=True)
+class MoveResult:
+    moved: int
+    warnings: tuple[str, ...]
+
+
+def _prop(obj: Any, name: str, default: Any) -> Any:
+    try:
+        return getattr(obj, name)
+    except Exception:
+        return default
+
+
+def _read_prop(obj: Any, name: str) -> Any:
+    try:
+        return getattr(obj, name)
+    except Exception as exc:
+        raise UnreadableGeometryError from exc
+
+
+def _read_coord(obj: Any, name: str) -> float:
+    try:
+        return float(_read_prop(obj, name))
+    except Exception as exc:
+        raise UnreadableGeometryError from exc
 
 
 class Drawing:
@@ -209,6 +249,219 @@ class Drawing:
             raise IndexError(f"Geometry index {index} out of range (1-{count})")  # noqa: TRY003
         coll.Item(index).Selected = True  # type: ignore[attr-defined]
 
+    def _restore_selection(self, paths: list[CamPath], previous: list[bool]) -> list[int]:
+        failed: list[int] = []
+        for index in range(min(len(paths), len(previous))):
+            try:
+                paths[index].selected = previous[index]
+            except Exception:
+                failed.append(index)
+        return failed
+
+    def move(self, dx: float, dy: float, dz: float = 0.0, select_all: bool = False) -> MoveResult:
+        for name, value in (("dx", dx), ("dy", dy), ("dz", dz)):
+            if not math.isfinite(value):
+                raise ValueError(f"{name} must be a finite number")  # noqa: TRY003
+        paths = self.geometries()
+        previous: list[bool] | None = None
+        moved_paths: list[tuple[int, CamPath]] = []
+        error: Exception | None = None
+        selected: list[tuple[int, CamPath]] = []
+        start_points: dict[int, tuple[float, float, float] | None] = {}
+        try:
+            previous = [path.selected for path in paths] if select_all else None
+            if select_all:
+                self.select_all_geometries()
+            selected = [(index, path) for index, path in enumerate(paths) if path.selected]
+        except Exception as e:
+            error = e
+        if error is None and not selected:
+            error = RuntimeError("No selected geometries")
+        failed_path: tuple[int, CamPath] | None = None
+        if error is None:
+            for index, path in selected:
+                start_points[index] = path.start_point()
+                try:
+                    path.move(dx, dy, dz)
+                except Exception as e:
+                    error = e
+                    failed_path = (index, path)
+                    break
+                moved_paths.append((index, path))
+
+        rolled_back = 0
+        rollback_failed: list[int] = []
+        rollback_uncertain: list[int] = []
+        if error is not None:
+            if failed_path is not None:
+                index, path = failed_path
+                outcome = self._rollback_path(
+                    path, index, start_points.get(index), dx, dy, dz, rollback_uncertain
+                )
+                if outcome is None:
+                    rollback_failed.append(index)
+                elif outcome:
+                    rolled_back += 1
+            for index, path in reversed(moved_paths):
+                outcome = self._rollback_path(
+                    path, index, start_points.get(index), dx, dy, dz, rollback_uncertain
+                )
+                if outcome is None:
+                    rollback_failed.append(index)
+                elif outcome:
+                    rolled_back += 1
+
+        restore_failed = self._restore_selection(paths, previous) if previous is not None else []
+        restore_message = (
+            "selection restore failed for path(s) "
+            + ", ".join(str(index) for index in restore_failed)
+            if restore_failed
+            else ""
+        )
+
+        if error is not None:
+            details = [f"move failed: {error}"]
+            if rollback_failed:
+                failed_indices = ", ".join(str(index) for index in sorted(rollback_failed))
+                details.append(f"rollback_failed={len(rollback_failed)} (path(s) {failed_indices})")
+            else:
+                details.append(f"rolled back {rolled_back} path(s)")
+            for index in sorted(rollback_uncertain):
+                details.append(f"rollback uncertain for path {index}")
+            if restore_failed:
+                details.append(restore_message)
+            raise RuntimeError("; ".join(details)) from error
+        warnings = list(self._move_warnings(dz))
+        if restore_failed:
+            warnings.append(restore_message)
+        return MoveResult(moved=len(moved_paths), warnings=tuple(warnings))
+
+    def _rollback_path(
+        self,
+        path: CamPath,
+        index: int,
+        before: tuple[float, float, float] | None,
+        dx: float,
+        dy: float,
+        dz: float,
+        uncertain: list[int],
+    ) -> bool | None:
+        after = path.start_point()
+        if before is None or after is None:
+            uncertain.append(index)
+        elif after == before:
+            return False
+        try:
+            path.move(-dx, -dy, -dz)
+        except Exception:
+            return None
+        return True
+
+    def _move_warnings(self, dz: float) -> tuple[str, ...]:
+        warnings: list[str] = []
+        if dz != 0.0:
+            warnings.append("dz != 0: geometry moved off Z=0 plane")
+        try:
+            tool_paths = int(self.tool_paths_count)
+        except Exception:
+            warnings.append(
+                "cannot determine whether the drawing contains toolpaths; "
+                "geometry may be moved without moving existing toolpaths"
+            )
+        else:
+            if tool_paths > 0:
+                warnings.append(
+                    "drawing contains toolpaths; moving geometry does not move existing toolpaths"
+                )
+        return tuple(warnings)
+
+    def lint(self, select_all: bool = False, *, units: str) -> dict[str, Any]:
+        thresholds = Thresholds().scaled(units)
+        if select_all:
+            count = int(self._drw.Geometries.Count)  # type: ignore[attr-defined]
+            if count > thresholds.max_paths:
+                raise LintBudgetExceeded(  # noqa: TRY003
+                    f"lint budget exceeded: {count} paths "
+                    f"(limit {thresholds.max_paths}); "
+                    "narrow the scope (select fewer geometries and rerun without --all)"
+                )
+        paths = self.geometries()
+        if select_all:
+            selected = list(enumerate(paths))
+        else:
+            selected = [(index, path) for index, path in enumerate(paths) if path.selected]
+            if not selected:
+                raise RuntimeError("No selected geometries")  # noqa: TRY003
+        if len(selected) > thresholds.max_paths:
+            raise LintBudgetExceeded(  # noqa: TRY003
+                f"lint budget exceeded: {len(selected)} paths "
+                f"(limit {thresholds.max_paths}); "
+                "narrow the scope (select fewer geometries and rerun without --all)"
+            )
+        total_elements = 0
+        element_counts: dict[int, int] = {}
+        unreadable: set[int] = set()
+        for index, path in selected:
+            try:
+                count = path.element_count()
+            except UnreadableGeometryError:
+                unreadable.add(index)
+                continue
+            element_counts[index] = count
+            total_elements += count
+            if total_elements > thresholds.max_total_elements:
+                raise LintBudgetExceeded(  # noqa: TRY003
+                    f"lint budget exceeded: {total_elements} elements "
+                    f"(limit {thresholds.max_total_elements}); "
+                    "narrow the scope (select fewer geometries and rerun without --all)"
+                )
+        inputs: list[PathInput] = []
+        for index, path in selected:
+            layer: str | None
+            layer_unreadable = False
+            try:
+                layer = path.layer
+            except Exception:
+                layer = None
+                layer_unreadable = True
+            if index in unreadable:
+                inputs.append(
+                    PathInput(
+                        closed=None,
+                        segments=[],
+                        layer=layer,
+                        unreadable=True,
+                        layer_unreadable=layer_unreadable,
+                        index=index,
+                    )
+                )
+                continue
+            try:
+                closed = path.closed
+                segments = path.segments(expected_count=element_counts.get(index))
+            except UnreadableGeometryError:
+                inputs.append(
+                    PathInput(
+                        closed=None,
+                        segments=[],
+                        layer=layer,
+                        unreadable=True,
+                        layer_unreadable=layer_unreadable,
+                        index=index,
+                    )
+                )
+                continue
+            inputs.append(
+                PathInput(
+                    closed=closed,
+                    segments=segments,
+                    layer=layer,
+                    layer_unreadable=layer_unreadable,
+                    index=index,
+                )
+            )
+        return analyze_paths(inputs, thresholds, units=units)
+
 
 class CamPath:
     def __init__(self, dispatch: win32.CDispatch) -> None:
@@ -245,6 +498,124 @@ class CamPath:
     def set_layer(self, layer: Any) -> None:
         """Assign this geometry to a user layer (raw dispatch from Drawing.create_layer)."""
         self._path.SetLayer(layer)  # type: ignore[attr-defined]
+
+    def move(self, dx: float, dy: float, dz: float = 0.0) -> None:
+        self._path.MoveG(dx, dy, dz)  # type: ignore[attr-defined]
+
+    def start_point(self) -> tuple[float, float, float] | None:
+        try:
+            element = self._path.GetFirstElem()  # type: ignore[attr-defined]
+            if element is None:
+                return None
+            return (
+                float(element.StartXG),
+                float(element.StartYG),
+                float(element.StartZG),
+            )
+        except Exception:
+            return None
+
+    @property
+    def closed(self) -> bool:
+        return bool(_read_prop(self._path, "Closed"))
+
+    @property
+    def layer(self) -> str | None:
+        layer = self._path.GetLayer()
+        if layer is None:
+            return None
+        name = layer.Name
+        if name is None:
+            return None
+        return str(name)
+
+    def element_count(self) -> int:
+        try:
+            return int(self._path.GetElemCount())  # type: ignore[attr-defined]
+        except Exception as exc:
+            raise UnreadableGeometryError from exc
+
+    def segments(self, expected_count: int | None = None) -> list[Segment]:
+        count = self.element_count() if expected_count is None else expected_count
+        if count == 0:
+            return []
+        try:
+            element = self._path.GetFirstElem()  # type: ignore[attr-defined]
+        except Exception as exc:
+            raise UnreadableGeometryError from exc
+        segments: list[Segment] = []
+        for _ in range(count):
+            if element is None:
+                break
+            is_arc = bool(_read_prop(element, "IsArc"))
+            start_x = _read_coord(element, "StartXG")
+            start_y = _read_coord(element, "StartYG")
+            start_z = _read_coord(element, "StartZG")
+            end_x = _read_coord(element, "EndXG")
+            end_y = _read_coord(element, "EndYG")
+            end_z = _read_coord(element, "EndZG")
+            if is_arc:
+                length = _read_coord(element, "Length")
+                center_x = _read_coord(element, "CenterXG")
+                center_y = _read_coord(element, "CenterYG")
+                radius = _read_coord(element, "Radius")
+                cw = bool(_read_prop(element, "CW"))
+            else:
+                length = self._line_length(element, start_x, start_y, end_x, end_y)
+                center_x = 0.0
+                center_y = 0.0
+                radius = 0.0
+                cw = False
+            values = (
+                start_x,
+                start_y,
+                start_z,
+                end_x,
+                end_y,
+                end_z,
+                length,
+                center_x,
+                center_y,
+                radius,
+            )
+            if not all(math.isfinite(value) for value in values):
+                raise UnreadableGeometryError("non-finite geometry value")  # noqa: TRY003
+            segments.append(
+                Segment(
+                    is_arc=is_arc,
+                    start_x=start_x,
+                    start_y=start_y,
+                    start_z=start_z,
+                    end_x=end_x,
+                    end_y=end_y,
+                    end_z=end_z,
+                    length=length,
+                    center_x=center_x,
+                    center_y=center_y,
+                    radius=radius,
+                    cw=cw,
+                )
+            )
+            try:
+                element = element.GetNext()
+            except Exception as exc:
+                raise UnreadableGeometryError from exc
+        if len(segments) != count:
+            detail = f"Read {len(segments)} of {count} path elements"
+            raise UnreadableGeometryError(detail)
+        return segments
+
+    @staticmethod
+    def _line_length(
+        element: Any, start_x: float, start_y: float, end_x: float, end_y: float
+    ) -> float:
+        length_value = _prop(element, "Length", None)
+        if length_value is not None:
+            try:
+                return float(length_value)
+            except (TypeError, ValueError):
+                pass
+        return math.dist((start_x, start_y), (end_x, end_y))
 
 
 class Geo2D:

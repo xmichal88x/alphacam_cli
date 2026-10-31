@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import json
+import math
 import os
+from typing import Any
 
 import typer
 from rich.table import Table
@@ -13,8 +16,65 @@ from alphacam_cli.cli.common import (
     resolve_app,
 )
 from alphacam_cli.com.manager import alphacam_context
+from alphacam_cli.core.geolint import Thresholds
 
 app = typer.Typer(help="Drawing operations")
+
+_LINT_SEVERITY = {
+    "unreadable": 0,
+    "layerUnreadable": 1,
+    "empty": 2,
+    "selfIntersect": 3,
+    "gap": 4,
+    "spike": 5,
+    "bigArc": 6,
+    "nonZeroZ": 7,
+    "nearlyClosed": 8,
+    "duplicates": 9,
+    "tiny": 10,
+}
+
+
+def _normalized_ratio(issue: dict[str, Any], thresholds: Thresholds) -> float:
+    issue_type = str(issue.get("type", ""))
+    value = float(issue.get("value", 0.0))
+    if issue_type == "gap":
+        return value / thresholds.gap_tol if thresholds.gap_tol > 0 else 0.0
+    if issue_type == "nearlyClosed":
+        return value / thresholds.nearly_closed_tol if thresholds.nearly_closed_tol > 0 else 0.0
+    if issue_type == "bigArc":
+        return value / thresholds.max_arc_radius if thresholds.max_arc_radius > 0 else 0.0
+    if issue_type == "tiny":
+        return thresholds.min_length / value if value > 0 else math.inf
+    if issue_type == "spike":
+        return value / thresholds.spike_turn_deg if thresholds.spike_turn_deg > 0 else 0.0
+    if issue_type == "nonZeroZ":
+        return value / thresholds.z_tol if thresholds.z_tol > 0 else 0.0
+    return 0.0
+
+
+def _lint_rows(
+    result: dict[str, Any], thresholds: Thresholds
+) -> list[tuple[int, float, int, dict[str, Any]]]:
+    rows: list[tuple[int, float, int, dict[str, Any]]] = []
+    for path in result.get("paths", []):
+        index = int(path.get("index", 0))
+        for issue in path.get("issues", []):
+            severity = _LINT_SEVERITY.get(str(issue.get("type", "")), 99)
+            rows.append((severity, _normalized_ratio(issue, thresholds), index, issue))
+    rows.sort(
+        key=lambda row: (
+            row[0],
+            -row[1],
+            row[2],
+            int(row[3].get("elem", 0)),
+        )
+    )
+    return rows
+
+
+def _fmt(value: Any) -> str:
+    return f"{float(value):.6g}"
 
 
 def _resolve_fmt(path: str, fmt: str) -> str:
@@ -111,6 +171,144 @@ def layer(name: str = typer.Argument(..., help="Layer name (max 31 characters)")
 
         drw.create_layer(name)
         console.print(f"[green]OK:[/green] Layer created: {name}")
+
+
+@app.command()
+@handle_com_errors
+def move(
+    dx: float = typer.Option(..., "--dx", help="Move distance along global X"),
+    dy: float = typer.Option(..., "--dy", help="Move distance along global Y"),
+    dz: float = typer.Option(0.0, "--dz", help="Move distance along global Z"),
+    all_: bool = typer.Option(False, "--all", help="Select all geometries before moving"),
+    json_out: bool = typer.Option(False, "--json", help="Output deterministic JSON"),
+) -> None:
+    """Move selected geometry by a vector (dx, dy, dz)."""
+    for name, value in (("dx", dx), ("dy", dy), ("dz", dz)):
+        if not math.isfinite(value):
+            console.print(f"[red]Error:[/red] --{name} must be a finite number")
+            raise typer.Exit(code=1)
+    require_platform()
+    moved = 0
+    failure: str | None = None
+    warnings: list[str] = []
+    with alphacam_context(visible=get_visible()) as raw:
+        ac = resolve_app(raw)
+        drw = ac.get_active_drawing()
+        if drw is None:
+            failure = "No active drawing"
+        else:
+            try:
+                result = drw.move(dx, dy, dz, select_all=all_)
+            except RuntimeError as e:
+                failure = str(e)
+            else:
+                moved = result.moved
+                warnings = list(result.warnings)
+
+    if failure is not None:
+        console.print(f"[red]Error:[/red] {failure}")
+        raise typer.Exit(code=1)
+
+    if json_out:
+        payload = {
+            "success": True,
+            "moved": moved,
+            "dx": dx,
+            "dy": dy,
+            "dz": dz,
+            "warnings": warnings,
+        }
+        typer.echo(json.dumps(payload, sort_keys=True))
+        return
+
+    for warning in warnings:
+        console.print(f"[yellow]Warning:[/yellow] {warning}")
+
+    t = Table(title="Geometry Moved")
+    t.add_column("Property", style="cyan")
+    t.add_column("Value", style="green")
+    t.add_row("dx", str(dx))
+    t.add_row("dy", str(dy))
+    t.add_row("dz", str(dz))
+    t.add_row("Moved", str(moved))
+    console.print(t)
+
+
+@app.command()
+@handle_com_errors
+def lint(
+    all_: bool = typer.Option(False, "--all", help="Scan all geometries instead of selection"),
+    units: str = typer.Option(..., "--units", help="Required: mm|inch (threshold scaling)"),
+    json_out: bool = typer.Option(False, "--json", help="Output deterministic JSON"),
+) -> None:
+    """Read-only geometry analysis for defects that break machining/NC."""
+    require_platform()
+    if units not in ("mm", "inch"):
+        console.print("[red]Error:[/red] --units must be 'mm' or 'inch'")
+        raise typer.Exit(code=1)
+
+    result: dict[str, Any] | None = None
+    failure: str | None = None
+    with alphacam_context(visible=get_visible()) as raw:
+        ac = resolve_app(raw)
+        drw = ac.get_active_drawing()
+        if drw is None:
+            failure = "No active drawing"
+        else:
+            try:
+                result = drw.lint(select_all=all_, units=units)
+            except RuntimeError as e:
+                failure = str(e)
+
+    if failure is not None:
+        console.print(f"[red]Error:[/red] {failure}")
+        raise typer.Exit(code=1)
+    if result is None:
+        console.print("[red]Error:[/red] lint produced no result")
+        raise typer.Exit(code=1)
+
+    if json_out:
+        typer.echo(json.dumps(result, sort_keys=True))
+        return
+
+    console.print(f"Scanned: {result.get('scanned', 0)} paths, flagged: {result.get('flagged', 0)}")
+    skipped = int(result.get("intersect_skipped", 0))
+    if skipped > 0:
+        console.print(
+            f"[yellow]Warning:[/yellow] intersection test skipped for {skipped} path(s) "
+            "(segment or pair budget)"
+        )
+
+    summary = Table(title="Geometry Lint")
+    summary.add_column("Issue type", style="cyan")
+    summary.add_column("Count", style="green", justify="right")
+    counts: dict[str, Any] = result.get("issues_by_type", {})
+    if counts:
+        for name, count in counts.items():
+            summary.add_row(str(name), str(count))
+    else:
+        summary.add_row("(none)", "0")
+    console.print(summary)
+
+    rows = _lint_rows(result, Thresholds().scaled(units))
+    if rows:
+        worst = Table(title="Worst cases (max 20)")
+        worst.add_column("Type", style="cyan")
+        worst.add_column("Path", style="magenta", justify="right")
+        worst.add_column("Elem", style="magenta", justify="right")
+        worst.add_column("X", justify="right")
+        worst.add_column("Y", justify="right")
+        worst.add_column("Value", style="yellow", justify="right")
+        for _, _, path_index, issue in rows[:20]:
+            worst.add_row(
+                str(issue.get("type", "")),
+                str(path_index),
+                str(issue.get("elem", "")),
+                _fmt(issue.get("x", 0.0)),
+                _fmt(issue.get("y", 0.0)),
+                _fmt(issue.get("value", 0.0)),
+            )
+        console.print(worst)
 
 
 @app.command()

@@ -4,7 +4,8 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from alphacam_cli.gateway.client import RemoteSession
+from alphacam_cli.gateway import client as client_module
+from alphacam_cli.gateway.client import RemoteConnectionError, RemoteSession
 from alphacam_cli.gateway.remote import (
     RemoteApplication,
     _basename,
@@ -16,6 +17,7 @@ from alphacam_cli.gateway.remote import (
 def test_remote_new_drawing() -> None:
     session = MagicMock()
     session.new_drawing.return_value = {"geometries_count": 3}
+    session.get_active_drawing.return_value = {"geometries_count": 3}
     app = RemoteApplication(session)
     drw = app.new_drawing(200, 100, 5, "Hello")
     assert drw is not None
@@ -284,6 +286,7 @@ def test_remote_find_style_files_empty() -> None:
 def test_remote_open_cad_file() -> None:
     session = MagicMock()
     session.open_cad_file.return_value = {"geometries_count": 5, "tool_paths_count": 2}
+    session.get_active_drawing.return_value = {"geometries_count": 5, "tool_paths_count": 2}
     app = RemoteApplication(session)
     drw = app.open_cad_file(r"C:\parts\panel.dxf", "dxf")
     assert drw is not None
@@ -293,6 +296,38 @@ def test_remote_open_cad_file() -> None:
     session.open_cad_file.assert_called_once_with(
         r"C:\parts\panel.dxf", "dxf", clear=False, cabinets=False
     )
+
+
+def test_remote_drawing_proxy_reports_live_counts() -> None:
+    session = MagicMock()
+    drw = _DrawingProxy(session, {"geometries_count": 1, "tool_paths_count": 0})
+    session.get_active_drawing.return_value = {"geometries_count": 1, "tool_paths_count": 0}
+    assert drw.geometries_count == 1
+    assert drw.tool_paths_count == 0
+    session.get_active_drawing.return_value = {"geometries_count": 2, "tool_paths_count": 1}
+    assert drw.geometries_count == 2
+    assert drw.tool_paths_count == 1
+
+
+def test_remote_drawing_proxy_raises_when_active_drawing_gone() -> None:
+    session = MagicMock()
+    session.get_active_drawing.return_value = None
+    drw = _DrawingProxy(session, {"geometries_count": 1, "tool_paths_count": 0})
+    with pytest.raises(RuntimeError, match="active drawing is gone"):
+        _ = drw.geometries_count
+    with pytest.raises(RuntimeError, match="active drawing is gone"):
+        _ = drw.tool_paths_count
+
+
+@pytest.mark.parametrize("missing", ["geometries_count", "tool_paths_count"])
+def test_remote_drawing_proxy_raises_on_missing_contract_key(missing: str) -> None:
+    info = {"geometries_count": 1, "tool_paths_count": 0}
+    del info[missing]
+    session = MagicMock()
+    session.get_active_drawing.return_value = info
+    drw = _DrawingProxy(session, info)
+    with pytest.raises(RuntimeError, match=missing):
+        _ = getattr(drw, missing)
 
 
 def test_remote_open_cad_file_none() -> None:
@@ -837,6 +872,13 @@ def test_remote_cdm_import_settings() -> None:
     session.cdm_import_settings.assert_called_once_with()
 
 
+def test_remote_session_drawing_lint_requires_units() -> None:
+    session = RemoteSession()
+
+    with pytest.raises(TypeError):
+        session.drawing_lint()  # type: ignore[call-arg]
+
+
 def test_remote_session_import_cdm_csv_digit_string_setting() -> None:
     client = RemoteSession()
     client._call = MagicMock(return_value={"success": True})  # type: ignore[method-assign]
@@ -1110,6 +1152,28 @@ def test_remote_session_call_socket_timeout_wrapped() -> None:
     client._sock = sock
     with pytest.raises(RemoteConnectionError, match=r"request timed out after 30\.0s"):
         client._call("ping")
+    sock.close.assert_called_once()
+    assert client._sock is None
+
+
+def test_remote_session_call_without_connect_reports_not_connected() -> None:
+    client = RemoteSession()
+
+    with pytest.raises(RemoteConnectionError, match="Not connected"):
+        client._call("ping")
+
+
+def test_call_send_oserror_closes_socket() -> None:
+    session = RemoteSession()
+    sock = MagicMock()
+    sock.sendall.side_effect = OSError("broken pipe")
+    session._sock = sock
+
+    with pytest.raises(RemoteConnectionError, match="send failed"):
+        session._call("ping")
+
+    sock.close.assert_called_once()
+    assert session._sock is None
 
 
 def test_remote_session_health() -> None:
@@ -1155,3 +1219,78 @@ def test_remote_cdm_set_sheet_order_delegates() -> None:
         "value": 1,
     }
     session.cdm_set_sheet_order.assert_called_once_with("Fronty", "picked")
+
+
+def test_call_rejects_response_id_mismatch(monkeypatch: pytest.MonkeyPatch) -> None:
+    session = RemoteSession()
+    sock = MagicMock()
+    session._sock = sock
+    monkeypatch.setattr(client_module, "read_frame", lambda _sock: {"id": 999, "result": {}})
+
+    with pytest.raises(RemoteConnectionError, match="response id mismatch"):
+        session._call("ping")
+
+    sock.close.assert_called_once()
+    assert session._sock is None
+
+
+def test_call_read_timeout_closes_socket(monkeypatch: pytest.MonkeyPatch) -> None:
+    session = RemoteSession()
+    sock = MagicMock()
+    session._sock = sock
+
+    def raise_timeout(_sock: object) -> None:
+        raise TimeoutError
+
+    monkeypatch.setattr(client_module, "read_frame", raise_timeout)
+
+    with pytest.raises(RemoteConnectionError, match="timed out"):
+        session._call("ping")
+
+    sock.close.assert_called_once()
+    assert session._sock is None
+
+
+def test_call_closed_connection_closes_socket(monkeypatch: pytest.MonkeyPatch) -> None:
+    session = RemoteSession()
+    sock = MagicMock()
+    session._sock = sock
+    monkeypatch.setattr(client_module, "read_frame", lambda _sock: None)
+
+    with pytest.raises(RemoteConnectionError, match="Connection closed"):
+        session._call("ping")
+
+    sock.close.assert_called_once()
+    assert session._sock is None
+
+
+def test_call_timeout_override_sets_and_restores_socket_timeout(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    session = RemoteSession(timeout=180.0)
+    sock = MagicMock()
+    session._sock = sock
+    monkeypatch.setattr(
+        client_module, "read_frame", lambda _sock: {"id": 1, "result": {"ok": True}}
+    )
+
+    assert session._call("ping", timeout=600.0) == {"ok": True}
+
+    assert sock.settimeout.call_args_list[0].args == (600.0,)
+    assert sock.settimeout.call_args_list[-1].args == (180.0,)
+
+
+def test_call_timeout_override_can_shorten_socket_timeout(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    session = RemoteSession(timeout=180.0)
+    sock = MagicMock()
+    session._sock = sock
+    monkeypatch.setattr(
+        client_module, "read_frame", lambda _sock: {"id": 1, "result": {"ok": True}}
+    )
+
+    assert session._call("ping", timeout=45.0) == {"ok": True}
+
+    assert sock.settimeout.call_args_list[0].args == (45.0,)
+    assert sock.settimeout.call_args_list[-1].args == (180.0,)

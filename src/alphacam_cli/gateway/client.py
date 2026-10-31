@@ -13,6 +13,10 @@ from alphacam_cli.gateway.protocol import (
     pack_message,
     read_frame,
 )
+from alphacam_cli.gateway.timeouts import (
+    DRAWING_LINT_CLIENT_TIMEOUT,
+    DRAWING_MOVE_CLIENT_TIMEOUT,
+)
 
 
 class RemoteConnectionError(Exception):
@@ -38,29 +42,54 @@ class RemoteSession:
         self._sock.connect((self.host, self.port))
         self._logger.info("Connected to %s:%s", self.host, self.port)
 
-    def _call(self, method: str, params: dict[str, Any] | None = None) -> Any:
+    def _call(
+        self,
+        method: str,
+        params: dict[str, Any] | None = None,
+        timeout: float | None = None,
+    ) -> Any:
         self._msg_id += 1
         msg_id = self._msg_id
         request = make_request(method, params or {}, msg_id)
         packed = pack_message(request)
         if self._sock is None:
             raise RemoteConnectionError("Not connected")
-        self._sock.sendall(packed)
+        sock = self._sock
+        effective_timeout = self.timeout if timeout is None else timeout
+        if timeout is not None:
+            sock.settimeout(effective_timeout)
         try:
-            raw = read_frame(self._sock)
-        except TimeoutError as e:
-            raise RemoteConnectionError(f"request timed out after {self.timeout}s") from e
-        if raw is None:
-            raise RemoteConnectionError("Connection closed by server")
-        response = cast(dict[str, Any], raw)
-        if "error" in response:
-            error = cast(dict[str, Any], response["error"])
-            code = error.get("code")
-            message = error.get("message", "Unknown error")
-            if code == COM_ERROR:
-                raise RemoteComError(str(message))
-            raise RemoteConnectionError(f"JSON-RPC error ({code}): {message}")
-        return response["result"]
+            try:
+                sock.sendall(packed)
+            except OSError as e:
+                self.close()
+                raise RemoteConnectionError(f"request send failed: {e}") from e
+            try:
+                raw = read_frame(sock)
+            except TimeoutError as e:
+                self.close()
+                raise RemoteConnectionError(f"request timed out after {effective_timeout}s") from e
+            if raw is None:
+                self.close()
+                raise RemoteConnectionError("Connection closed by server")
+            response = cast(dict[str, Any], raw)
+            if response.get("id") != msg_id:
+                self.close()
+                raise RemoteConnectionError(
+                    f"response id mismatch: expected {msg_id}, got {response.get('id')}"
+                )
+            if "error" in response:
+                error = cast(dict[str, Any], response["error"])
+                code = error.get("code")
+                message = error.get("message", "Unknown error")
+                if code == COM_ERROR:
+                    raise RemoteComError(str(message))
+                raise RemoteConnectionError(f"JSON-RPC error ({code}): {message}")
+            return response["result"]
+        finally:
+            if timeout is not None and self._sock is sock:
+                with contextlib.suppress(OSError):
+                    sock.settimeout(self.timeout)
 
     def close(self) -> None:
         if self._sock is not None:
@@ -191,6 +220,22 @@ class RemoteSession:
 
     def create_layer(self, name: str) -> dict[str, Any]:
         return self._call("create_layer", {"name": name})  # type: ignore[no-any-return]
+
+    def drawing_move(
+        self, dx: float, dy: float, dz: float = 0.0, select_all: bool = False
+    ) -> dict[str, Any]:
+        return self._call(  # type: ignore[no-any-return]
+            "drawing_move",
+            {"dx": dx, "dy": dy, "dz": dz, "all": select_all},
+            timeout=DRAWING_MOVE_CLIENT_TIMEOUT,
+        )
+
+    def drawing_lint(self, units: str, select_all: bool = False) -> dict[str, Any]:
+        return self._call(  # type: ignore[no-any-return]
+            "drawing_lint",
+            {"all": select_all, "units": units},
+            timeout=DRAWING_LINT_CLIENT_TIMEOUT,
+        )
 
     def drawing_query(self, file: str) -> dict[str, Any]:
         return self._call("drawing_query", {"file": file})  # type: ignore[no-any-return]

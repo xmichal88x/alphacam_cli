@@ -27,6 +27,10 @@ from alphacam_cli.gateway.protocol import (
     pack_message,
     read_frame,
 )
+from alphacam_cli.gateway.timeouts import (
+    DRAWING_LINT_SERVER_WATCHDOG,
+    DRAWING_MOVE_SERVER_WATCHDOG,
+)
 
 CONNECT_TIMEOUT = 180
 _COM_CALL_POLL = 30.0
@@ -121,6 +125,169 @@ def _require_windows_abs_path(value: Any, name: str, ctx: str = "manifest") -> s
     return path
 
 
+_QUIT_ON_STOP_ENV = "ALPHACAM_GATEWAY_QUIT_ON_STOP"
+_QUIT_ON_STOP_FALSE = frozenset({"0", "false", "no", "off"})
+_ATTACH_ATTEMPTS = 5
+_ATTACH_RETRY_DELAY = 1.0
+_QUIT_WAIT_TIMEOUT = 0.5
+_QUIT_WAIT_POLL = 0.1
+_STOP_SEQUENCE_BUDGET = 1.5
+_STA_STOP_JOIN_TIMEOUT = 10.0
+
+
+def _quit_on_stop() -> bool:
+    raw = os.environ.get(_QUIT_ON_STOP_ENV)
+    if raw is None or not raw.strip():
+        return True
+    return raw.strip().lower() not in _QUIT_ON_STOP_FALSE
+
+
+def _acam_processes() -> list[int] | None:
+    try:
+        import ctypes
+        from ctypes import wintypes
+
+        kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)  # type: ignore[attr-defined]
+        psapi = ctypes.WinDLL("psapi", use_last_error=True)  # type: ignore[attr-defined]
+        kernel32.OpenProcess.restype = wintypes.HANDLE
+        kernel32.OpenProcess.argtypes = [wintypes.DWORD, wintypes.BOOL, wintypes.DWORD]
+        kernel32.CloseHandle.argtypes = [wintypes.HANDLE]
+        psapi.GetModuleBaseNameW.restype = wintypes.DWORD
+        pids = (wintypes.DWORD * 4096)()
+        needed = wintypes.DWORD()
+        if not psapi.EnumProcesses(ctypes.byref(pids), ctypes.sizeof(pids), ctypes.byref(needed)):
+            raise OSError("EnumProcesses failed")
+        count = needed.value // ctypes.sizeof(wintypes.DWORD)
+        found: list[int] = []
+        for index in range(count):
+            pid = int(pids[index])
+            if pid == 0:
+                continue
+            handle = kernel32.OpenProcess(0x0410, False, pid)
+            if not handle:
+                continue
+            try:
+                name = ctypes.create_unicode_buffer(260)
+                if psapi.GetModuleBaseNameW(handle, None, name, len(name)):
+                    if name.value.lower() == "acam.exe":
+                        found.append(pid)
+            finally:
+                kernel32.CloseHandle(handle)
+        return found
+    except Exception:
+        logging.getLogger("alphacam.gateway").warning(
+            "Acam process enumeration failed", exc_info=True
+        )
+        return None
+
+
+def _terminate_pid(pid: int, logger: logging.Logger | None = None) -> bool:
+    logger = logger or logging.getLogger("alphacam.gateway")
+    try:
+        import ctypes
+        from ctypes import wintypes
+
+        kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)  # type: ignore[attr-defined]
+        kernel32.OpenProcess.restype = wintypes.HANDLE
+        kernel32.OpenProcess.argtypes = [wintypes.DWORD, wintypes.BOOL, wintypes.DWORD]
+        kernel32.TerminateProcess.restype = wintypes.BOOL
+        kernel32.TerminateProcess.argtypes = [wintypes.HANDLE, wintypes.UINT]
+        kernel32.CloseHandle.argtypes = [wintypes.HANDLE]
+        process_terminate = 0x0001
+        handle = kernel32.OpenProcess(process_terminate, False, pid)
+        if not handle:
+            logger.critical("OpenProcess failed for owned AlphaCAM pid=%s", pid)
+            return False
+        try:
+            return bool(kernel32.TerminateProcess(handle, 1))
+        finally:
+            kernel32.CloseHandle(handle)
+    except Exception:
+        logger.critical("Forced termination of owned AlphaCAM pid=%s failed", pid, exc_info=True)
+        return False
+
+
+def _wait_for_pid_exit(
+    pid: int,
+    timeout: float = _QUIT_WAIT_TIMEOUT,
+    poll: float = _QUIT_WAIT_POLL,
+) -> bool:
+    deadline = time.monotonic() + timeout
+    while True:
+        pids = _acam_processes()
+        if pids is not None and pid not in pids:
+            return True
+        if time.monotonic() >= deadline:
+            return False
+        time.sleep(poll)
+
+
+def _release_ac_app(
+    ac_app: Any,
+    owned: bool,
+    logger: logging.Logger,
+    owned_pid: int | None = None,
+) -> None:
+    if not owned:
+        logger.info("AlphaCAM not owned; leaving external instance running")
+        return
+    if not _quit_on_stop():
+        logger.info("AlphaCAM left running (%s=off)", _QUIT_ON_STOP_ENV)
+        return
+    started = time.monotonic()
+    try:
+        ac_app.Quit()
+        logger.info("AlphaCAM quit on stop (quit_on_stop=on)")
+    except Exception:
+        logger.exception("AlphaCAM Quit failed")
+
+    if owned_pid is None:
+        pids = _acam_processes()
+        if pids:
+            logger.critical(
+                "AlphaCAM orphan left (pid unknown); %d Acam.exe process(es) still running",
+                len(pids),
+            )
+        return
+
+    if _wait_for_pid_exit(owned_pid):
+        logger.info("AlphaCAM owned process pid=%s exited after Quit", owned_pid)
+    elif _terminate_pid(owned_pid, logger):
+        logger.warning(
+            "AlphaCAM did not exit after Quit; terminated owned pid=%s",
+            owned_pid,
+        )
+    else:
+        logger.critical("AlphaCAM owned process pid=%s could not be terminated", owned_pid)
+
+    elapsed = time.monotonic() - started
+    if elapsed > _STOP_SEQUENCE_BUDGET:
+        logger.warning("Stop sequence took %.2fs (budget %.1fs)", elapsed, _STOP_SEQUENCE_BUDGET)
+
+
+def _attach_existing(
+    win32: Any,
+    gencache: Any,
+    prog_ids: Any,
+    logger: logging.Logger,
+) -> Any | None:
+    for attempt in range(1, _ATTACH_ATTEMPTS + 1):
+        for prog_id in prog_ids:
+            try:
+                return gencache.EnsureDispatch(win32.GetActiveObject(prog_id))
+            except Exception:
+                continue
+        if attempt < _ATTACH_ATTEMPTS:
+            logger.info(
+                "AlphaCAM attach attempt %d/%d failed; retrying in %.0fs",
+                attempt,
+                _ATTACH_ATTEMPTS,
+                _ATTACH_RETRY_DELAY,
+            )
+            time.sleep(_ATTACH_RETRY_DELAY)
+    return None
+
+
 class COMError(Exception):
     pass
 
@@ -137,6 +304,7 @@ class GatewayServer:
         self._server: socket.socket | None = None
         self._running = threading.Event()
         self._owned: bool = False
+        self._owned_pid: int | None = None
         self._sta_thread: threading.Thread | None = None
         self._call_queue: queue.Queue[Any] = queue.Queue()
 
@@ -209,6 +377,7 @@ class GatewayServer:
             com_ok = False
             ac_app = None
             owned = False
+            owned_pid: int | None = None
             try:
                 pythoncom.CoInitializeEx(pythoncom.COINIT_APARTMENTTHREADED)
                 com_ok = True
@@ -217,18 +386,56 @@ class GatewayServer:
                     start_q.put(("error", f"CoInitializeEx failed: {e}"))
                     return
 
-            for pid in PROG_IDS:
+            pids_before = _acam_processes()
+            pids_before_set: set[int] = set(pids_before or [])
+            pids_before_known = pids_before is not None
+
+            ac_app = _attach_existing(win32, gencache, PROG_IDS, self._logger)
+            if ac_app is not None:
                 try:
-                    ac_app = win32.GetActiveObject(pid)
-                    ac_app = gencache.EnsureDispatch(ac_app)
-                    break
+                    ac_app.Name  # type: ignore[attr-defined]
                 except Exception:
+                    self._logger.warning(
+                        "Attached AlphaCAM instance is not alive; treating as failed attach"
+                    )
+                    ac_app = None
+
+            launched = False
+            if ac_app is None:
+                if pids_before:
+                    self._logger.warning(
+                        "Could not attach to existing AlphaCAM after %d attempts "
+                        "(PIDs: %s); launching a new instance. Unsaved drawings "
+                        "in the previous instance are not accessible.",
+                        _ATTACH_ATTEMPTS,
+                        pids_before,
+                    )
+                for prog_id in PROG_IDS:
                     try:
-                        ac_app = gencache.EnsureDispatch(pid)
+                        ac_app = gencache.EnsureDispatch(prog_id)
                         owned = True
+                        launched = True
                         break
                     except Exception:
                         pass
+
+            if ac_app is not None:
+                if not launched:
+                    owned = pids_before_known and not pids_before_set
+                pids_after = _acam_processes()
+                if pids_before_known and pids_after is not None:
+                    new_pids = set(pids_after) - pids_before_set
+                    owned_pid = next(iter(new_pids)) if len(new_pids) == 1 else None
+                self._owned_pid = owned_pid
+                if owned and owned_pid is not None:
+                    self._logger.info("AlphaCAM launched (pid=%s, owned=True)", owned_pid)
+                elif not owned and len(pids_before_set) == 1:
+                    self._logger.info(
+                        "AlphaCAM attached existing (pid=%s, owned=False)",
+                        next(iter(pids_before_set)),
+                    )
+                else:
+                    self._logger.info("AlphaCAM ownership unknown (pid=None)")
 
             if ac_app is None:
                 start_q.put(
@@ -249,7 +456,6 @@ class GatewayServer:
             global _app
             _app = Application(ac_app)  # type: ignore[arg-type]
             start_q.put(("ok", owned))
-            self._logger.info("AlphaCAM COM connected (owned=%s)", owned)
 
             while self._running.is_set():
                 try:
@@ -266,9 +472,7 @@ class GatewayServer:
                     result_q.put(exc)
                 pythoncom.PumpWaitingMessages()
 
-            if owned:
-                with contextlib.suppress(Exception):
-                    ac_app.Quit()
+            _release_ac_app(ac_app, owned, self._logger, owned_pid)
             if com_ok:
                 pythoncom.CoUninitialize()  # type: ignore[attr-defined]
 
@@ -335,7 +539,11 @@ class GatewayServer:
                 self._server.close()
         if self._sta_thread is not None and self._sta_thread.is_alive():
             self._call_queue.put((lambda: None, queue.Queue(), "stop"))
-            self._sta_thread.join(timeout=10)
+            self._sta_thread.join(timeout=_STA_STOP_JOIN_TIMEOUT)
+            if self._sta_thread.is_alive():
+                self._logger.warning(
+                    "STA cleanup did not complete within %.0fs", _STA_STOP_JOIN_TIMEOUT
+                )
 
     def _watchdog_arm(self, seconds: float, label: str) -> threading.Timer:
         timer = threading.Timer(seconds, self._watchdog_fire, args=(label, seconds))
@@ -350,6 +558,14 @@ class GatewayServer:
     def _handler_ping(self, params: dict[str, Any]) -> dict[str, bool]:
         return {"pong": True}
 
+    def _acam_process_count(self) -> int | None:
+        try:
+            pids = _acam_processes()
+        except Exception:
+            self._logger.warning("health: Acam process enumeration failed", exc_info=True)
+            return None
+        return None if pids is None else len(pids)
+
     def _handler_health(self, params: dict[str, Any]) -> dict[str, Any]:
         """True health-check: verifies the AlphaCAM COM process, not just TCP.
 
@@ -363,8 +579,9 @@ class GatewayServer:
         """
         from alphacam_cli.gateway.server import _app as com_app
 
+        processes = self._acam_process_count()
         if com_app is None:
-            return {"ok": False, "error": "AlphaCAM not attached"}
+            return {"ok": False, "error": "AlphaCAM not attached", "acam_processes": processes}
         try:
             version = str(com_app.version)
         except Exception as e:
@@ -380,9 +597,20 @@ class GatewayServer:
                     "ok": False,
                     "error": f"stale AlphaCAM COM: {e}",
                     "restart_scheduled": True,
+                    "acam_processes": processes,
                 }
-            return {"ok": False, "error": f"stale AlphaCAM COM: {e}", "restart_scheduled": False}
-        return {"ok": True, "version": version, "name": str(com_app.name)}
+            return {
+                "ok": False,
+                "error": f"stale AlphaCAM COM: {e}",
+                "restart_scheduled": False,
+                "acam_processes": processes,
+            }
+        return {
+            "ok": True,
+            "version": version,
+            "name": str(com_app.name),
+            "acam_processes": processes,
+        }
 
     def _handler_reports_create(self, params: dict[str, Any]) -> dict[str, Any]:
         from alphacam_cli.gateway.server import _app as com_app
@@ -709,6 +937,71 @@ class GatewayServer:
         except Exception as e:
             raise COMError(f"create_layer failed: {e}") from e
         return {"success": True, "layer": name}
+
+    def _handler_drawing_move(self, params: dict[str, Any]) -> dict[str, Any]:
+        from alphacam_cli.gateway.server import _app as com_app
+
+        dx_raw = params.get("dx")
+        if dx_raw is None:
+            raise COMError("dx is required")
+        dy_raw = params.get("dy")
+        if dy_raw is None:
+            raise COMError("dy is required")
+        dz_raw = params.get("dz")
+
+        def to_float(name: str, raw: Any) -> float:
+            try:
+                return float(raw)
+            except (TypeError, ValueError) as e:
+                raise COMError(f"{name} must be a number") from e
+
+        dx = to_float("dx", dx_raw)
+        dy = to_float("dy", dy_raw)
+        dz = 0.0 if dz_raw is None else to_float("dz", dz_raw)
+        for name, value in (("dx", dx), ("dy", dy), ("dz", dz)):
+            if not math.isfinite(value):
+                raise COMError(f"{name} must be a finite number")
+        select_all = _as_bool(params.get("all"))
+        watchdog = self._watchdog_arm(DRAWING_MOVE_SERVER_WATCHDOG, "drawing_move")
+        try:
+            drw = com_app.get_active_drawing()
+            if drw is None:
+                raise COMError("No active drawing")
+            try:
+                move_result = drw.move(dx, dy, dz, select_all=select_all)
+            except Exception as e:
+                raise COMError(str(e)) from e
+            return {
+                "success": True,
+                "moved": int(move_result.moved),
+                "dx": dx,
+                "dy": dy,
+                "dz": dz,
+                "warnings": list(move_result.warnings),
+            }
+        finally:
+            watchdog.cancel()
+
+    def _handler_drawing_lint(self, params: dict[str, Any]) -> dict[str, Any]:
+        from alphacam_cli.gateway.server import _app as com_app
+
+        select_all = _as_bool(params.get("all"))
+        units = params.get("units")
+        if not isinstance(units, str) or not units:
+            raise COMError("units is required (mm|inch)")
+        if units not in ("mm", "inch"):
+            raise COMError("units must be 'mm' or 'inch'")
+        watchdog = self._watchdog_arm(DRAWING_LINT_SERVER_WATCHDOG, "drawing_lint")
+        try:
+            drw = com_app.get_active_drawing()
+            if drw is None:
+                raise COMError("No active drawing")
+            try:
+                return drw.lint(select_all=select_all, units=units)  # type: ignore[no-any-return]
+            except Exception as e:
+                raise COMError(str(e)) from e
+        finally:
+            watchdog.cancel()
 
     def _handler_drawing_query(self, params: dict[str, Any]) -> dict[str, Any]:
         from alphacam_cli.gateway.server import _app as com_app

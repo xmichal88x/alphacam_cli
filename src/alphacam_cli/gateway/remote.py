@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 from typing import Any
 
+from alphacam_cli.core.drawing import MoveResult
 from alphacam_cli.gateway.client import RemoteSession
 
 
@@ -47,11 +48,21 @@ class _DrawingProxy:
 
     @property
     def geometries_count(self) -> int:
-        return int(self._info["geometries_count"])
+        return self._live_count("geometries_count")
 
     @property
     def tool_paths_count(self) -> int:
-        return int(self._info.get("tool_paths_count", 0))
+        return self._live_count("tool_paths_count")
+
+    def _live_count(self, key: str) -> int:
+        info = self._session.get_active_drawing()
+        if info is None:
+            raise RuntimeError("active drawing is gone")  # noqa: TRY003
+        if key not in info:
+            raise RuntimeError(  # noqa: TRY003
+                f"gateway active drawing response violates contract: missing {key!r}"
+            )
+        return int(info[key])
 
     def save_as(self, path: str) -> None:
         self._session.save_active_drawing(path)
@@ -79,6 +90,20 @@ class _DrawingProxy:
 
     def create_layer(self, name: str) -> dict[str, Any]:
         return self._session.create_layer(name)  # type: ignore[no-any-return]
+
+    def move(self, dx: float, dy: float, dz: float = 0.0, select_all: bool = False) -> MoveResult:
+        result = self._session.drawing_move(dx, dy, dz, select_all)
+        if not isinstance(result, dict) or "moved" not in result or "warnings" not in result:
+            raise RuntimeError(  # noqa: TRY003
+                "gateway move response violates contract: missing 'moved' or 'warnings'"
+            )
+        return MoveResult(
+            moved=int(result["moved"]),
+            warnings=tuple(str(warning) for warning in result["warnings"]),
+        )
+
+    def lint(self, select_all: bool = False, *, units: str) -> dict[str, Any]:
+        return self._session.drawing_lint(units, select_all)
 
     def run_query(self, file_path: str) -> int:
         result = self._session.drawing_query(file_path)

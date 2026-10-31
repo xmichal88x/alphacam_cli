@@ -90,7 +90,7 @@ def test_stock_offcut_add_json_preserves_blocked_status() -> None:
             ],
         )
     assert result.exit_code == 1
-    assert '"status": "blocked"' in result.stderr
+    assert '"status": "blocked"' in result.stdout
     create.assert_called_once_with("MDF", 18.0, 100.0, 200.0, 1, "offcut")
 
 
@@ -119,7 +119,7 @@ def test_stock_add_json_success() -> None:
             ["cdm", "stock", "add", "MDF", "18", "100", "200", "5", "--name", "ZZ_TEST", "--json"],
         )
     assert result.exit_code == 0
-    data = json.loads(result.stderr)
+    data = json.loads(result.stdout)
     assert data["success"] is True
     assert data["sheet_id"] == 235
     assert data == payload
@@ -160,7 +160,7 @@ def test_stock_add_failure_json_has_nonzero_exit() -> None:
             app, ["cdm", "stock", "add", "MDF", "18", "100", "200", "5", "--json"]
         )
     assert result.exit_code == 1
-    data, _ = json.JSONDecoder().raw_decode(result.stderr)
+    data, _ = json.JSONDecoder().raw_decode(result.stdout)
     assert data["success"] is False
     assert data["error"] == "material not found: MDF"
     add.assert_called_once_with("MDF", 18.0, 100.0, 200.0, 5, None, 0)
@@ -178,7 +178,7 @@ def test_stock_offcut_delete_uses_stable_id_and_json() -> None:
     ):
         result = runner.invoke(app, ["cdm", "stock", "offcut-delete", "123", "--force", "--json"])
     assert result.exit_code == 0
-    assert '"sheet_id": 123' in result.stderr
+    assert '"sheet_id": 123' in result.stdout
     delete.assert_called_once_with(123)
 
 
@@ -198,8 +198,8 @@ def test_stock_offcut_delete_not_found_has_nonzero_exit() -> None:
     ):
         result = runner.invoke(app, ["cdm", "stock", "offcut-delete", "123", "--force", "--json"])
     assert result.exit_code == 1
-    assert '"status": "not_found"' in result.stderr
-    assert "offcut not found: 123" in result.stderr
+    assert '"status": "not_found"' in result.stdout
+    assert "offcut not found: 123" in result.stdout
 
 
 def test_stock_offcut_delete_wrong_type_has_nonzero_exit() -> None:
@@ -214,7 +214,7 @@ def test_stock_offcut_delete_wrong_type_has_nonzero_exit() -> None:
     ):
         result = runner.invoke(app, ["cdm", "stock", "offcut-delete", "123", "--force", "--json"])
     assert result.exit_code == 1
-    assert '"status": "wrong_type"' in result.stderr
+    assert '"status": "wrong_type"' in result.stdout
 
 
 def test_stock_offcut_delete_com_error_has_nonzero_exit() -> None:
@@ -331,7 +331,7 @@ def test_stock_material_add_json_success() -> None:
     ):
         result = runner.invoke(app, ["cdm", "stock", "material-add", "TEST_MAT", "18", "--json"])
     assert result.exit_code == 0
-    data = json.loads(result.stderr)
+    data = json.loads(result.stdout)
     assert data["success"] is True
     assert data == payload
     add.assert_called_once_with("TEST_MAT", 18.0, 0)
@@ -368,7 +368,7 @@ def test_stock_material_add_failure_json_has_nonzero_exit() -> None:
     ):
         result = runner.invoke(app, ["cdm", "stock", "material-add", "TEST_MAT", "18", "--json"])
     assert result.exit_code == 1
-    data = json.loads(result.stderr)
+    data = json.loads(result.stdout)
     assert data["success"] is False
     assert data["error"] == "material already exists: X"
     add.assert_called_once_with("TEST_MAT", 18.0, 0)
@@ -506,7 +506,7 @@ def test_stock_material_delete_json_success() -> None:
             app, ["cdm", "stock", "material-delete", "MDF_18", "--force", "--json"]
         )
     assert result.exit_code == 0
-    data = json.loads(result.stderr)
+    data = json.loads(result.stdout)
     assert data["success"] is True
     assert data == deleted
     delete.assert_called_once_with("MDF_18")
@@ -592,7 +592,7 @@ def test_stock_material_delete_failure_json_exit1() -> None:
     ):
         result = runner.invoke(app, ["cdm", "stock", "material-delete", "X", "--force", "--json"])
     assert result.exit_code == 1
-    data = json.loads(result.stderr)
+    data = json.loads(result.stdout)
     assert data["success"] is False
     assert data["error"] == "material not found: X"
     delete.assert_called_once_with("X")
@@ -911,9 +911,7 @@ def test_cdm_create_command_exclude_offcuts_requires_group() -> None:
             "alphacam_cli.core.application.Application.create_cdm_job",
         ) as mock_create,
     ):
-        result = runner.invoke(
-            app, ["cdm", "create", "JOB-001", "--exclude-offcuts", "118"]
-        )
+        result = runner.invoke(app, ["cdm", "create", "JOB-001", "--exclude-offcuts", "118"])
     assert result.exit_code == 2
     assert "requires --material-group" in result.stderr
     mock_create.assert_not_called()
@@ -2338,7 +2336,7 @@ def test_cdm_config_show_json_includes_sheet_order() -> None:
     ):
         result = runner.invoke(app, ["cdm", "config", "show", "Fronty", "--json"])
     assert result.exit_code == 0
-    payload = json.loads(result.stderr[result.stderr.index("{"):])
+    payload = json.loads(result.stdout[result.stdout.index("{") :])
     assert payload["nesting_sheet_order_type"] == 1
 
 
@@ -2372,9 +2370,7 @@ def test_cdm_config_set_sheet_order_command() -> None:
             },
         ) as mock_set,
     ):
-        result = runner.invoke(
-            app, ["cdm", "config", "set-sheet-order", "Fronty", "picked"]
-        )
+        result = runner.invoke(app, ["cdm", "config", "set-sheet-order", "Fronty", "picked"])
     assert result.exit_code == 0
     mock_set.assert_called_once_with("Fronty", "picked")
 
@@ -2400,7 +2396,7 @@ def test_cdm_config_set_sheet_order_json() -> None:
             app, ["cdm", "config", "set-sheet-order", "Fronty", "best", "--json"]
         )
     assert result.exit_code == 0
-    payload = json.loads(result.stderr[result.stderr.index("{"):])
+    payload = json.loads(result.stdout[result.stdout.index("{") :])
     assert payload["value"] == 0
 
 
@@ -2408,9 +2404,7 @@ def test_cdm_config_set_sheet_order_invalid_value() -> None:
     from tests.unit.test_cli import _mock_com
 
     with _mock_com():
-        result = runner.invoke(
-            app, ["cdm", "config", "set-sheet-order", "Fronty", "sideways"]
-        )
+        result = runner.invoke(app, ["cdm", "config", "set-sheet-order", "Fronty", "sideways"])
     assert result.exit_code != 0
 
 
@@ -4432,8 +4426,190 @@ def test_cdm_config_set_sheet_order_remote_delegates() -> None:
         _mock_com(),
         patch("alphacam_cli.cli.cdm.alphacam_context", fake_context),
     ):
-        result = runner.invoke(
-            app, ["cdm", "config", "set-sheet-order", "Fronty", "picked"]
-        )
+        result = runner.invoke(app, ["cdm", "config", "set-sheet-order", "Fronty", "picked"])
     assert result.exit_code == 0
     session.cdm_set_sheet_order.assert_called_once_with("Fronty", "picked")
+
+
+_LONG_WINDOWS_PATH = (
+    r"C:\ALPHACAM\LICOMDIR\Styles\Frezowanie\Korpusy\Szafki_dolne\Fronty"
+    r"\MDF_18mm\Lakier_bialy_polysk\Profil_A\Zamowienie_2026\Klient_000123"
+    r"\Pozycja_000456\Rewizja_07\Plik_konfiguracji_produkcyjnej.amd"
+    r"\Warstwa_koncowa_000789\Parametry_maszyny_CNC"
+)
+
+
+def _json_rows(count: int) -> list[dict[str, Any]]:
+    assert len(_LONG_WINDOWS_PATH) > 200
+    return [
+        {"id": index, "name": f"record-{index}", "path": _LONG_WINDOWS_PATH}
+        for index in range(count)
+    ]
+
+
+def _parse_entire_stdout(result: Any) -> Any:
+    return json.loads(result.stdout)
+
+
+def test_stock_list_json_is_valid_with_long_paths() -> None:
+    from tests.unit.test_cli import _mock_com
+
+    payload = {"materials": [{"name": "MDF_18", "sheets": _json_rows(4)}]}
+    with (
+        _mock_com(),
+        patch(
+            "alphacam_cli.core.application.Application.stock_list",
+            return_value=payload,
+        ) as stock_list,
+    ):
+        result = runner.invoke(app, ["cdm", "stock", "list", "--json"])
+    assert result.exit_code == 0
+    assert _parse_entire_stdout(result) == payload
+    stock_list.assert_called_once_with(None)
+
+
+def test_stock_add_json_is_valid_with_long_paths() -> None:
+    from tests.unit.test_cli import _mock_com
+
+    payload = {"success": True, "rows": _json_rows(5), "path": _LONG_WINDOWS_PATH}
+    with (
+        _mock_com(),
+        patch(
+            "alphacam_cli.core.application.Application.stock_add",
+            return_value=payload,
+        ) as stock_add,
+    ):
+        result = runner.invoke(
+            app,
+            ["cdm", "stock", "add", "MDF", "18", "100", "200", "5", "--json"],
+        )
+    assert result.exit_code == 0
+    assert _parse_entire_stdout(result) == payload
+    stock_add.assert_called_once_with("MDF", 18.0, 100.0, 200.0, 5, None, 0)
+
+
+def test_stock_offcut_add_json_is_valid_with_long_paths() -> None:
+    from tests.unit.test_cli import _mock_com
+
+    payload = {"success": True, "rows": _json_rows(5), "path": _LONG_WINDOWS_PATH}
+    with (
+        _mock_com(),
+        patch(
+            "alphacam_cli.core.application.Application.stock_offcut_create",
+            return_value=payload,
+        ) as offcut_add,
+    ):
+        result = runner.invoke(
+            app,
+            ["cdm", "stock", "offcut-add", "MDF", "18", "100", "200", "1", "--json"],
+        )
+    assert result.exit_code == 0
+    assert _parse_entire_stdout(result) == payload
+    offcut_add.assert_called_once_with("MDF", 18.0, 100.0, 200.0, 1, None)
+
+
+def test_stock_offcut_delete_json_is_valid_with_long_paths() -> None:
+    from tests.unit.test_cli import _mock_com
+
+    payload = {"success": True, "rows": _json_rows(5), "path": _LONG_WINDOWS_PATH}
+    with (
+        _mock_com(),
+        patch(
+            "alphacam_cli.core.application.Application.stock_offcut_delete",
+            return_value=payload,
+        ) as offcut_delete,
+    ):
+        result = runner.invoke(
+            app,
+            ["cdm", "stock", "offcut-delete", "123", "--force", "--json"],
+        )
+    assert result.exit_code == 0
+    assert _parse_entire_stdout(result) == payload
+    offcut_delete.assert_called_once_with(123)
+
+
+def test_stock_material_add_json_is_valid_with_long_paths() -> None:
+    from tests.unit.test_cli import _mock_com
+
+    payload = {"success": True, "rows": _json_rows(5), "path": _LONG_WINDOWS_PATH}
+    with (
+        _mock_com(),
+        patch(
+            "alphacam_cli.core.application.Application.stock_material_add",
+            return_value=payload,
+        ) as material_add,
+    ):
+        result = runner.invoke(
+            app,
+            ["cdm", "stock", "material-add", "MDF", "18", "--json"],
+        )
+    assert result.exit_code == 0
+    assert _parse_entire_stdout(result) == payload
+    material_add.assert_called_once_with("MDF", 18.0, 0)
+
+
+def test_stock_material_delete_json_is_valid_with_long_paths() -> None:
+    from tests.unit.test_cli import _mock_com
+
+    payload = {"success": True, "rows": _json_rows(5), "path": _LONG_WINDOWS_PATH}
+    with (
+        _mock_com(),
+        patch(
+            "alphacam_cli.core.application.Application.stock_material_delete",
+            return_value=payload,
+        ) as material_delete,
+    ):
+        result = runner.invoke(
+            app,
+            ["cdm", "stock", "material-delete", "MDF_18", "--force", "--json"],
+        )
+    assert result.exit_code == 0
+    assert _parse_entire_stdout(result) == payload
+    material_delete.assert_called_once_with("MDF_18")
+
+
+def test_config_show_json_is_valid_with_long_paths() -> None:
+    from tests.unit.test_cli import _mock_com
+
+    config = {
+        "name": "Fronty",
+        "drawing_output_location": _LONG_WINDOWS_PATH,
+        "rows": _json_rows(5),
+    }
+    with (
+        _mock_com(),
+        patch(
+            "alphacam_cli.core.application.Application.cdm_configs",
+            return_value={"configs": [config]},
+        ) as configs,
+    ):
+        result = runner.invoke(app, ["cdm", "config", "show", "Fronty", "--json"])
+    assert result.exit_code == 0
+    assert _parse_entire_stdout(result) == config
+    configs.assert_called_once_with(show="Fronty")
+
+
+def test_config_set_sheet_order_json_is_valid_with_long_paths() -> None:
+    from tests.unit.test_cli import _mock_com
+
+    payload = {
+        "success": True,
+        "config": "Fronty",
+        "sheet_order": "picked",
+        "rows": _json_rows(5),
+        "path": _LONG_WINDOWS_PATH,
+    }
+    with (
+        _mock_com(),
+        patch(
+            "alphacam_cli.core.application.Application.cdm_set_sheet_order",
+            return_value=payload,
+        ) as set_sheet_order,
+    ):
+        result = runner.invoke(
+            app,
+            ["cdm", "config", "set-sheet-order", "Fronty", "picked", "--json"],
+        )
+    assert result.exit_code == 0
+    assert _parse_entire_stdout(result) == payload
+    set_sheet_order.assert_called_once_with("Fronty", "picked")

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import os
 import pathlib
 import sys
@@ -2842,12 +2843,36 @@ def test_gateway_start_clears_macro_log(monkeypatch: pytest.MonkeyPatch) -> None
     fake_socket.accept.assert_called_once()
 
 
-def test_handler_health_ok(server_app: MagicMock) -> None:
+def test_handler_health_ok(server_app: MagicMock, monkeypatch: pytest.MonkeyPatch) -> None:
+    import alphacam_cli.gateway.server as server_module
+
+    monkeypatch.setattr(server_module, "_acam_processes", lambda: [101, 202])
     server_app.version = "9.0.1"
     server_app.name = "AlphaCAM"
     gw = GatewayServer()
     result = gw._handler_health({})
-    assert result == {"ok": True, "version": "9.0.1", "name": "AlphaCAM"}
+    assert result == {
+        "ok": True,
+        "version": "9.0.1",
+        "name": "AlphaCAM",
+        "acam_processes": 2,
+    }
+
+
+def test_handler_health_process_enumeration_error_returns_null(
+    server_app: MagicMock, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import alphacam_cli.gateway.server as server_module
+
+    def boom() -> list[int]:
+        raise RuntimeError
+
+    monkeypatch.setattr(server_module, "_acam_processes", boom)
+    server_app.version = "9.0.1"
+    server_app.name = "AlphaCAM"
+    result = GatewayServer()._handler_health({})
+    assert result["ok"] is True
+    assert result["acam_processes"] is None
 
 
 def test_handler_health_not_attached(
@@ -2856,9 +2881,14 @@ def test_handler_health_not_attached(
     import alphacam_cli.gateway.server as server_module
 
     monkeypatch.setattr(server_module, "_app", None)
+    monkeypatch.setattr(server_module, "_acam_processes", lambda: [])
     gw = GatewayServer()
     result = gw._handler_health({})
-    assert result == {"ok": False, "error": "AlphaCAM not attached"}
+    assert result == {
+        "ok": False,
+        "error": "AlphaCAM not attached",
+        "acam_processes": 0,
+    }
 
 
 def test_handler_health_stale_com_restart_scheduled(
@@ -2881,6 +2911,7 @@ def test_handler_health_stale_com_restart_scheduled(
         "ok": False,
         "error": "stale AlphaCAM COM: COM dead",
         "restart_scheduled": True,
+        "acam_processes": None,
     }
     assert len(_FakeTimer.instances) == 1
     timer = _FakeTimer.instances[0]
@@ -2915,6 +2946,7 @@ def test_handler_health_stale_com_no_restart_when_job_queued(
         "ok": False,
         "error": "stale AlphaCAM COM: COM dead",
         "restart_scheduled": False,
+        "acam_processes": None,
     }
     assert _FakeTimer.instances == []
     mock_exit.assert_not_called()
@@ -2937,3 +2969,270 @@ def test_cdm_set_sheet_order_handler(server_app: MagicMock) -> None:
         "value": 0,
     }
     server_app.cdm_set_sheet_order.assert_called_once_with("Fronty", "best")
+
+
+def test_drawing_move_handler_watchdog_armed_and_cancelled(server_app: MagicMock) -> None:
+    drw = MagicMock()
+    drw.move.return_value.moved = 1
+    drw.move.return_value.warnings = []
+    server_app.get_active_drawing.return_value = drw
+    gw = GatewayServer()
+    watchdog = MagicMock()
+    gw._watchdog_arm = MagicMock(return_value=watchdog)
+
+    result = gw._handler_drawing_move({"dx": 1, "dy": 2})
+
+    assert result["moved"] == 1
+    gw._watchdog_arm.assert_called_once_with(60.0, "drawing_move")
+    watchdog.cancel.assert_called_once()
+
+
+def test_drawing_move_handler_watchdog_cancelled_on_error(server_app: MagicMock) -> None:
+    drw = MagicMock()
+    drw.move.side_effect = RuntimeError("move boom")
+    server_app.get_active_drawing.return_value = drw
+    gw = GatewayServer()
+    watchdog = MagicMock()
+    gw._watchdog_arm = MagicMock(return_value=watchdog)
+
+    with pytest.raises(COMError, match="move boom"):
+        gw._handler_drawing_move({"dx": 1, "dy": 2})
+
+    watchdog.cancel.assert_called_once()
+
+
+def test_drawing_lint_handler_watchdog_armed_and_cancelled(server_app: MagicMock) -> None:
+    drw = MagicMock()
+    drw.lint.return_value = {"success": True, "scanned": 1}
+    server_app.get_active_drawing.return_value = drw
+    gw = GatewayServer()
+    watchdog = MagicMock()
+    gw._watchdog_arm = MagicMock(return_value=watchdog)
+
+    result = gw._handler_drawing_lint({"all": True, "units": "mm"})
+
+    assert result == {"success": True, "scanned": 1}
+    gw._watchdog_arm.assert_called_once_with(180.0, "drawing_lint")
+    watchdog.cancel.assert_called_once()
+
+
+def test_drawing_lint_handler_watchdog_cancelled_on_error(server_app: MagicMock) -> None:
+    drw = MagicMock()
+    drw.lint.side_effect = RuntimeError("lint boom")
+    server_app.get_active_drawing.return_value = drw
+    gw = GatewayServer()
+    watchdog = MagicMock()
+    gw._watchdog_arm = MagicMock(return_value=watchdog)
+
+    with pytest.raises(COMError, match="lint boom"):
+        gw._handler_drawing_lint({"all": True, "units": "mm"})
+
+    watchdog.cancel.assert_called_once()
+
+
+def test_watchdog_cancel_prevents_process_exit(monkeypatch: pytest.MonkeyPatch) -> None:
+    import alphacam_cli.gateway.server as server_module
+
+    calls: list[int] = []
+    monkeypatch.setattr(server_module.os, "_exit", lambda code: calls.append(code))
+    gw = GatewayServer()
+
+    timer = gw._watchdog_arm(0.05, "drawing_move")
+    timer.cancel()
+    timer.join(0.5)
+
+    assert calls == []
+
+
+def test_watchdog_fires_process_exit_when_not_cancelled(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import alphacam_cli.gateway.server as server_module
+
+    calls: list[int] = []
+    monkeypatch.setattr(server_module.os, "_exit", lambda code: calls.append(code))
+    gw = GatewayServer()
+
+    timer = gw._watchdog_arm(0.01, "drawing_move")
+    timer.join(2.0)
+
+    assert calls == [1]
+
+
+def _fake_com_modules(
+    monkeypatch: pytest.MonkeyPatch,
+    get_active: Any = None,
+) -> MagicMock:
+    """Install fake win32com/pythoncom modules; by default attaches to a new Acam."""
+    ac_app = MagicMock()
+    ac_app.ActiveDrawing = None
+
+    class FakeComError(Exception):
+        hresult = 0
+
+    pythoncom = types.ModuleType("pythoncom")
+    pythoncom.COINIT_APARTMENTTHREADED = 2  # type: ignore[attr-defined]
+    pythoncom.com_error = FakeComError  # type: ignore[attr-defined]
+    pythoncom.CoInitializeEx = MagicMock()  # type: ignore[attr-defined]
+    pythoncom.CoUninitialize = MagicMock()  # type: ignore[attr-defined]
+    pythoncom.PumpWaitingMessages = MagicMock()  # type: ignore[attr-defined]
+
+    gencache = MagicMock()
+    gencache.EnsureDispatch.return_value = ac_app
+    client_mod = types.ModuleType("win32com.client")
+    if get_active is None:
+        client_mod.GetActiveObject = MagicMock(  # type: ignore[attr-defined]
+            side_effect=Exception("not running")
+        )
+    else:
+        client_mod.GetActiveObject = get_active  # type: ignore[attr-defined]
+    client_mod.gencache = gencache  # type: ignore[attr-defined]
+    win32com = types.ModuleType("win32com")
+    win32com.client = client_mod  # type: ignore[attr-defined]
+
+    monkeypatch.setitem(sys.modules, "pythoncom", pythoncom)
+    monkeypatch.setitem(sys.modules, "win32com", win32com)
+    monkeypatch.setitem(sys.modules, "win32com.client", client_mod)
+    monkeypatch.setitem(sys.modules, "win32com.client.gencache", gencache)
+    return ac_app
+
+
+def _run_sta_once(server: GatewayServer) -> None:
+    server._running.set()
+    server._sta_loop()
+    server._running.clear()
+    assert server._sta_thread is not None
+    server._sta_thread.join(timeout=2.0)
+    assert not server._sta_thread.is_alive()
+
+
+@pytest.mark.parametrize("value", ["1", "true", "yes", "TRUE", "Yes", " 1 "])
+def test_quit_on_stop_enabled_values(monkeypatch: pytest.MonkeyPatch, value: str) -> None:
+    import alphacam_cli.gateway.server as server_module
+
+    monkeypatch.setenv("ALPHACAM_GATEWAY_QUIT_ON_STOP", value)
+    assert server_module._quit_on_stop() is True
+
+
+def test_quit_on_stop_defaults_to_on(monkeypatch: pytest.MonkeyPatch) -> None:
+    import alphacam_cli.gateway.server as server_module
+
+    monkeypatch.delenv("ALPHACAM_GATEWAY_QUIT_ON_STOP", raising=False)
+    assert server_module._quit_on_stop() is True
+
+
+@pytest.mark.parametrize("value", ["0", "false", "no", "off", "OFF", " 0 "])
+def test_quit_on_stop_disabled_values(monkeypatch: pytest.MonkeyPatch, value: str) -> None:
+    import alphacam_cli.gateway.server as server_module
+
+    monkeypatch.setenv("ALPHACAM_GATEWAY_QUIT_ON_STOP", value)
+    assert server_module._quit_on_stop() is False
+
+
+def test_release_never_touches_external_instance() -> None:
+    import alphacam_cli.gateway.server as server_module
+
+    app = MagicMock()
+
+    server_module._release_ac_app(app, False, logging.getLogger("alphacam.gateway"))
+
+    app.Quit.assert_not_called()
+
+
+def test_release_disabled_by_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    import alphacam_cli.gateway.server as server_module
+
+    monkeypatch.setenv("ALPHACAM_GATEWAY_QUIT_ON_STOP", "0")
+    app = MagicMock()
+
+    server_module._release_ac_app(app, True, logging.getLogger("alphacam.gateway"))
+
+    app.Quit.assert_not_called()
+
+
+def test_attach_retries_five_times_before_giving_up(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import alphacam_cli.gateway.server as server_module
+
+    sleeps: list[float] = []
+    monkeypatch.setattr(server_module.time, "sleep", lambda delay: sleeps.append(delay))
+    get_active = MagicMock(side_effect=Exception("CALL_REJECTED"))
+    win32 = MagicMock()
+    win32.GetActiveObject = get_active
+    gencache = MagicMock()
+
+    result = server_module._attach_existing(
+        win32, gencache, ["AlphaCAM.Application"], logging.getLogger("alphacam.gateway")
+    )
+
+    assert result is None
+    assert get_active.call_count == server_module._ATTACH_ATTEMPTS
+    assert len(sleeps) == server_module._ATTACH_ATTEMPTS - 1
+    gencache.EnsureDispatch.assert_not_called()
+
+
+def test_sta_loop_logs_warning_when_orphan_processes_block_attach(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    import alphacam_cli.gateway.server as server_module
+
+    monkeypatch.delenv("ALPHACAM_GATEWAY_QUIT_ON_STOP", raising=False)
+    monkeypatch.setattr(server_module.time, "sleep", lambda _delay: None)
+    monkeypatch.setattr(server_module, "_acam_processes", lambda: [1111, 2222])
+    ac_app = _fake_com_modules(monkeypatch)
+    ac_app.Quit = MagicMock()
+
+    with caplog.at_level(logging.WARNING, logger="alphacam.gateway"):
+        _run_sta_once(GatewayServer())
+
+    attach_records = [
+        r for r in caplog.records if "Could not attach to existing AlphaCAM" in r.getMessage()
+    ]
+    assert attach_records
+    assert all(r.levelno == logging.WARNING for r in attach_records)
+    assert "[1111, 2222]" in caplog.text
+    assert "after 5 attempts" in caplog.text
+    assert "launching a new instance" in caplog.text
+    assert "Unsaved drawings in the previous instance are not accessible." in caplog.text
+
+
+def test_sta_loop_attaches_without_critical_when_no_processes(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    import alphacam_cli.gateway.server as server_module
+
+    monkeypatch.setattr(server_module.time, "sleep", lambda _delay: None)
+    monkeypatch.setattr(server_module, "_acam_processes", lambda: [])
+    _fake_com_modules(monkeypatch)
+
+    with caplog.at_level(logging.CRITICAL, logger="alphacam.gateway"):
+        _run_sta_once(GatewayServer())
+
+    assert not [r for r in caplog.records if r.levelno == logging.CRITICAL]
+
+
+def test_sta_loop_quits_owned_app_by_default(monkeypatch: pytest.MonkeyPatch) -> None:
+    import alphacam_cli.gateway.server as server_module
+
+    monkeypatch.delenv("ALPHACAM_GATEWAY_QUIT_ON_STOP", raising=False)
+    monkeypatch.setattr(server_module.time, "sleep", lambda _delay: None)
+    monkeypatch.setattr(server_module, "_acam_processes", lambda: [])
+    ac_app = _fake_com_modules(monkeypatch)
+
+    _run_sta_once(GatewayServer())
+
+    ac_app.Quit.assert_called_once_with()
+
+
+def test_sta_loop_respects_quit_on_stop_off(monkeypatch: pytest.MonkeyPatch) -> None:
+    import alphacam_cli.gateway.server as server_module
+
+    monkeypatch.setenv("ALPHACAM_GATEWAY_QUIT_ON_STOP", "0")
+    monkeypatch.setattr(server_module.time, "sleep", lambda _delay: None)
+    monkeypatch.setattr(server_module, "_acam_processes", lambda: [])
+    ac_app = _fake_com_modules(monkeypatch)
+
+    _run_sta_once(GatewayServer())
+
+    ac_app.Quit.assert_not_called()
