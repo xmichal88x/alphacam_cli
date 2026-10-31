@@ -10,15 +10,16 @@ try:
 except ImportError:
     win32com = None  # type: ignore[assignment]
 
-from alphacam_cli.cli.common import console, get_visible
+from alphacam_cli.cli.common import console, get_visible, handle_com_errors
 from alphacam_cli.com.constants import PROG_IDS
-from alphacam_cli.com.manager import alphacam_context
+from alphacam_cli.com.manager import AlphacamConnectionError, alphacam_context
 from alphacam_cli.core.application import Application
 
 app = typer.Typer(help="System diagnostics for AlphaCAM")
 
 
 @app.command()
+@handle_com_errors
 def diagnose() -> None:
     """Run system diagnostics for AlphaCAM connectivity."""
     console.print("[bold cyan]AlphaCAM Diagnostics[/bold cyan]")
@@ -63,6 +64,9 @@ def diagnose() -> None:
 
                 return  # Success with first ProgID
 
+        except AlphacamConnectionError:
+            console.print(f"\\[FAIL] COM connection: {prog_id}")
+            raise
         except Exception:
             console.print(f"\\[FAIL] COM connection: {prog_id}")
             continue

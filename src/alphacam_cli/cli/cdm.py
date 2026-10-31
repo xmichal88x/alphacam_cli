@@ -611,9 +611,13 @@ def manifest(
             if token_qty:
                 ignored.append("--token-qty")
             if ignored:
-                console.print(
-                    f"[yellow]WARNING:[/yellow] {' '.join(ignored)} ignored without job name"
-                )
+                message = f"WARNING: {' '.join(ignored)} ignored without job name"
+                if json_out:
+                    typer.echo(message, err=True)
+                else:
+                    console.print(
+                        f"[yellow]WARNING:[/yellow] {' '.join(ignored)} ignored without job name"
+                    )
             _print_manifest_list(ac, data_dir, json_out)
 
 
@@ -666,7 +670,7 @@ def _parse_token_qtys(raw_items: list[str]) -> dict[str, int]:
 def _print_manifest_list(ac: Any, data_dir: str | None, json_out: bool) -> None:
     data = ac.manifest_list(data_dir)
     if json_out:
-        console.print_json(data=data)
+        typer.echo(json.dumps(data, indent=2, ensure_ascii=False))
         return
     manifests = data.get("manifests", [])
     if not manifests:
@@ -718,7 +722,7 @@ def _print_manifest(
         token_qty=token_qty,
     )
     if json_out:
-        console.print_json(data=data)
+        typer.echo(json.dumps(data, indent=2, ensure_ascii=False))
         return None
     manifest = data.get("manifest", {})
     header = f"[cyan]Manifest:[/cyan] {manifest.get('job_name') or job_name}"
@@ -1025,7 +1029,7 @@ def order_details_list(
         ac = resolve_app(raw)
         result = ac.cdm_order_details(job_name=job_name)
         if json_out:
-            console.print_json(data=result)
+            typer.echo(json.dumps(result, indent=2, ensure_ascii=False))
             return
         rows = result.get("order_details", [])
         if not rows:

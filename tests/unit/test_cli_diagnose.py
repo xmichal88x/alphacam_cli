@@ -59,8 +59,11 @@ def test_diagnose_no_com_connection() -> None:
 
     with patch("alphacam_cli.cli.diagnose.alphacam_context", failing_context):
         result = runner.invoke(app, [])
-    assert result.exit_code == 1
-    assert "No AlphaCAM COM connection" in result.stderr
+    assert result.exit_code == 3
+    assert "Connection Error" in result.stderr
+    assert "No AlphaCAM available" in result.stderr
+    assert "Traceback" not in result.stderr
+    assert "Traceback" not in result.stdout
 
 
 def test_diagnose_win32com_not_installed() -> None:

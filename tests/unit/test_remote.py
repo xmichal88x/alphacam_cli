@@ -1,11 +1,17 @@
 from __future__ import annotations
 
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, call
 
 import pytest
 
+from alphacam_cli.com.manager import AlphacamComError, AlphacamConnectionError
 from alphacam_cli.gateway import client as client_module
-from alphacam_cli.gateway.client import RemoteConnectionError, RemoteSession
+from alphacam_cli.gateway.client import (
+    RemoteComError,
+    RemoteConnectionError,
+    RemoteProtocolError,
+    RemoteSession,
+)
 from alphacam_cli.gateway.remote import (
     RemoteApplication,
     _basename,
@@ -1294,3 +1300,114 @@ def test_call_timeout_override_can_shorten_socket_timeout(
 
     assert sock.settimeout.call_args_list[0].args == (45.0,)
     assert sock.settimeout.call_args_list[-1].args == (180.0,)
+
+
+def test_remote_connection_error_inherits_alphacam_connection_error() -> None:
+    error = RemoteConnectionError("down")
+
+    assert isinstance(error, AlphacamConnectionError)
+
+
+def test_remote_com_error_inherits_alphacam_com_error_and_keeps_hresult() -> None:
+    error = RemoteComError("boom", hresult=-32000)
+
+    assert isinstance(error, AlphacamComError)
+    assert error.hresult == -32000
+    assert str(error) == "boom"
+
+
+def test_remote_com_error_without_hresult() -> None:
+    error = RemoteComError("internal")
+
+    assert error.hresult is None
+
+
+def test_call_com_error_maps_to_remote_com_error_with_hresult(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    session = RemoteSession()
+    session._sock = MagicMock()
+    monkeypatch.setattr(
+        client_module,
+        "read_frame",
+        lambda _sock: {"id": 1, "error": {"code": -32000, "message": "COM failed"}},
+    )
+
+    with pytest.raises(RemoteComError) as exc_info:
+        session._call("ping")
+
+    assert exc_info.value.hresult == -32000
+    assert str(exc_info.value) == "COM failed"
+
+
+def test_call_internal_error_maps_to_remote_com_error_without_hresult(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    session = RemoteSession()
+    session._sock = MagicMock()
+    monkeypatch.setattr(
+        client_module,
+        "read_frame",
+        lambda _sock: {"id": 1, "error": {"code": -32603, "message": "Internal error"}},
+    )
+
+    with pytest.raises(RemoteComError) as exc_info:
+        session._call("ping")
+
+    assert exc_info.value.hresult is None
+
+
+@pytest.mark.parametrize("code", [-32601, -32600, -32700, 12345])
+def test_call_protocol_errors_map_to_remote_protocol_error(
+    monkeypatch: pytest.MonkeyPatch, code: int
+) -> None:
+    session = RemoteSession()
+    session._sock = MagicMock()
+    monkeypatch.setattr(
+        client_module,
+        "read_frame",
+        lambda _sock: {"id": 1, "error": {"code": code, "message": "bad request"}},
+    )
+
+    with pytest.raises(RemoteProtocolError, match=rf"JSON-RPC error \({code}\)"):
+        session._call("ping")
+
+
+def test_connect_socket_timeout_constant() -> None:
+    from alphacam_cli.gateway.timeouts import CONNECT_SOCKET_TIMEOUT
+
+    assert CONNECT_SOCKET_TIMEOUT == 10.0
+
+
+def test_connect_filtered_port_raises_with_host_port_and_connect_timeout(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import socket as socket_module
+
+    fake_sock = MagicMock()
+    fake_sock.connect.side_effect = socket_module.timeout("timed out")  # noqa: UP041
+    monkeypatch.setattr(client_module.socket, "socket", MagicMock(return_value=fake_sock))
+
+    session = RemoteSession(host="192.168.100.60", port=9999)
+
+    with pytest.raises(RemoteConnectionError) as exc_info:
+        session.connect()
+
+    message = str(exc_info.value)
+    assert "192.168.100.60:9999" in message
+    assert "10s" in message
+    assert session._sock is None
+    fake_sock.settimeout.assert_called_once_with(10.0)
+
+
+def test_connect_success_restores_session_timeout(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    fake_sock = MagicMock()
+    monkeypatch.setattr(client_module.socket, "socket", MagicMock(return_value=fake_sock))
+
+    session = RemoteSession(timeout=180.0)
+    session.connect()
+
+    assert session._sock is fake_sock
+    assert fake_sock.settimeout.call_args_list == [call(10.0), call(180.0)]

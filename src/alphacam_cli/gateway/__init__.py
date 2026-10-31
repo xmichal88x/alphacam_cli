@@ -1,4 +1,9 @@
-from alphacam_cli.gateway.client import RemoteComError, RemoteConnectionError, RemoteSession
+from alphacam_cli.gateway.client import (
+    RemoteComError,
+    RemoteConnectionError,
+    RemoteProtocolError,
+    RemoteSession,
+)
 from alphacam_cli.gateway.protocol import (
     make_error,
     make_request,
@@ -13,6 +18,7 @@ __all__ = [
     "RemoteApplication",
     "RemoteConnectionError",
     "RemoteComError",
+    "RemoteProtocolError",
     "pack_message",
     "read_frame",
     "make_request",

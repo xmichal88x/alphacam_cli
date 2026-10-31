@@ -142,6 +142,11 @@ def _quit_on_stop() -> bool:
     return raw.strip().lower() not in _QUIT_ON_STOP_FALSE
 
 
+def _require_enum_processes(ok: int) -> None:
+    if not ok:
+        raise OSError("EnumProcesses failed")
+
+
 def _acam_processes() -> list[int] | None:
     try:
         import ctypes
@@ -155,8 +160,9 @@ def _acam_processes() -> list[int] | None:
         psapi.GetModuleBaseNameW.restype = wintypes.DWORD
         pids = (wintypes.DWORD * 4096)()
         needed = wintypes.DWORD()
-        if not psapi.EnumProcesses(ctypes.byref(pids), ctypes.sizeof(pids), ctypes.byref(needed)):
-            raise OSError("EnumProcesses failed")
+        _require_enum_processes(
+            psapi.EnumProcesses(ctypes.byref(pids), ctypes.sizeof(pids), ctypes.byref(needed))
+        )
         count = needed.value // ctypes.sizeof(wintypes.DWORD)
         found: list[int] = []
         for index in range(count):
@@ -168,17 +174,20 @@ def _acam_processes() -> list[int] | None:
                 continue
             try:
                 name = ctypes.create_unicode_buffer(260)
-                if psapi.GetModuleBaseNameW(handle, None, name, len(name)):
-                    if name.value.lower() == "acam.exe":
-                        found.append(pid)
+                if (
+                    psapi.GetModuleBaseNameW(handle, None, name, len(name))
+                    and name.value.lower() == "acam.exe"
+                ):
+                    found.append(pid)
             finally:
                 kernel32.CloseHandle(handle)
-        return found
     except Exception:
         logging.getLogger("alphacam.gateway").warning(
             "Acam process enumeration failed", exc_info=True
         )
         return None
+    else:
+        return found
 
 
 def _terminate_pid(pid: int, logger: logging.Logger | None = None) -> bool:
@@ -393,7 +402,7 @@ class GatewayServer:
             ac_app = _attach_existing(win32, gencache, PROG_IDS, self._logger)
             if ac_app is not None:
                 try:
-                    ac_app.Name  # type: ignore[attr-defined]
+                    _ = ac_app.Name  # type: ignore[attr-defined]
                 except Exception:
                     self._logger.warning(
                         "Attached AlphaCAM instance is not alive; treating as failed attach"
@@ -687,10 +696,8 @@ class GatewayServer:
                 cmd_bars = raw.CommandBars
                 bar_names = []
                 for i in range(1, min(cmd_bars.Count + 1, 50)):
-                    try:
+                    with contextlib.suppress(Exception):
                         bar_names.append(cmd_bars(i).Name)
-                    except Exception:
-                        pass
                 result["command_bars"] = bar_names
             except Exception as e:
                 result["command_bars_error"] = str(e)
@@ -737,9 +744,10 @@ class GatewayServer:
             except Exception as e:
                 result["vbe_error"] = str(e)
 
-            return result
         except Exception as e:
             raise COMError(str(e)) from e
+        else:
+            return result
 
     def _handler_vba_save_project(self, params: dict[str, Any]) -> dict[str, Any]:
         from alphacam_cli.gateway.server import _app as com_app
@@ -758,9 +766,11 @@ class GatewayServer:
                     saved += 1
                 except Exception as e:
                     errors.append(f"{name}: {e}")
-            return {"saved": saved, "total": vbp.Count, "errors": errors}
+            payload: dict[str, Any] = {"saved": saved, "total": vbp.Count, "errors": errors}
         except Exception as e:
             raise COMError(str(e)) from e
+        else:
+            return payload
 
     def _handler_vba_export_project(self, params: dict[str, Any]) -> dict[str, Any]:
         from alphacam_cli.gateway.server import _app as com_app
@@ -776,9 +786,10 @@ class GatewayServer:
                 proj = vbp(i)
                 proj.Export(path)
                 return {"success": True, "project": proj.Name, "path": path}
-            return {"error": "no project found"}
         except Exception as e:
             raise COMError(str(e)) from e
+        else:
+            return {"error": "no project found"}
 
     def _handler_vba_probe(self, params: dict[str, Any]) -> dict[str, Any]:
         from alphacam_cli.gateway.server import _app as com_app
@@ -802,9 +813,10 @@ class GatewayServer:
                         cm = comp.CodeModule
                         result["cm_methods"] = [a for a in dir(cm) if not a.startswith("_")]
 
-            return result
         except Exception as e:
             raise COMError(str(e)) from e
+        else:
+            return result
 
     def _handler_vba_write_code(self, params: dict[str, Any]) -> dict[str, Any]:
         from alphacam_cli.gateway.server import _app as com_app
@@ -828,10 +840,8 @@ class GatewayServer:
                     if component_name and comp.Name != component_name:
                         continue
                     if hasattr(comp, "Activate"):
-                        try:
+                        with contextlib.suppress(Exception):
                             comp.Activate()
-                        except Exception:
-                            pass
                     cm = comp.CodeModule
                     if count > 0:
                         cm.DeleteLines(start_line, count)
@@ -843,9 +853,10 @@ class GatewayServer:
                         "component": comp.Name,
                         "lines": new_total,
                     }
-            return {"error": "project or component not found"}
         except Exception as e:
             raise COMError(str(e)) from e
+        else:
+            return {"error": "project or component not found"}
 
     def _handler_vba_replace_code(self, params: dict[str, Any]) -> dict[str, Any]:
         from alphacam_cli.gateway.server import _app as com_app
@@ -875,9 +886,10 @@ class GatewayServer:
                         "component": comp.Name,
                         "line": line,
                     }
-            return {"error": "project or component not found"}
         except Exception as e:
             raise COMError(str(e)) from e
+        else:
+            return {"error": "project or component not found"}
 
     def _handler_vba_read_code(self, params: dict[str, Any]) -> dict[str, Any]:
         from alphacam_cli.gateway.server import _app as com_app
@@ -898,10 +910,8 @@ class GatewayServer:
                     if component_name and comp.Name != component_name:
                         continue
                     if hasattr(comp, "Activate"):
-                        try:
+                        with contextlib.suppress(Exception):
                             comp.Activate()
-                        except Exception:
-                            pass
                     cm = comp.CodeModule
                     total = cm.CountOfLines
                     if total == 0:
@@ -918,9 +928,10 @@ class GatewayServer:
                         "code": code,
                         "lines": total,
                     }
-            return {"error": "project or component not found"}
         except Exception as e:
             raise COMError(str(e)) from e
+        else:
+            return {"error": "project or component not found"}
 
     def _handler_create_layer(self, params: dict[str, Any]) -> dict[str, Any]:
         from alphacam_cli.gateway.server import _app as com_app

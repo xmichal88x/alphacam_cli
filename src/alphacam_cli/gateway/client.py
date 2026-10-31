@@ -7,24 +7,34 @@ import logging
 import socket
 from typing import Any, cast
 
+from alphacam_cli.com.manager import AlphacamComError, AlphacamConnectionError
 from alphacam_cli.gateway.protocol import (
     COM_ERROR,
+    INTERNAL_ERROR,
     make_request,
     pack_message,
     read_frame,
 )
 from alphacam_cli.gateway.timeouts import (
+    CONNECT_SOCKET_TIMEOUT,
     DRAWING_LINT_CLIENT_TIMEOUT,
     DRAWING_MOVE_CLIENT_TIMEOUT,
 )
 
 
-class RemoteConnectionError(Exception):
+class RemoteConnectionError(AlphacamConnectionError):
     """Connection-level errors."""
 
 
-class RemoteComError(Exception):
-    """COM errors on the server."""
+class RemoteComError(AlphacamComError):
+    """COM errors reported by the remote server."""
+
+    def __init__(self, message: str, hresult: int | None = None) -> None:
+        super().__init__(message, hresult)
+
+
+class RemoteProtocolError(Exception):
+    """JSON-RPC protocol errors unrelated to COM or transport."""
 
 
 class RemoteSession:
@@ -38,8 +48,17 @@ class RemoteSession:
 
     def connect(self) -> None:
         self._sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self._sock.settimeout(self.timeout)
-        self._sock.connect((self.host, self.port))
+        sock = self._sock
+        sock.settimeout(CONNECT_SOCKET_TIMEOUT)
+        try:
+            sock.connect((self.host, self.port))
+        except (TimeoutError, OSError) as e:
+            self.close()
+            raise RemoteConnectionError(
+                f"cannot connect to {self.host}:{self.port} "
+                f"within {CONNECT_SOCKET_TIMEOUT:.0f}s: {e}"
+            ) from e
+        sock.settimeout(self.timeout)
         self._logger.info("Connected to %s:%s", self.host, self.port)
 
     def _call(
@@ -81,10 +100,12 @@ class RemoteSession:
             if "error" in response:
                 error = cast(dict[str, Any], response["error"])
                 code = error.get("code")
-                message = error.get("message", "Unknown error")
+                message = str(error.get("message", "Unknown error"))
                 if code == COM_ERROR:
-                    raise RemoteComError(str(message))
-                raise RemoteConnectionError(f"JSON-RPC error ({code}): {message}")
+                    raise RemoteComError(message, hresult=code)
+                if code == INTERNAL_ERROR:
+                    raise RemoteComError(message)
+                raise RemoteProtocolError(f"JSON-RPC error ({code}): {message}")
             return response["result"]
         finally:
             if timeout is not None and self._sock is sock:

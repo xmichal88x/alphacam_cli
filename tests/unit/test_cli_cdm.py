@@ -7,6 +7,7 @@ from contextlib import contextmanager
 from typing import Any
 from unittest.mock import patch
 
+import pytest
 from typer.testing import CliRunner
 
 from alphacam_cli.cli.common import console
@@ -1998,7 +1999,7 @@ def test_cdm_order_details_list_json() -> None:
     ):
         result = runner.invoke(app, ["cdm", "order-details", "list", "JOB-001", "--json"])
     assert result.exit_code == 0
-    data = json.loads(result.stderr)
+    data = json.loads(result.stdout)
     assert data == payload
     mock_details.assert_called_once_with(job_name="JOB-001")
 
@@ -2015,7 +2016,7 @@ def test_cdm_order_details_list_json_empty() -> None:
     ):
         result = runner.invoke(app, ["cdm", "order-details", "list", "JOB-001", "--json"])
     assert result.exit_code == 0
-    data = json.loads(result.stderr)
+    data = json.loads(result.stdout)
     assert data == {"order_details": [], "job_name": "JOB-001"}
 
 
@@ -2805,7 +2806,7 @@ def test_cdm_manifest_list_json_unchanged() -> None:
     ):
         result = runner.invoke(app, ["cdm", "manifest", "--json"])
     assert result.exit_code == 0
-    data = json.loads(result.stderr)
+    data = json.loads(result.stdout)
     assert set(data["manifests"][0]) == {
         "path",
         "job_name",
@@ -2863,7 +2864,7 @@ def test_cdm_manifest_list_dir_and_json_not_ignored() -> None:
         result = runner.invoke(app, ["cdm", "manifest", "--json", "--dir", r"C:\Reports\Data"])
     assert result.exit_code == 0
     assert "ignored without job name" not in result.stderr
-    data = json.loads(result.stderr)
+    data = json.loads(result.stdout)
     assert data["manifests"][0]["job_name"] == "Fronty"
     mock_manifest_list.assert_called_once_with(r"C:\Reports\Data")
 
@@ -2951,7 +2952,7 @@ def test_cdm_manifest_read_json() -> None:
     ):
         result = runner.invoke(app, ["cdm", "manifest", "JOB", "--json"])
     assert result.exit_code == 0
-    data = json.loads(result.stderr)
+    data = json.loads(result.stdout)
     assert data["manifest"]["job_name"] == "Fronty"
     assert data["manifest"]["sheets"][0]["name"] == "Arkusz A1"
     mock_manifest_read.assert_called_once_with(
@@ -3375,7 +3376,7 @@ def test_cdm_manifest_read_by_token_json() -> None:
     ):
         result = runner.invoke(app, ["cdm", "manifest", "JOB", "--by-token", "--json"])
     assert result.exit_code == 0
-    data = json.loads(result.stderr)
+    data = json.loads(result.stdout)
     assert data["by_token"][0]["token"] == "ABC"
     assert data["by_token"][0]["total_qty"] == 9
     assert data["by_token"][1]["token"] is None
@@ -3781,7 +3782,7 @@ def test_cdm_manifest_read_validate_json_contains_validation() -> None:
     ):
         result = runner.invoke(app, ["cdm", "manifest", "JOB", "--validate", "--json"])
     assert result.exit_code == 0
-    out = json.loads(result.stderr)
+    out = json.loads(result.stdout)
     assert out["validation"]["valid"] is False
     assert out["validation"]["errors"] == ['token "ABC": expected 8, got 7']
     mock_manifest_read.assert_called_once_with(
@@ -4613,3 +4614,115 @@ def test_config_set_sheet_order_json_is_valid_with_long_paths() -> None:
     assert result.exit_code == 0
     assert _parse_entire_stdout(result) == payload
     set_sheet_order.assert_called_once_with("Fronty", "picked")
+
+
+def _assert_stderr_has_no_json(result: Any) -> None:
+    text = result.stderr.strip()
+    if not text:
+        return
+    with pytest.raises(json.JSONDecodeError):
+        json.loads(text)
+
+
+@pytest.mark.parametrize(
+    ("argv", "method_name", "mock_return", "expected"),
+    [
+        (
+            ["cdm", "manifest", "--json"],
+            "manifest_list",
+            _MANIFEST_LIST_DATA,
+            _MANIFEST_LIST_DATA,
+        ),
+        (
+            ["cdm", "manifest", "JOB", "--json"],
+            "manifest_read",
+            _MANIFEST_READ_DATA,
+            _MANIFEST_READ_DATA,
+        ),
+        (
+            ["cdm", "order-details", "list", "JOB", "--json"],
+            "cdm_order_details",
+            {"order_details": [], "job_name": "JOB"},
+            {"order_details": [], "job_name": "JOB"},
+        ),
+        (["cdm", "stock", "list", "--json"], "stock_list", {"materials": []}, {"materials": []}),
+        (
+            ["cdm", "stock", "add", "MDF", "18", "100", "200", "1", "--json"],
+            "stock_add",
+            {"success": True, "name": "X"},
+            {"success": True, "name": "X"},
+        ),
+        (
+            ["cdm", "stock", "offcut-add", "MDF", "18", "100", "200", "1", "--json"],
+            "stock_offcut_create",
+            {"success": True, "name": "X"},
+            {"success": True, "name": "X"},
+        ),
+        (
+            ["cdm", "stock", "offcut-delete", "1", "--force", "--json"],
+            "stock_offcut_delete",
+            {"success": True, "status": "deleted", "sheet_id": 1},
+            {"success": True, "status": "deleted", "sheet_id": 1},
+        ),
+        (
+            ["cdm", "stock", "material-add", "MDF", "18", "--json"],
+            "stock_material_add",
+            {"success": True, "material": "MDF"},
+            {"success": True, "material": "MDF"},
+        ),
+        (
+            ["cdm", "stock", "material-delete", "MDF", "--force", "--json"],
+            "stock_material_delete",
+            {"success": True, "deleted": "MDF"},
+            {"success": True, "deleted": "MDF"},
+        ),
+        (
+            ["cdm", "config", "show", "Fronty", "--json"],
+            "cdm_configs",
+            {"configs": [{"name": "Fronty"}]},
+            {"name": "Fronty"},
+        ),
+        (
+            ["cdm", "config", "set-sheet-order", "Fronty", "picked", "--json"],
+            "cdm_set_sheet_order",
+            {"success": True, "config": "Fronty", "sheet_order": "picked"},
+            {"success": True, "config": "Fronty", "sheet_order": "picked"},
+        ),
+    ],
+)
+def test_cdm_json_commands_write_json_only_to_stdout(
+    argv: list[str],
+    method_name: str,
+    mock_return: dict[str, Any],
+    expected: dict[str, Any],
+) -> None:
+    from tests.unit.test_cli import _mock_com
+
+    with (
+        _mock_com(),
+        patch(
+            f"alphacam_cli.core.application.Application.{method_name}",
+            return_value=mock_return,
+        ),
+    ):
+        result = runner.invoke(app, argv)
+    assert result.exit_code == 0, result.stderr
+    assert json.loads(result.stdout) == expected
+    _assert_stderr_has_no_json(result)
+
+
+def test_cdm_manifest_json_show_all_without_job_keeps_warning_on_stderr() -> None:
+    from tests.unit.test_cli import _mock_com
+
+    with (
+        _mock_com(),
+        patch(
+            "alphacam_cli.core.application.Application.manifest_list",
+            return_value=_MANIFEST_LIST_DATA,
+        ),
+    ):
+        result = runner.invoke(app, ["cdm", "manifest", "--json", "--show-all"])
+    assert result.exit_code == 0
+    assert json.loads(result.stdout) == _MANIFEST_LIST_DATA
+    assert "--show-all ignored without job name" in result.stderr
+    _assert_stderr_has_no_json(result)
