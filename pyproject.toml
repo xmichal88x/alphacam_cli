@@ -51,6 +51,10 @@ line-length = 100
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "N", "W", "UP", "B", "SIM", "TRY"]
+# 135 dynamicznych, user-facing komunikatów COMError w gatewayu; wymóg TRY003
+# oznaczałby 136 klas-boilerplate bez zysku funkcjonalnego.
+# Ten sam powód dla dynamicznych komunikatów COMError w kliencie i protokole gatewaya.
+per-file-ignores = { "src/alphacam_cli/gateway/server.py" = ["TRY003"], "src/alphacam_cli/gateway/client.py" = ["TRY003"], "src/alphacam_cli/gateway/protocol.py" = ["TRY003"] }
 
 [tool.mypy]
 strict = true

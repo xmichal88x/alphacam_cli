@@ -1,5 +1,3 @@
-# ruff: noqa: TRY003
-
 from __future__ import annotations
 
 import contextlib
@@ -299,6 +297,12 @@ def _attach_existing(
 
 class COMError(Exception):
     pass
+
+
+def _require_sheet(sheet: Any, sheet_name: str, ctx: str) -> Any:
+    if sheet is None:
+        raise COMError(f"{ctx}: sheet from library not found: {sheet_name}")
+    return sheet
 
 
 # Module-level Application instance, created and used exclusively on the STA thread.
@@ -2083,8 +2087,7 @@ class GatewayServer:
                     sheet = app.Nesting.SheetDatabase.FindSheet(sheet_name)
                 except Exception as e:
                     raise COMError(f"nest: sheet from library not found: {sheet_name}") from e
-                if sheet is None:
-                    raise COMError(f"nest: sheet from library not found: {sheet_name}")  # noqa: TRY301
+                sheet = _require_sheet(sheet, sheet_name, "nest")
                 paths = sheet.InsertInActiveDrawingAtPoint(0.0, 0.0)
                 try:
                     thickness = sheet.Thickness.Thickness
@@ -2203,10 +2206,7 @@ class GatewayServer:
             sl = nesting.NewSheetList()
             if sheet_name:
                 sheet = nesting.SheetDatabase.FindSheet(sheet_name)
-                if sheet is None:
-                    raise COMError(  # noqa: TRY301
-                        f"nest[advanced]: sheet from library not found: {sheet_name}"
-                    )
+                sheet = _require_sheet(sheet, sheet_name, "nest[advanced]")
                 paths = sheet.InsertInActiveDrawingAtPoint(0.0, 0.0)
                 nest_sheet = sl.Add(paths.Item(1))
                 try:
