@@ -105,6 +105,16 @@ class _DrawingProxy:
     def lint(self, select_all: bool = False, *, units: str) -> dict[str, Any]:
         return self._session.drawing_lint(units, select_all)
 
+    def lint_fix(
+        self,
+        select_all: bool = False,
+        *,
+        units: str,
+        dry_run: bool = False,
+        backup: bool = True,
+    ) -> dict[str, Any]:
+        return self._session.drawing_lint_fix(units, select_all, dry_run, backup)
+
     def run_query(self, file_path: str) -> int:
         result = self._session.drawing_query(file_path)
         return int(result.get("count", 0)) if isinstance(result, dict) else 0

@@ -2,7 +2,10 @@ from __future__ import annotations
 
 import contextlib
 import math
+import os
+import tempfile
 from dataclasses import dataclass
+from datetime import datetime
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
@@ -12,16 +15,61 @@ if TYPE_CHECKING:
 
 from alphacam_cli.com.constants import ACAM_OUT_NC_FILE
 from alphacam_cli.core.geolint import (
+    FIXABLE_TYPES,
+    REBUILD_TYPES,
     LintBudgetExceeded,
     PathInput,
     Segment,
     Thresholds,
     analyze_paths,
+    path_has_arcs,
+    rebuild_segments,
 )
 
 
 class UnreadableGeometryError(RuntimeError):
     pass
+
+
+REMOVAL_TYPES = ("tiny", "spike")
+
+
+def _skip_reason(types: list[str]) -> str | None:
+    for name in ("unreadable", "empty", "layerUnreadable", "bigArc", "selfIntersect"):
+        if name in types:
+            return name
+    if not set(types) & set(REBUILD_TYPES):
+        return "no automatic fix"
+    return None
+
+
+def _fix_payload(
+    *,
+    units: str,
+    fixed: dict[str, int],
+    skipped: list[dict[str, Any]],
+    failed: list[dict[str, Any]],
+    deleted_paths: list[int],
+    backup_path: str | None,
+    remaining: dict[str, int],
+    warnings: list[str],
+    dry_run: bool,
+    would_fix: dict[str, int] | None,
+) -> dict[str, Any]:
+    payload: dict[str, Any] = {
+        "success": True,
+        "units": units,
+        "fixed": fixed,
+        "skipped": skipped,
+        "failed": failed,
+        "deleted_paths": deleted_paths,
+        "backup": backup_path,
+        "remaining": remaining,
+        "warnings": warnings,
+    }
+    if would_fix is not None:
+        payload["would_fix"] = would_fix
+    return payload
 
 
 @dataclass(frozen=True)
@@ -461,6 +509,291 @@ class Drawing:
                 )
             )
         return analyze_paths(inputs, thresholds, units=units)
+
+    def lint_fix(
+        self,
+        select_all: bool = False,
+        *,
+        units: str,
+        dry_run: bool = False,
+        backup: bool = True,
+    ) -> dict[str, Any]:
+        thresholds = Thresholds().scaled(units)
+        paths = self.geometries()
+        selected = (
+            list(enumerate(paths))
+            if select_all
+            else [(index, path) for index, path in enumerate(paths) if path.selected]
+        )
+        if not selected:
+            raise RuntimeError("No selected geometries")  # noqa: TRY003
+        report = self.lint(select_all=select_all, units=units)
+        issues_by_index = {
+            int(entry["index"]): list(entry.get("issues", [])) for entry in report.get("paths", [])
+        }
+        closed_by_index = {
+            int(entry["index"]): entry.get("closed") for entry in report.get("paths", [])
+        }
+
+        warnings = self._fix_warnings()
+        fixed = {name: 0 for name in FIXABLE_TYPES}
+        skipped: list[dict[str, Any]] = []
+        failed: list[dict[str, Any]] = []
+        planned: list[tuple[int, CamPath, list[dict[str, Any]], list[Segment], bool]] = []
+        delete_targets: list[tuple[int, CamPath, list[dict[str, Any]]]] = []
+        duplicate_targets: list[tuple[int, CamPath, int]] = []
+
+        for index, path in selected:
+            issues = issues_by_index.get(index)
+            if not issues:
+                continue
+            types = sorted({str(issue.get("type", "")) for issue in issues})
+            duplicate_count = sum(1 for issue in issues if issue.get("type") == "duplicates")
+            if duplicate_count:
+                duplicate_targets.append((index, path, duplicate_count))
+                continue
+            reason = _skip_reason(types)
+            segments: list[Segment] = []
+            if reason is None:
+                try:
+                    segments = path.segments()
+                except Exception:
+                    reason = "unreadable"
+                else:
+                    if path_has_arcs(segments):
+                        reason = "contains arcs"
+            if reason is not None:
+                skipped.append({"index": index, "types": types, "reason": reason})
+                continue
+            closed = bool(closed_by_index.get(index))
+            rebuilt = rebuild_segments(segments, thresholds, closed=closed)
+            if not rebuilt and set(types) <= set(REMOVAL_TYPES):
+                delete_targets.append((index, path, issues))
+                continue
+            if (
+                not closed
+                and len(rebuilt) > 1
+                and math.dist(
+                    (rebuilt[0].start_x, rebuilt[0].start_y),
+                    (rebuilt[-1].end_x, rebuilt[-1].end_y),
+                )
+                <= 1e-9
+            ):
+                closed = True
+            planned.append((index, path, issues, rebuilt, closed))
+
+        if dry_run:
+            would_fix = {name: 0 for name in FIXABLE_TYPES}
+            for _, _, issues, _, _ in planned:
+                for issue in issues:
+                    issue_type = str(issue.get("type", ""))
+                    if issue_type in REBUILD_TYPES:
+                        would_fix[issue_type] += 1
+            for _, _, issues in delete_targets:
+                for issue in issues:
+                    issue_type = str(issue.get("type", ""))
+                    if issue_type in REBUILD_TYPES:
+                        would_fix[issue_type] += 1
+            for _, _, count in duplicate_targets:
+                would_fix["duplicates"] += count
+            return _fix_payload(
+                units=units,
+                fixed=fixed,
+                skipped=skipped,
+                failed=failed,
+                deleted_paths=[],
+                backup_path=None,
+                remaining=dict(report.get("issues_by_type", {})),
+                warnings=warnings,
+                dry_run=True,
+                would_fix=would_fix,
+            )
+
+        backup_path: str | None = None
+        if backup and (planned or delete_targets or duplicate_targets):
+            backup_path = self._backup_drawing()
+
+        for index, path, issues, rebuilt, closed in sorted(
+            planned, key=lambda item: item[0], reverse=True
+        ):
+            reason = self._apply_rebuild(path, rebuilt, closed)
+            if reason is None:
+                for issue in issues:
+                    issue_type = str(issue.get("type", ""))
+                    if issue_type in fixed:
+                        fixed[issue_type] += 1
+            else:
+                failed.append(
+                    {
+                        "index": index,
+                        "types": sorted({str(issue.get("type", "")) for issue in issues}),
+                        "reason": reason,
+                    }
+                )
+
+        deleted_paths: list[int] = []
+        for index, path, issues in sorted(delete_targets, key=lambda item: item[0], reverse=True):
+            reason = self._remove_path(path)
+            if reason is None:
+                deleted_paths.append(index)
+                for issue in issues:
+                    issue_type = str(issue.get("type", ""))
+                    if issue_type in fixed:
+                        fixed[issue_type] += 1
+            else:
+                failed.append(
+                    {
+                        "index": index,
+                        "types": sorted({str(issue.get("type", "")) for issue in issues}),
+                        "reason": reason,
+                    }
+                )
+
+        for index, path, count in sorted(duplicate_targets, key=lambda item: item[0], reverse=True):
+            try:
+                self._delete_geometry(path)
+            except Exception as exc:
+                failed.append(
+                    {"index": index, "types": ["duplicates"], "reason": f"delete failed: {exc}"}
+                )
+            else:
+                fixed["duplicates"] += count
+
+        self._restore_scope_selection(select_all, [path for _, path in selected])
+        try:
+            remaining_report = self.lint(select_all=select_all, units=units)
+            remaining = dict(remaining_report.get("issues_by_type", {}))
+        except (RuntimeError, LintBudgetExceeded):
+            remaining = {}
+
+        skipped.sort(key=lambda entry: int(entry["index"]))
+        failed.sort(key=lambda entry: int(entry["index"]))
+        deleted_paths.sort()
+        return _fix_payload(
+            units=units,
+            fixed=fixed,
+            skipped=skipped,
+            failed=failed,
+            deleted_paths=deleted_paths,
+            backup_path=backup_path,
+            remaining=remaining,
+            warnings=warnings,
+            dry_run=False,
+            would_fix=None,
+        )
+
+    def _fix_warnings(self) -> list[str]:
+        try:
+            tool_paths = int(self.tool_paths_count)
+        except Exception:
+            return [
+                "cannot determine toolpath count; rebuilding geometry may orphan existing toolpaths"
+            ]
+        if tool_paths > 0:
+            return [
+                f"drawing contains {tool_paths} toolpath(s); "
+                "rebuilding geometry may orphan existing toolpaths"
+            ]
+        return []
+
+    def _backup_drawing(self) -> str:
+        root = os.environ.get("TEMP") or tempfile.gettempdir()
+        name = f"alphacam_lint_backup_{datetime.now().strftime('%Y%m%d-%H%M%S')}.dxf"
+        target = os.path.join(root, name)
+        try:
+            self.export(target, "dxf")
+        except Exception as exc:
+            raise RuntimeError(f"backup failed: {exc}") from exc  # noqa: TRY003
+        return target
+
+    def _remove_path(self, path: CamPath) -> str | None:
+        before = self.geometries_count
+        try:
+            self._delete_geometry(path)
+        except Exception as exc:
+            return f"delete failed: {exc}"
+        if self.geometries_count >= before:
+            return "delete failed: geometry count did not decrease"
+        return None
+
+    def _delete_geometry(self, path: CamPath) -> None:
+        for candidate in self.geometries():
+            with contextlib.suppress(Exception):
+                candidate.selected = False
+        path.selected = True
+        self._drw.DeleteSelected()  # type: ignore[attr-defined]
+
+    def _apply_rebuild(
+        self, old_path: CamPath, segments: list[Segment], closed: bool
+    ) -> str | None:
+        if not segments:
+            return "no segments left"
+        points = [(segments[0].start_x, segments[0].start_y)]
+        points.extend((segment.end_x, segment.end_y) for segment in segments)
+        new_path: CamPath | None = None
+        try:
+            geo = self.create_2d_geometry(points[0][0], points[0][1])
+            for x, y in points[1:]:
+                geo.add_line(x, y)
+            new_path = geo.close_and_finish_line() if closed else geo.finish()
+        except Exception as exc:
+            if new_path is not None:
+                with contextlib.suppress(Exception):
+                    self._delete_geometry(new_path)
+            return f"rebuild failed: {exc}"
+        reason = self._verify_rebuild(new_path, points)
+        if reason is not None:
+            with contextlib.suppress(Exception):
+                self._delete_geometry(new_path)
+            return reason
+        try:
+            self._delete_geometry(old_path)
+        except Exception as exc:
+            with contextlib.suppress(Exception):
+                self._delete_geometry(new_path)
+            return f"delete failed: {exc}"
+        return None
+
+    def _verify_rebuild(self, new_path: CamPath, points: list[tuple[float, float]]) -> str | None:
+        try:
+            segments = new_path.segments()
+        except Exception as exc:
+            return f"verify read failed: {exc}"
+        expected_count = len(points) - 1
+        if len(segments) != expected_count:
+            return f"element count mismatch: {len(segments)} != {expected_count}"
+        vertices = [(segment.start_x, segment.start_y) for segment in segments]
+        vertices.extend((segment.end_x, segment.end_y) for segment in segments)
+        actual_xs = [x for x, _ in vertices]
+        actual_ys = [y for _, y in vertices]
+        expected_xs = [x for x, _ in points]
+        expected_ys = [y for _, y in points]
+        if (
+            abs(min(actual_xs) - min(expected_xs)) > 1e-6
+            or abs(max(actual_xs) - max(expected_xs)) > 1e-6
+            or abs(min(actual_ys) - min(expected_ys)) > 1e-6
+            or abs(max(actual_ys) - max(expected_ys)) > 1e-6
+        ):
+            return "bbox mismatch"
+        expected_length = sum(
+            math.dist(points[position], points[position + 1]) for position in range(len(points) - 1)
+        )
+        actual_length = sum(
+            math.dist((segment.start_x, segment.start_y), (segment.end_x, segment.end_y))
+            for segment in segments
+        )
+        if abs(actual_length - expected_length) > 1e-6:
+            return f"length mismatch: {actual_length} != {expected_length}"
+        return None
+
+    def _restore_scope_selection(self, select_all: bool, paths: list[CamPath]) -> None:
+        if select_all:
+            return
+        with contextlib.suppress(Exception):
+            self._drw.SetGeosSelected(False)  # type: ignore[attr-defined]
+        for path in paths:
+            with contextlib.suppress(Exception):
+                path.selected = True
 
 
 class CamPath:

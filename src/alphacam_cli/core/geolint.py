@@ -19,6 +19,9 @@ ISSUE_TYPES = (
     "layerUnreadable",
     "empty",
 )
+REBUILD_TYPES = ("tiny", "spike", "gap", "nearlyClosed", "nonZeroZ")
+FIXABLE_TYPES = ("duplicates", *REBUILD_TYPES)
+UNFIXABLE_TYPES = ("bigArc", "selfIntersect", "empty", "unreadable", "layerUnreadable")
 _MAX_FLATTEN_PER_ARC = 512
 _ARC_EPS = 1e-9
 _INTERSECT_EPS = 1e-9
@@ -440,3 +443,83 @@ def _mark_duplicates(paths: Sequence[PathInput], reports: Sequence[PathReport]) 
             report.issues.append(
                 Issue("duplicates", -1, head.start_x, head.start_y, float(original))
             )
+
+
+def path_has_arcs(segments: Sequence[Segment]) -> bool:
+    return any(segment.is_arc for segment in segments)
+
+
+def rebuild_segments(
+    segments: Sequence[Segment], thresholds: Thresholds, *, closed: bool
+) -> list[Segment]:
+    th = thresholds
+    working = [segment for segment in segments if not _line_too_short(segment, th)]
+
+    spike_drop: set[int] = set()
+    for position in range(len(working) - 1):
+        if _is_spike(working[position], working[position + 1], th):
+            shorter = (
+                position
+                if working[position].length <= working[position + 1].length
+                else position + 1
+            )
+            spike_drop.add(shorter)
+    if closed and len(working) > 1 and _is_spike(working[-1], working[0], th):
+        spike_drop.add(len(working) - 1 if working[-1].length <= working[0].length else 0)
+    if spike_drop:
+        working = [
+            segment for position, segment in enumerate(working) if position not in spike_drop
+        ]
+
+    for position in range(len(working) - 1):
+        previous = working[position]
+        current = working[position + 1]
+        if (
+            math.dist((previous.end_x, previous.end_y), (current.start_x, current.start_y))
+            > th.gap_tol
+        ):
+            working[position + 1] = _pull_start(current, previous.end_x, previous.end_y)
+    if closed and len(working) > 1:
+        previous = working[-1]
+        current = working[0]
+        if (
+            math.dist((previous.end_x, previous.end_y), (current.start_x, current.start_y))
+            > th.gap_tol
+        ):
+            working[0] = _pull_start(current, previous.end_x, previous.end_y)
+
+    if not closed and len(working) > 1:
+        first = working[0]
+        last = working[-1]
+        distance = math.dist((first.start_x, first.start_y), (last.end_x, last.end_y))
+        if 0.0 < distance < th.nearly_closed_tol:
+            working[-1] = _pull_end(last, first.start_x, first.start_y)
+
+    return [
+        replace(segment, start_z=0.0, end_z=0.0)
+        if segment.start_z != 0.0 or segment.end_z != 0.0
+        else segment
+        for segment in working
+    ]
+
+
+def _line_too_short(segment: Segment, th: Thresholds) -> bool:
+    return segment.length < th.min_length
+
+
+def _is_spike(previous: Segment, current: Segment, th: Thresholds) -> bool:
+    if min(previous.length, current.length) >= th.spike_max_length:
+        return False
+    return _turn_angle(previous, current) > th.spike_turn_deg
+
+
+def _pull_start(segment: Segment, x: float, y: float) -> Segment:
+    length = segment.length if segment.is_arc else math.dist((x, y), (segment.end_x, segment.end_y))
+    return replace(segment, start_x=x, start_y=y, length=length)
+
+
+def _pull_end(segment: Segment, x: float, y: float) -> Segment:
+    length = (
+        segment.length if segment.is_arc else math.dist((segment.start_x, segment.start_y), (x, y))
+    )
+    return replace(segment, end_x=x, end_y=y, length=length)

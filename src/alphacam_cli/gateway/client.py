@@ -260,6 +260,19 @@ class RemoteSession:
             timeout=DRAWING_LINT_CLIENT_TIMEOUT,
         )
 
+    def drawing_lint_fix(
+        self,
+        units: str,
+        select_all: bool = False,
+        dry_run: bool = False,
+        backup: bool = True,
+    ) -> dict[str, Any]:
+        return self._call(  # type: ignore[no-any-return]
+            "drawing_lint_fix",
+            {"all": select_all, "units": units, "dry_run": dry_run, "backup": backup},
+            timeout=DRAWING_LINT_CLIENT_TIMEOUT,
+        )
+
     def drawing_query(self, file: str) -> dict[str, Any]:
         return self._call("drawing_query", {"file": file})  # type: ignore[no-any-return]
 

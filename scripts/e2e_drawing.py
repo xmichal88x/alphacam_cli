@@ -8,6 +8,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -45,8 +46,11 @@ STEP_NAMES = (
     "5. move: ostrzezenie dz",
     "6. lint: jednostki mm",
     "7. lint: jednostki mm vs inch",
-    "8. lint: wymagane --units",
-    "9. lint: pusty rysunek",
+    "8. lint fix: dry-run",
+    "9. lint fix: naprawa",
+    "10. lint fix: czysty rysunek",
+    "11. lint: wymagane --units",
+    "12. lint: pusty rysunek",
 )
 
 Runner = Callable[[Sequence[str], float], "CommandResult"]
@@ -256,6 +260,24 @@ def bbox_shift_matches(
     return bbox_close(expected, after, tol)
 
 
+def parse_geometry_count(text: str) -> int | None:
+    """Extract the geometry count from `drawing info` table output."""
+    match = re.search(r"Geometries\D*?(\d+)", text)
+    return int(match.group(1)) if match else None
+
+
+def _fix_counts(payload: dict[str, Any], key: str) -> dict[str, Any]:
+    value = payload.get(key)
+    return value if isinstance(value, dict) else {}
+
+
+def _fixed_all_zero(payload: dict[str, Any]) -> bool:
+    fixed = payload.get("fixed")
+    if not isinstance(fixed, dict):
+        return False
+    return all(int(count) == 0 for count in fixed.values())
+
+
 def build_ssh_command(config: E2EConfig, remote_command: str) -> list[str]:
     options = ["-o", "ConnectTimeout=15", "-o", "StrictHostKeyChecking=accept-new"]
     if config.ssh_key:
@@ -335,6 +357,14 @@ def _line(
     ]
 
 
+def _closed_polyline(vertices: Sequence[tuple[float, float]]) -> list[str]:
+    polyline = ["0", "POLYLINE", "8", "0", "66", "1", "70", "1"]
+    for x, y in vertices:
+        polyline.extend(["0", "VERTEX", "8", "0", "10", f"{x}", "20", f"{y}", "30", "0.0"])
+    polyline.extend(["0", "SEQEND"])
+    return polyline
+
+
 def defects_dxf_text() -> str:
     polyline = ["0", "POLYLINE", "8", "0", "66", "1", "70", "0"]
     for x, y in ((20000.0, 0.0), (20010.0, 0.0), (20010.1, 0.0), (19965.549674, 22.699525)):
@@ -359,6 +389,7 @@ def defects_dxf_text() -> str:
         *_circle(0.0, 0.0, 1000.0),
         *_line(10000.0, 10000.0, 10000.01, 10000.0),
         *polyline,
+        *_closed_polyline(((0.0, 3000.0), (100.0, 3100.0), (100.0, 3000.0), (0.0, 3100.0))),
         *_line(30000.0, 0.0, 30010.0, 0.0, 5.0, 5.0),
         "0",
         "ENDSEC",
@@ -489,6 +520,47 @@ class E2E:
             raise ScenarioError(f"lint --units {units} did not return JSON")
         return payload
 
+    def _lint_fix_json(self, *, dry_run: bool = False) -> dict[str, Any]:
+        args = ["drawing", "lint", "--all", "--units", "mm", "--fix", "--json"]
+        if dry_run:
+            args.append("--dry-run")
+        label = "lint --fix --dry-run" if dry_run else "lint --fix"
+        result = self._cli(*args)
+        self._require_ok(result, label)
+        payload = parse_json_output(result.stdout)
+        if payload is None:
+            raise ScenarioError(f"{label} did not return JSON")
+        return payload
+
+    def _drawing_info_count(self) -> int:
+        result = self._cli("drawing", "info")
+        self._require_ok(result, "drawing info")
+        count = parse_geometry_count(result.output)
+        if count is None:
+            raise ScenarioError("drawing info did not report geometry count")
+        return count
+
+    def _ssh_test_path(self, remote_path: str) -> bool:
+        escaped = remote_path.replace("'", "''")
+        command = f"powershell -NoProfile -Command \"Test-Path -LiteralPath '{escaped}'\""
+        result = self._ssh(command)
+        self._require_ok(result, "Test-Path")
+        return result.stdout.strip().lower().startswith("true")
+
+    def _import_defects(self) -> str:
+        local_defects = self.local_dir / "defects.dxf"
+        local_defects.write_text(defects_dxf_text(), encoding="utf-8")
+        remote_defects = self._remote_win("defects.dxf")
+        self._require_ok(
+            self._scp_upload(local_defects, remote_defects),
+            "upload defects.dxf",
+        )
+        self._require_ok(
+            self._cli("drawing", "import", remote_defects, "--fmt", "dxf"),
+            "drawing import defects.dxf",
+        )
+        return remote_defects
+
     def _step_preflight(self) -> str:
         result = self._cli("health", "health", timeout=SETUP_TIMEOUT)
         self._require_ok(result, "health")
@@ -567,17 +639,7 @@ class E2E:
         return "flagged=0"
 
     def _step_defects(self) -> str:
-        local_defects = self.local_dir / "defects.dxf"
-        local_defects.write_text(defects_dxf_text(), encoding="utf-8")
-        remote_defects = self._remote_win("defects.dxf")
-        self._require_ok(
-            self._scp_upload(local_defects, remote_defects),
-            "upload defects.dxf",
-        )
-        self._require_ok(
-            self._cli("drawing", "import", remote_defects, "--fmt", "dxf"),
-            "drawing import defects.dxf",
-        )
+        self._import_defects()
 
         mm = self._lint_json("mm")
         inch = self._lint_json("inch")
@@ -593,6 +655,8 @@ class E2E:
             checks.append(f"mm nonZeroZ!=1 ({mm_counts})")
         if int(mm_counts.get("duplicates", 0)) != 1:
             checks.append(f"mm duplicates!=1 ({mm_counts})")
+        if int(mm_counts.get("selfIntersect", 0)) < 1:
+            checks.append(f"mm selfIntersect<1 ({mm_counts})")
         if "bigArc" in mm_counts:
             checks.append(f"mm bigArc present ({mm_counts})")
         if int(inch_counts.get("bigArc", 0)) != 2:
@@ -604,6 +668,80 @@ class E2E:
         if checks:
             raise ScenarioError("; ".join(checks))
         return f"mm={mm_counts}; inch={inch_counts}"
+
+    def _step_lint_fix_dry_run(self) -> str:
+        before = self._drawing_info_count()
+        payload = self._lint_fix_json(dry_run=True)
+        if not _fixed_all_zero(payload):
+            raise ScenarioError(f"dry-run fixed not all zero: {payload.get('fixed')!r}")
+        if payload.get("backup") is not None:
+            raise ScenarioError(f"dry-run created backup: {payload.get('backup')!r}")
+        would_fix = _fix_counts(payload, "would_fix")
+        checks = [
+            f"{name}<1"
+            for name in ("duplicates", "tiny", "spike")
+            if int(would_fix.get(name, 0)) < 1
+        ]
+        if checks:
+            raise ScenarioError(f"dry-run would_fix too low ({would_fix}): {', '.join(checks)}")
+        after = self._drawing_info_count()
+        if after != before:
+            raise ScenarioError(f"dry-run changed geometry count: before={before}, after={after}")
+        return f"would_fix={would_fix}, geometrie {before} -> {after}"
+
+    def _step_lint_fix(self) -> str:
+        payload = self._lint_fix_json()
+        failed = payload.get("failed")
+        if failed != []:
+            raise ScenarioError(f"fix reported failures: {failed!r}")
+        deleted_paths = payload.get("deleted_paths")
+        if not isinstance(deleted_paths, list) or not deleted_paths:
+            raise ScenarioError(f"deleted_paths empty: {deleted_paths!r}")
+        fixed = _fix_counts(payload, "fixed")
+        checks = [
+            f"{name}<1"
+            for name in ("duplicates", "tiny", "spike", "nonZeroZ")
+            if int(fixed.get(name, 0)) < 1
+        ]
+        if checks:
+            raise ScenarioError(f"fixed too low ({fixed}): {', '.join(checks)}")
+        backup = payload.get("backup")
+        if not isinstance(backup, str) or not backup.strip():
+            raise ScenarioError(f"backup path missing: {backup!r}")
+        if not self._ssh_test_path(backup):
+            raise ScenarioError(f"backup does not exist on VM: {backup}")
+        skipped = payload.get("skipped")
+        skip_types = {
+            str(issue_type)
+            for entry in (skipped if isinstance(skipped, list) else [])
+            if isinstance(entry, dict)
+            for issue_type in (entry.get("types") or [])
+        }
+        if "selfIntersect" not in skip_types:
+            raise ScenarioError(f"skipped does not contain selfIntersect: {skipped!r}")
+
+        remaining = _fix_counts(self._lint_json("mm"), "issues_by_type")
+        unexpected = sorted(name for name in remaining if name != "selfIntersect")
+        if unexpected:
+            raise ScenarioError(f"unfixable issues remain after fix: {remaining}")
+        return (
+            f"fixed={fixed}, deleted_paths={deleted_paths}, backup={backup}, remaining={remaining}"
+        )
+
+    def _step_lint_fix_clean(self) -> str:
+        self._require_ok(
+            self._cli("drawing", "create", "-w", "100", "-h", "50", "--fillet", "10"),
+            "drawing create --fillet",
+        )
+        payload = self._lint_fix_json()
+        if not _fixed_all_zero(payload):
+            raise ScenarioError(f"clean fix fixed not all zero: {payload.get('fixed')!r}")
+        if payload.get("backup") is not None:
+            raise ScenarioError(f"clean fix created backup: {payload.get('backup')!r}")
+        deleted_paths = payload.get("deleted_paths")
+        if deleted_paths:
+            raise ScenarioError(f"clean fix deleted paths: {deleted_paths!r}")
+        return "fixed same zera, backup=null, deleted_paths=[]"
 
     def _step_units_required(self) -> str:
         result = self._cli("drawing", "lint", "--all")
@@ -676,7 +814,7 @@ class E2E:
         )
 
     def _record_dry_run(self) -> None:
-        for name in (*STEP_NAMES, "10. cleanup"):
+        for name in (*STEP_NAMES, "13. cleanup"):
             self.results.append(StepResult(name, DRY, 0.0, "dry-run: nie wykonano"))
 
     def run(self) -> int:
@@ -704,8 +842,11 @@ class E2E:
                 ("5. move: ostrzezenie dz", self._step_dz),
                 ("6. lint: jednostki mm", self._step_lint_mm),
                 ("7. lint: jednostki mm vs inch", self._step_defects),
-                ("8. lint: wymagane --units", self._step_units_required),
-                ("9. lint: pusty rysunek", self._step_empty),
+                ("8. lint fix: dry-run", self._step_lint_fix_dry_run),
+                ("9. lint fix: naprawa", self._step_lint_fix),
+                ("10. lint fix: czysty rysunek", self._step_lint_fix_clean),
+                ("11. lint: wymagane --units", self._step_units_required),
+                ("12. lint: pusty rysunek", self._step_empty),
             ):
                 self._run_step(name, step)
             if any(result.status == FAIL for result in self.results):
@@ -721,7 +862,7 @@ class E2E:
             )
             exit_code = EXIT_FAIL
         finally:
-            self._run_step("10. cleanup", self._step_cleanup)
+            self._run_step("13. cleanup", self._step_cleanup)
         return exit_code
 
 

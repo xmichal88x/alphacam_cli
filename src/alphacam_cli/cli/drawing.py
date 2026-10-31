@@ -90,6 +90,76 @@ def _resolve_fmt(path: str, fmt: str) -> str:
     return ext
 
 
+def _print_fix_result(result: dict[str, Any]) -> None:
+    backup = result.get("backup")
+    console.print(f"Backup: {backup}" if backup else "Backup: (none)")
+
+    fixed: dict[str, Any] = result.get("fixed", {})
+    repaired = Table(title="Fixed")
+    repaired.add_column("Issue type", style="cyan")
+    repaired.add_column("Count", style="green", justify="right")
+    has_fixed = False
+    for name, count in fixed.items():
+        if int(count) > 0:
+            repaired.add_row(str(name), str(count))
+            has_fixed = True
+    if not has_fixed:
+        repaired.add_row("(none)", "0")
+    console.print(repaired)
+
+    would_fix: dict[str, Any] = result.get("would_fix", {})
+    if would_fix:
+        planned = Table(title="Would fix (dry run)")
+        planned.add_column("Issue type", style="cyan")
+        planned.add_column("Count", style="yellow", justify="right")
+        for name, count in would_fix.items():
+            if int(count) > 0:
+                planned.add_row(str(name), str(count))
+        console.print(planned)
+
+    skipped: list[dict[str, Any]] = result.get("skipped", [])
+    if skipped:
+        skipped_table = Table(title="Skipped")
+        skipped_table.add_column("Path", style="magenta", justify="right")
+        skipped_table.add_column("Types", style="cyan")
+        skipped_table.add_column("Reason", style="yellow")
+        for entry in skipped:
+            skipped_table.add_row(
+                str(entry.get("index", "")),
+                ", ".join(str(item) for item in entry.get("types", [])),
+                str(entry.get("reason", "")),
+            )
+        console.print(skipped_table)
+
+    failed: list[dict[str, Any]] = result.get("failed", [])
+    if failed:
+        failed_table = Table(title="Failed")
+        failed_table.add_column("Path", style="magenta", justify="right")
+        failed_table.add_column("Types", style="cyan")
+        failed_table.add_column("Reason", style="red")
+        for entry in failed:
+            failed_table.add_row(
+                str(entry.get("index", "")),
+                ", ".join(str(item) for item in entry.get("types", [])),
+                str(entry.get("reason", "")),
+            )
+        console.print(failed_table)
+
+    remaining: dict[str, Any] = result.get("remaining", {})
+    remaining_table = Table(title="Remaining issues")
+    remaining_table.add_column("Issue type", style="cyan")
+    remaining_table.add_column("Count", style="green", justify="right")
+    if remaining:
+        for name, count in remaining.items():
+            remaining_table.add_row(str(name), str(count))
+    else:
+        remaining_table.add_row("(none)", "0")
+    console.print(remaining_table)
+
+    for warning in result.get("warnings", []):
+        console.print(f"[yellow]Warning:[/yellow] {warning}")
+
+
 @app.command()
 @handle_com_errors
 def create(
@@ -240,6 +310,11 @@ def lint(
     all_: bool = typer.Option(False, "--all", help="Scan all geometries instead of selection"),
     units: str = typer.Option(..., "--units", help="Required: mm|inch (threshold scaling)"),
     json_out: bool = typer.Option(False, "--json", help="Output deterministic JSON"),
+    fix: bool = typer.Option(False, "--fix", help="Repair fixable defects in place"),
+    dry_run: bool = typer.Option(False, "--dry-run", help="With --fix: plan only, no changes"),
+    no_backup: bool = typer.Option(
+        False, "--no-backup", help="With --fix: skip the DXF backup export"
+    ),
 ) -> None:
     """Read-only geometry analysis for defects that break machining/NC."""
     require_platform()
@@ -256,7 +331,15 @@ def lint(
             failure = "No active drawing"
         else:
             try:
-                result = drw.lint(select_all=all_, units=units)
+                if fix:
+                    result = drw.lint_fix(
+                        select_all=all_,
+                        units=units,
+                        dry_run=dry_run,
+                        backup=not no_backup,
+                    )
+                else:
+                    result = drw.lint(select_all=all_, units=units)
             except RuntimeError as e:
                 failure = str(e)
 
@@ -269,6 +352,10 @@ def lint(
 
     if json_out:
         typer.echo(json.dumps(result, sort_keys=True))
+        return
+
+    if fix:
+        _print_fix_result(result)
         return
 
     console.print(f"Scanned: {result.get('scanned', 0)} paths, flagged: {result.get('flagged', 0)}")

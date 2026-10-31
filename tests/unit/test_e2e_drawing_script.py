@@ -5,6 +5,8 @@ from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
 
+import pytest
+
 from scripts import e2e_drawing as e2e
 
 BEFORE_DXF = """0
@@ -84,20 +86,85 @@ class ExplodingRunner:
 class HappyHandler:
     def __init__(self) -> None:
         self.lint_index = 0
+        self.fix_index = 0
+        self.info_counts: list[int] = [7, 7]
+        self.backup_exists = True
         self.lint_payloads = [
             {"flagged": 0, "issues_by_type": {}},
             {
-                "flagged": 3,
-                "issues_by_type": {"tiny": 1, "spike": 1, "nonZeroZ": 1, "duplicates": 1},
+                "flagged": 6,
+                "scanned": 7,
+                "issues_by_type": {
+                    "tiny": 1,
+                    "spike": 1,
+                    "nonZeroZ": 1,
+                    "duplicates": 1,
+                    "nearlyClosed": 1,
+                    "selfIntersect": 1,
+                },
             },
             {"flagged": 2, "issues_by_type": {"bigArc": 2}},
+            {"scanned": 6, "issues_by_type": {"selfIntersect": 1}},
             {"flagged": 0, "scanned": 0, "issues_by_type": {}},
         ]
+        self.dry_run_payload = {
+            "success": True,
+            "units": "mm",
+            "fixed": _zero_fixed(),
+            "skipped": [],
+            "failed": [],
+            "deleted_paths": [],
+            "backup": None,
+            "remaining": {"tiny": 1, "spike": 1, "nonZeroZ": 1, "duplicates": 1},
+            "warnings": [],
+            "would_fix": {
+                "duplicates": 1,
+                "tiny": 1,
+                "spike": 1,
+                "gap": 0,
+                "nearlyClosed": 1,
+                "nonZeroZ": 1,
+            },
+        }
+        self.fix_payload = {
+            "success": True,
+            "units": "mm",
+            "fixed": {
+                "duplicates": 1,
+                "tiny": 1,
+                "spike": 1,
+                "gap": 0,
+                "nearlyClosed": 1,
+                "nonZeroZ": 1,
+            },
+            "skipped": [{"index": 6, "types": ["selfIntersect"], "reason": "no automatic fix"}],
+            "failed": [],
+            "deleted_paths": [4],
+            "backup": "C:\\Temp\\alphacam_lint_backup_20261031-000000.dxf",
+            "remaining": {"selfIntersect": 1},
+            "warnings": [],
+        }
+        self.clean_fix_payload = {
+            "success": True,
+            "units": "mm",
+            "fixed": _zero_fixed(),
+            "skipped": [],
+            "failed": [],
+            "deleted_paths": [],
+            "backup": None,
+            "remaining": {},
+            "warnings": [],
+        }
 
     def __call__(self, call: list[str]) -> e2e.CommandResult:
         joined = " ".join(call)
         if "health health" in joined:
             return _result(call, stdout=HEALTH_OK)
+        if "Test-Path" in joined:
+            return _result(call, stdout="True\n" if self.backup_exists else "False\n")
+        if "drawing info" in joined:
+            count = self.info_counts.pop(0) if self.info_counts else 7
+            return _result(call, stdout=f" Active Drawing \n Geometries: {count}\n")
         if "drawing move" in joined:
             if "nan" in joined:
                 return _result(call, 1, stderr="Error: --dx must be a finite number")
@@ -107,6 +174,12 @@ class HappyHandler:
         if "drawing lint" in joined:
             if "--units" not in joined:
                 return _result(call, 2, stderr="Missing option '--units'.")
+            if "--fix" in call:
+                if "--dry-run" in call:
+                    return _result(call, 0, stdout=json.dumps(self.dry_run_payload))
+                self.fix_index += 1
+                payload = self.fix_payload if self.fix_index == 1 else self.clean_fix_payload
+                return _result(call, 0, stdout=json.dumps(payload))
             if "--all" not in joined:
                 return _result(call, 1, stderr="No selected geometries")
             payload = self.lint_payloads[self.lint_index % len(self.lint_payloads)]
@@ -121,6 +194,10 @@ class HappyHandler:
                 Path(destination).write_text(content, encoding="utf-8")
             return _result(call)
         return _result(call)
+
+
+def _zero_fixed() -> dict[str, int]:
+    return {"duplicates": 0, "tiny": 0, "spike": 0, "gap": 0, "nearlyClosed": 0, "nonZeroZ": 0}
 
 
 def _failing_handler(call: list[str]) -> e2e.CommandResult:
@@ -321,7 +398,7 @@ def test_full_scenario_passes(tmp_path: Path) -> None:
 
     assert scenario.run() == e2e.EXIT_OK
     assert all(result.status == e2e.PASS for result in scenario.results)
-    assert e2e.format_summary(scenario.results) == "10/10 PASS"
+    assert e2e.format_summary(scenario.results) == "13/13 PASS"
     assert any("rmdir /s /q" in call for call in runner.joined())
     assert not scenario.local_dir.exists()
 
@@ -336,7 +413,7 @@ def test_cleanup_runs_after_failure(tmp_path: Path) -> None:
     assert scenario.run() == e2e.EXIT_FAIL
     statuses = {result.name: result.status for result in scenario.results}
     assert statuses["2. move: przesuniecie"] == e2e.FAIL
-    assert statuses["10. cleanup"] == e2e.PASS
+    assert statuses["13. cleanup"] == e2e.PASS
     assert any("rmdir /s /q" in call for call in runner.joined())
     assert not scenario.local_dir.exists()
 
@@ -357,3 +434,144 @@ def test_preflight_failure_returns_exit_2(tmp_path: Path) -> None:
     statuses = {result.name: result.status for result in scenario.results}
     assert statuses["1. preflight"] == e2e.FAIL
     assert "2. move: przesuniecie" not in statuses
+
+
+def _run_handler(handler: HappyHandler, tmp_path: Path) -> e2e.E2E:
+    scenario = e2e.E2E(
+        e2e.E2EConfig(workdir=tmp_path, cli="alphacam", timeout=5.0),
+        runner=ScriptedRunner(handler),
+    )
+    scenario.run()
+    return scenario
+
+
+def _status(scenario: e2e.E2E, name: str) -> str:
+    return {result.name: result.status for result in scenario.results}[name]
+
+
+def test_parse_geometry_count_from_info_table() -> None:
+    assert e2e.parse_geometry_count("| Geometries | 7 |") == 7
+    assert e2e.parse_geometry_count(" Geometries: 12\n") == 12
+    assert e2e.parse_geometry_count("Active Drawing") is None
+
+
+def _polylines(text: str) -> list[dict[str, Any]]:
+    polylines: list[dict[str, Any]] = []
+    current: dict[str, Any] | None = None
+    for code, value in e2e._dxf_pairs(text):
+        if code == "0" and value == "POLYLINE":
+            current = {"flags": [], "vertices": []}
+            polylines.append(current)
+            continue
+        if current is None:
+            continue
+        if code == "0" and value == "SEQEND":
+            current = None
+            continue
+        if code == "70":
+            current["flags"].append(int(value))
+        elif code == "10":
+            current["vertices"].append([float(value), None])
+        elif code == "20" and current["vertices"]:
+            current["vertices"][-1][1] = float(value)
+    return polylines
+
+
+def test_defects_dxf_contains_closed_self_intersecting_polyline() -> None:
+    polylines = _polylines(e2e.defects_dxf_text())
+    closed = [poly for poly in polylines if 1 in poly["flags"]]
+
+    assert len(closed) == 1
+    assert closed[0]["vertices"] == [
+        [0.0, 3000.0],
+        [100.0, 3100.0],
+        [100.0, 3000.0],
+        [0.0, 3100.0],
+    ]
+
+
+def test_defects_step_fails_without_self_intersect_in_mm(tmp_path: Path) -> None:
+    handler = HappyHandler()
+    del handler.lint_payloads[1]["issues_by_type"]["selfIntersect"]
+    scenario = _run_handler(handler, tmp_path)
+
+    assert _status(scenario, "7. lint: jednostki mm vs inch") == e2e.FAIL
+    assert "selfIntersect" in scenario.results[6].detail
+
+
+def test_fix_steps_pass_with_self_intersect_remaining(tmp_path: Path) -> None:
+    scenario = _run_handler(HappyHandler(), tmp_path)
+
+    assert _status(scenario, "8. lint fix: dry-run") == e2e.PASS
+    assert _status(scenario, "9. lint fix: naprawa") == e2e.PASS
+    assert _status(scenario, "10. lint fix: czysty rysunek") == e2e.PASS
+
+
+def test_dry_run_geometry_change_fails(tmp_path: Path) -> None:
+    handler = HappyHandler()
+    handler.info_counts = [7, 8]
+    scenario = _run_handler(handler, tmp_path)
+
+    assert _status(scenario, "8. lint fix: dry-run") == e2e.FAIL
+    assert "geometry count" in scenario.results[7].detail
+
+
+def test_dry_run_nonzero_fixed_fails(tmp_path: Path) -> None:
+    handler = HappyHandler()
+    handler.dry_run_payload["fixed"]["tiny"] = 1
+    scenario = _run_handler(handler, tmp_path)
+
+    assert _status(scenario, "8. lint fix: dry-run") == e2e.FAIL
+
+
+@pytest.mark.parametrize("name", ["duplicates", "tiny", "spike"])
+def test_dry_run_would_fix_below_one_fails(name: str, tmp_path: Path) -> None:
+    handler = HappyHandler()
+    handler.dry_run_payload["would_fix"][name] = 0
+    scenario = _run_handler(handler, tmp_path)
+
+    assert _status(scenario, "8. lint fix: dry-run") == e2e.FAIL
+
+
+@pytest.mark.parametrize("name", ["duplicates", "tiny", "spike", "nonZeroZ"])
+def test_fix_fixed_below_one_fails(name: str, tmp_path: Path) -> None:
+    handler = HappyHandler()
+    handler.fix_payload["fixed"][name] = 0
+    scenario = _run_handler(handler, tmp_path)
+
+    assert _status(scenario, "9. lint fix: naprawa") == e2e.FAIL
+
+
+@pytest.mark.parametrize("name", ["tiny", "spike", "nonZeroZ", "duplicates", "nearlyClosed"])
+def test_unfixable_issue_remaining_after_fix_fails(name: str, tmp_path: Path) -> None:
+    handler = HappyHandler()
+    handler.lint_payloads[3] = {"scanned": 6, "issues_by_type": {"selfIntersect": 1, name: 1}}
+    scenario = _run_handler(handler, tmp_path)
+
+    assert _status(scenario, "9. lint fix: naprawa") == e2e.FAIL
+    assert name in scenario.results[8].detail
+
+
+def test_self_intersect_remaining_after_fix_is_tolerated(tmp_path: Path) -> None:
+    handler = HappyHandler()
+    handler.lint_payloads[3] = {"scanned": 6, "issues_by_type": {"selfIntersect": 1}}
+    scenario = _run_handler(handler, tmp_path)
+
+    assert _status(scenario, "9. lint fix: naprawa") == e2e.PASS
+
+
+def test_missing_backup_on_vm_fails(tmp_path: Path) -> None:
+    handler = HappyHandler()
+    handler.backup_exists = False
+    scenario = _run_handler(handler, tmp_path)
+
+    assert _status(scenario, "9. lint fix: naprawa") == e2e.FAIL
+    assert "backup does not exist" in scenario.results[8].detail
+
+
+def test_clean_fix_with_nonzero_fixed_fails(tmp_path: Path) -> None:
+    handler = HappyHandler()
+    handler.clean_fix_payload["fixed"]["tiny"] = 1
+    scenario = _run_handler(handler, tmp_path)
+
+    assert _status(scenario, "10. lint fix: czysty rysunek") == e2e.FAIL

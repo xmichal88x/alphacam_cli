@@ -1029,6 +1029,33 @@ class GatewayServer:
         finally:
             watchdog.cancel()
 
+    def _handler_drawing_lint_fix(self, params: dict[str, Any]) -> dict[str, Any]:
+        from alphacam_cli.gateway.server import _app as com_app
+
+        select_all = _as_bool(params.get("all"))
+        units = params.get("units")
+        if not isinstance(units, str) or not units:
+            raise RequestError("units is required (mm|inch)")
+        if units not in ("mm", "inch"):
+            raise RequestError("units must be 'mm' or 'inch'")
+        dry_run = _as_bool(params.get("dry_run"))
+        backup = _as_bool(params.get("backup", True))
+        watchdog = self._watchdog_arm(DRAWING_LINT_SERVER_WATCHDOG, "drawing_lint_fix")
+        try:
+            drw = com_app.get_active_drawing()
+            if drw is None:
+                raise RequestError("No active drawing")
+            try:
+                return drw.lint_fix(  # type: ignore[no-any-return]
+                    select_all=select_all, units=units, dry_run=dry_run, backup=backup
+                )
+            except RuntimeError as e:
+                raise RequestError(str(e)) from e
+            except Exception as e:
+                raise COMError(str(e)) from e
+        finally:
+            watchdog.cancel()
+
     def _handler_drawing_query(self, params: dict[str, Any]) -> dict[str, Any]:
         from alphacam_cli.gateway.server import _app as com_app
 
