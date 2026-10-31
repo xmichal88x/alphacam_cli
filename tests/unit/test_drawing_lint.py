@@ -13,9 +13,9 @@ from typer.testing import CliRunner
 from alphacam_cli.cli.drawing import _lint_rows
 from alphacam_cli.core.drawing import CamPath, Drawing
 from alphacam_cli.core.geolint import LintBudgetExceeded, Thresholds
-from alphacam_cli.gateway.client import RemoteSession
-from alphacam_cli.gateway.remote import _DrawingProxy
-from alphacam_cli.gateway.server import COMError, GatewayServer
+from alphacam_cli.gateway.client import RemoteProtocolError, RemoteSession
+from alphacam_cli.gateway.remote import RemoteApplication, _DrawingProxy
+from alphacam_cli.gateway.server import GatewayServer, RequestError
 from alphacam_cli.main import app
 
 runner = CliRunner()
@@ -837,20 +837,20 @@ def test_handler_drawing_lint_returns_payload(server_app: MagicMock) -> None:
 def test_handler_drawing_lint_no_drawing(server_app: MagicMock) -> None:
     server_app.get_active_drawing.return_value = None
 
-    with pytest.raises(COMError, match="No active drawing"):
+    with pytest.raises(RequestError, match="No active drawing"):
         GatewayServer()._handler_drawing_lint({"all": False, "units": "mm"})
 
 
 @pytest.mark.parametrize("params", [{}, {"units": None}, {"units": ""}, {"units": 1}])
 def test_handler_drawing_lint_requires_units(server_app: MagicMock, params: dict[str, Any]) -> None:
-    with pytest.raises(COMError, match=r"units is required \(mm\|inch\)"):
+    with pytest.raises(RequestError, match=r"units is required \(mm\|inch\)"):
         GatewayServer()._handler_drawing_lint(params)
 
     server_app.get_active_drawing.assert_not_called()
 
 
 def test_handler_drawing_lint_rejects_unknown_units(server_app: MagicMock) -> None:
-    with pytest.raises(COMError, match="units must be"):
+    with pytest.raises(RequestError, match="units must be"):
         GatewayServer()._handler_drawing_lint({"units": "cm"})
 
     server_app.get_active_drawing.assert_not_called()
@@ -861,7 +861,7 @@ def test_handler_drawing_lint_wraps_error(server_app: MagicMock) -> None:
     drw.lint.side_effect = RuntimeError("No selected geometries")
     server_app.get_active_drawing.return_value = drw
 
-    with pytest.raises(COMError, match="No selected geometries"):
+    with pytest.raises(RequestError, match="No selected geometries"):
         GatewayServer()._handler_drawing_lint({"all": False, "units": "mm"})
 
 
@@ -884,3 +884,21 @@ def test_remote_proxy_lint_returns_payload() -> None:
 
     assert proxy.lint(True, units="inch") == _PAYLOAD
     session.drawing_lint.assert_called_once_with("inch", True)
+
+
+def test_cli_drawing_lint_remote_request_error_exits_1() -> None:
+    session = RemoteSession()
+
+    def fake_call(method: str, params: Any = None, timeout: float | None = None) -> Any:
+        if method == "drawing_lint":
+            raise RemoteProtocolError(  # noqa: TRY003
+                "JSON-RPC error (-32600): No selected geometries"
+            )
+        return {"geometries_count": 0, "tool_paths_count": 0}
+
+    session._call = MagicMock(side_effect=fake_call)  # type: ignore[method-assign]
+
+    result = _invoke(RemoteApplication(session), ["--units", "mm"])
+
+    assert result.exit_code == 1
+    assert "No selected geometries" in result.stderr

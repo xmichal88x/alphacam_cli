@@ -299,6 +299,10 @@ class COMError(Exception):
     pass
 
 
+class RequestError(Exception):
+    """Invalid request: bad parameter value, missing selection, no active drawing."""
+
+
 def _require_sheet(sheet: Any, sheet_name: str, ctx: str) -> Any:
     if sheet is None:
         raise COMError(f"{ctx}: sheet from library not found: {sheet_name}")
@@ -536,6 +540,9 @@ class GatewayServer:
             return make_error(METHOD_NOT_FOUND, f"Method not found: {method}", msg_id)
         try:
             result = self._com_call(lambda: handler(params), method)
+        except RequestError as e:
+            self._logger.warning("Request error handling '%s': %s", method, e)
+            return make_error(INVALID_REQUEST, str(e), msg_id)
         except COMError as e:
             self._logger.exception("COM error handling '%s'", method)
             return make_error(COM_ERROR, str(e), msg_id)
@@ -958,32 +965,34 @@ class GatewayServer:
 
         dx_raw = params.get("dx")
         if dx_raw is None:
-            raise COMError("dx is required")
+            raise RequestError("dx is required")
         dy_raw = params.get("dy")
         if dy_raw is None:
-            raise COMError("dy is required")
+            raise RequestError("dy is required")
         dz_raw = params.get("dz")
 
         def to_float(name: str, raw: Any) -> float:
             try:
                 return float(raw)
             except (TypeError, ValueError) as e:
-                raise COMError(f"{name} must be a number") from e
+                raise RequestError(f"{name} must be a number") from e
 
         dx = to_float("dx", dx_raw)
         dy = to_float("dy", dy_raw)
         dz = 0.0 if dz_raw is None else to_float("dz", dz_raw)
         for name, value in (("dx", dx), ("dy", dy), ("dz", dz)):
             if not math.isfinite(value):
-                raise COMError(f"{name} must be a finite number")
+                raise RequestError(f"{name} must be a finite number")
         select_all = _as_bool(params.get("all"))
         watchdog = self._watchdog_arm(DRAWING_MOVE_SERVER_WATCHDOG, "drawing_move")
         try:
             drw = com_app.get_active_drawing()
             if drw is None:
-                raise COMError("No active drawing")
+                raise RequestError("No active drawing")
             try:
                 move_result = drw.move(dx, dy, dz, select_all=select_all)
+            except RuntimeError as e:
+                raise RequestError(str(e)) from e
             except Exception as e:
                 raise COMError(str(e)) from e
             return {
@@ -1003,16 +1012,18 @@ class GatewayServer:
         select_all = _as_bool(params.get("all"))
         units = params.get("units")
         if not isinstance(units, str) or not units:
-            raise COMError("units is required (mm|inch)")
+            raise RequestError("units is required (mm|inch)")
         if units not in ("mm", "inch"):
-            raise COMError("units must be 'mm' or 'inch'")
+            raise RequestError("units must be 'mm' or 'inch'")
         watchdog = self._watchdog_arm(DRAWING_LINT_SERVER_WATCHDOG, "drawing_lint")
         try:
             drw = com_app.get_active_drawing()
             if drw is None:
-                raise COMError("No active drawing")
+                raise RequestError("No active drawing")
             try:
                 return drw.lint(select_all=select_all, units=units)  # type: ignore[no-any-return]
+            except RuntimeError as e:
+                raise RequestError(str(e)) from e
             except Exception as e:
                 raise COMError(str(e)) from e
         finally:
@@ -1041,7 +1052,7 @@ class GatewayServer:
         try:
             job_name = _validate_job_name(job_name)
         except RuntimeError as exc:
-            raise COMError(str(exc)) from None
+            raise RequestError(str(exc)) from None
         config = str(params.get("config", "") or "").strip() or None
         material = str(params.get("material", "") or "").strip() or None
         customer = str(params.get("customer", "") or "").strip() or None
@@ -1063,7 +1074,7 @@ class GatewayServer:
             try:
                 _validate_due_date(due_date)
             except RuntimeError as exc:
-                raise COMError(str(exc)) from None
+                raise RequestError(str(exc)) from None
         from alphacam_cli.gateway.server import _app as com_app
 
         create_kwargs: dict[str, Any] = {
@@ -1096,7 +1107,7 @@ class GatewayServer:
         try:
             job_name = _validate_job_name(job_name)
         except RuntimeError as exc:
-            raise COMError(str(exc)) from None
+            raise RequestError(str(exc)) from None
         timeout_seconds = params.get("timeout_seconds")
         if timeout_seconds is not None and (
             not isinstance(timeout_seconds, int)
@@ -1174,7 +1185,7 @@ class GatewayServer:
                 try:
                     _validate_job_name(value)
                 except RuntimeError as exc:
-                    raise COMError(str(exc)) from None
+                    raise RequestError(str(exc)) from None
         separator_param = params.get("separator")
         separator = str(separator_param or "") or None
         has_header = _as_bool(params.get("has_header"))
@@ -1226,7 +1237,7 @@ class GatewayServer:
                 try:
                     _validate_job_name(value)
                 except RuntimeError as exc:
-                    raise COMError(str(exc)) from None
+                    raise RequestError(str(exc)) from None
         separator_param = params.get("separator")
         separator = str(separator_param or "") or None
         has_header = _as_bool(params.get("has_header"))
@@ -1291,7 +1302,7 @@ class GatewayServer:
             try:
                 job_name = _validate_job_name(job_name)
             except RuntimeError as exc:
-                raise COMError(str(exc)) from None
+                raise RequestError(str(exc)) from None
         try:
             return {"order_details": cdm_db.order_details(job_name), "job_name": job_name}
         except Exception as e:
@@ -1446,7 +1457,7 @@ class GatewayServer:
         try:
             job_name = _validate_job_name(job_name)
         except RuntimeError as exc:
-            raise COMError(str(exc)) from None
+            raise RequestError(str(exc)) from None
         material = str(params.get("material")) if params.get("material") else None
         data_dir = _require_windows_abs_path(params.get("data_dir"), "data_dir")
         nc_root = _require_windows_abs_path(params.get("nc_root"), "nc_root")
@@ -1496,7 +1507,7 @@ class GatewayServer:
         try:
             job_name = _validate_job_name(job_name)
         except RuntimeError as exc:
-            raise COMError(str(exc)) from None
+            raise RequestError(str(exc)) from None
         from alphacam_cli.gateway.server import _app as com_app
 
         try:

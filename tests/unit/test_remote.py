@@ -10,6 +10,7 @@ from alphacam_cli.gateway.client import (
     RemoteComError,
     RemoteConnectionError,
     RemoteProtocolError,
+    RemoteServerError,
     RemoteSession,
 )
 from alphacam_cli.gateway.remote import (
@@ -1340,7 +1341,7 @@ def test_call_com_error_maps_to_remote_com_error_with_hresult(
     assert str(exc_info.value) == "COM failed"
 
 
-def test_call_internal_error_maps_to_remote_com_error_without_hresult(
+def test_call_internal_error_maps_to_remote_server_error(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     session = RemoteSession()
@@ -1351,10 +1352,18 @@ def test_call_internal_error_maps_to_remote_com_error_without_hresult(
         lambda _sock: {"id": 1, "error": {"code": -32603, "message": "Internal error"}},
     )
 
-    with pytest.raises(RemoteComError) as exc_info:
+    with pytest.raises(RemoteServerError) as exc_info:
         session._call("ping")
 
-    assert exc_info.value.hresult is None
+    assert str(exc_info.value) == "Internal error"
+    assert not isinstance(exc_info.value, AlphacamComError)
+    assert not isinstance(exc_info.value, AlphacamConnectionError)
+
+
+def test_remote_server_error_is_exported_from_gateway_package() -> None:
+    from alphacam_cli.gateway import RemoteServerError as Exported
+
+    assert Exported is RemoteServerError
 
 
 @pytest.mark.parametrize("code", [-32601, -32600, -32700, 12345])

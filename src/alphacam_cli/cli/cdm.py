@@ -1379,7 +1379,7 @@ def stock_material_add_cmd(
     except AlphacamComError as e:
         console.print(f"[red]COM Error:[/red] {e}")
         if e.hresult:
-            console.print(f"      HRESULT: [yellow]0x{e.hresult:08X}[/yellow]")
+            console.print(f"      HRESULT: [yellow]0x{e.hresult & 0xFFFFFFFF:08X}[/yellow]")
         console.print("      [dim]Try restarting AlphaCAM or check the connection.[/dim]")
         raise typer.Exit(code=4) from e
     except AlphacamConnectionError as e:
@@ -1424,7 +1424,7 @@ def stock_material_delete_cmd(
     except AlphacamComError as e:
         console.print(f"[red]COM Error:[/red] {e}")
         if e.hresult:
-            console.print(f"      HRESULT: [yellow]0x{e.hresult:08X}[/yellow]")
+            console.print(f"      HRESULT: [yellow]0x{e.hresult & 0xFFFFFFFF:08X}[/yellow]")
         console.print("      [dim]Try restarting AlphaCAM or check the connection.[/dim]")
         raise typer.Exit(code=4) from e
     except AlphacamConnectionError as e:

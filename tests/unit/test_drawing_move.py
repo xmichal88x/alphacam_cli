@@ -10,9 +10,9 @@ import pytest
 from typer.testing import CliRunner
 
 from alphacam_cli.core.drawing import CamPath, Drawing, MoveResult
-from alphacam_cli.gateway.client import RemoteSession
-from alphacam_cli.gateway.remote import _DrawingProxy
-from alphacam_cli.gateway.server import COMError, GatewayServer
+from alphacam_cli.gateway.client import RemoteProtocolError, RemoteSession
+from alphacam_cli.gateway.remote import RemoteApplication, _DrawingProxy
+from alphacam_cli.gateway.server import GatewayServer, RequestError
 from alphacam_cli.main import app
 
 runner = CliRunner()
@@ -615,7 +615,7 @@ def test_handler_drawing_move_warnings_are_not_duplicated(server_app: MagicMock)
 def test_handler_drawing_move_rejects_non_numeric(
     server_app: MagicMock, params: dict[str, Any], message: str
 ) -> None:
-    with pytest.raises(COMError, match=message):
+    with pytest.raises(RequestError, match=message):
         GatewayServer()._handler_drawing_move(params)
 
     server_app.get_active_drawing.assert_not_called()
@@ -626,7 +626,7 @@ def test_handler_drawing_move_rejects_non_finite(server_app: MagicMock, key: str
     params: dict[str, Any] = {"dx": 0, "dy": 0, "dz": 0}
     params[key] = float("nan")
 
-    with pytest.raises(COMError, match="finite"):
+    with pytest.raises(RequestError, match="finite"):
         GatewayServer()._handler_drawing_move(params)
 
     server_app.get_active_drawing.assert_not_called()
@@ -644,7 +644,7 @@ def test_handler_drawing_move_rejects_non_finite(server_app: MagicMock, key: str
 def test_handler_drawing_move_requires_dx_dy(
     server_app: MagicMock, params: dict[str, Any], message: str
 ) -> None:
-    with pytest.raises(COMError, match=message):
+    with pytest.raises(RequestError, match=message):
         GatewayServer()._handler_drawing_move(params)
 
     server_app.get_active_drawing.assert_not_called()
@@ -653,7 +653,7 @@ def test_handler_drawing_move_requires_dx_dy(
 def test_handler_drawing_move_no_drawing(server_app: MagicMock) -> None:
     server_app.get_active_drawing.return_value = None
 
-    with pytest.raises(COMError, match="No active drawing"):
+    with pytest.raises(RequestError, match="No active drawing"):
         GatewayServer()._handler_drawing_move({"dx": 1, "dy": 2})
 
 
@@ -662,7 +662,7 @@ def test_handler_drawing_move_wraps_error(server_app: MagicMock) -> None:
     drw.move.side_effect = RuntimeError("No selected geometries")
     server_app.get_active_drawing.return_value = drw
 
-    with pytest.raises(COMError, match="No selected geometries"):
+    with pytest.raises(RequestError, match="No selected geometries"):
         GatewayServer()._handler_drawing_move({"dx": 1, "dy": 2})
 
 
@@ -729,3 +729,21 @@ def test_cli_drawing_move_prints_warnings_from_move_result() -> None:
 
     assert result.exit_code == 0
     assert result.stderr.count("handler warning") == 1
+
+
+def test_cli_drawing_move_remote_request_error_exits_1() -> None:
+    session = RemoteSession()
+
+    def fake_call(method: str, params: Any = None, timeout: float | None = None) -> Any:
+        if method == "drawing_move":
+            raise RemoteProtocolError(  # noqa: TRY003
+                "JSON-RPC error (-32600): No selected geometries"
+            )
+        return {"geometries_count": 0, "tool_paths_count": 0}
+
+    session._call = MagicMock(side_effect=fake_call)  # type: ignore[method-assign]
+
+    result = _invoke(RemoteApplication(session), ["--dx", "1", "--dy", "2"])
+
+    assert result.exit_code == 1
+    assert "No selected geometries" in result.stderr

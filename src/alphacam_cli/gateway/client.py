@@ -31,6 +31,10 @@ class RemoteComError(AlphacamComError):
         super().__init__(message, hresult)
 
 
+class RemoteServerError(Exception):
+    """Unexpected server-side errors reported as JSON-RPC INTERNAL_ERROR."""
+
+
 class RemoteProtocolError(Exception):
     """JSON-RPC protocol errors unrelated to COM or transport."""
 
@@ -102,7 +106,7 @@ class RemoteSession:
                 if code == COM_ERROR:
                     raise RemoteComError(message, hresult=code)
                 if code == INTERNAL_ERROR:
-                    raise RemoteComError(message)
+                    raise RemoteServerError(message)
                 raise RemoteProtocolError(f"JSON-RPC error ({code}): {message}")
             return response["result"]
         finally:

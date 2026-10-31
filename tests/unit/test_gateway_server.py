@@ -13,7 +13,10 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from alphacam_cli.gateway.server import COMError, GatewayServer
+from alphacam_cli.gateway import client as client_module
+from alphacam_cli.gateway.client import RemoteProtocolError, RemoteSession
+from alphacam_cli.gateway.protocol import COM_ERROR, INTERNAL_ERROR, INVALID_REQUEST
+from alphacam_cli.gateway.server import COMError, GatewayServer, RequestError
 
 
 @pytest.fixture
@@ -1430,7 +1433,7 @@ def test_create_cdm_job_handler_missing_job_name(server_app: MagicMock) -> None:
 def test_create_cdm_job_handler_forbidden_name(server_app: MagicMock) -> None:
     gw = GatewayServer()
     with pytest.raises(
-        COMError, match=r"invalid job name: 'Zadanie/1' \(forbidden characters: /\)"
+        RequestError, match=r"invalid job name: 'Zadanie/1' \(forbidden characters: /\)"
     ):
         gw._handler_create_cdm_job({"job_name": "Zadanie/1"})
     server_app.create_cdm_job.assert_not_called()
@@ -1438,7 +1441,7 @@ def test_create_cdm_job_handler_forbidden_name(server_app: MagicMock) -> None:
 
 def test_create_cdm_job_handler_invalid_due_date(server_app: MagicMock) -> None:
     gw = GatewayServer()
-    with pytest.raises(COMError, match="cdm: invalid due date"):
+    with pytest.raises(RequestError, match="cdm: invalid due date"):
         gw._handler_create_cdm_job({"job_name": "JOB-001", "due_date": "2026-13-40"})
     server_app.create_cdm_job.assert_not_called()
 
@@ -1503,13 +1506,13 @@ def test_cdm_order_details_handler_non_string_job_name(server_app: MagicMock) ->
 
 def test_cdm_order_details_handler_forbidden_job_name(server_app: MagicMock) -> None:
     gw = GatewayServer()
-    with pytest.raises(COMError, match=r"invalid job name: 'A/B' \(forbidden characters: /\)"):
+    with pytest.raises(RequestError, match=r"invalid job name: 'A/B' \(forbidden characters: /\)"):
         gw._handler_cdm_order_details({"job_name": "A/B"})
 
 
 def test_cdm_order_details_handler_overlong_job_name(server_app: MagicMock) -> None:
     gw = GatewayServer()
-    with pytest.raises(COMError, match=r"max 60 characters"):
+    with pytest.raises(RequestError, match=r"max 60 characters"):
         gw._handler_cdm_order_details({"job_name": "J" * 61})
 
 
@@ -1786,7 +1789,7 @@ def test_cdm_import_csv_handler_forbidden_name(
     csv_file = tmp_path / "order.csv"
     csv_file.write_text("P003,1,500,500,1;2;3\n", encoding="utf-8")
     gw = GatewayServer()
-    with pytest.raises(COMError, match=r"invalid job name: 'A/B' \(forbidden characters: /\)"):
+    with pytest.raises(RequestError, match=r"invalid job name: 'A/B' \(forbidden characters: /\)"):
         gw._handler_cdm_import_csv({"csv": str(csv_file), "name": "A/B"})
     server_app.import_cdm_csv.assert_not_called()
 
@@ -1797,7 +1800,7 @@ def test_cdm_import_csv_handler_forbidden_job(
     csv_file = tmp_path / "order.csv"
     csv_file.write_text("P003,1,500,500,1;2;3\n", encoding="utf-8")
     gw = GatewayServer()
-    with pytest.raises(COMError, match=r"invalid job name: .*forbidden characters"):
+    with pytest.raises(RequestError, match=r"invalid job name: .*forbidden characters"):
         gw._handler_cdm_import_csv({"csv": str(csv_file), "job": "A\\B"})
     server_app.import_cdm_csv.assert_not_called()
 
@@ -1941,7 +1944,7 @@ def test_cdm_import_preview_handler_forbidden_job_name(
     csv_file = tmp_path / "order.csv"
     csv_file.write_text("P003,1,500,500,1;2;3\n", encoding="utf-8")
     gw = GatewayServer()
-    with pytest.raises(COMError, match=r"invalid job name: .*forbidden characters"):
+    with pytest.raises(RequestError, match=r"invalid job name: .*forbidden characters"):
         gw._handler_cdm_import_preview({"csv": str(csv_file), "job": "A/B"})
     server_app.import_cdm_preview.assert_not_called()
 
@@ -1952,7 +1955,7 @@ def test_cdm_import_preview_handler_forbidden_name_param(
     csv_file = tmp_path / "order.csv"
     csv_file.write_text("P003,1,500,500,1;2;3\n", encoding="utf-8")
     gw = GatewayServer()
-    with pytest.raises(COMError, match=r"invalid job name: .*forbidden characters"):
+    with pytest.raises(RequestError, match=r"invalid job name: .*forbidden characters"):
         gw._handler_cdm_import_preview({"csv": str(csv_file), "name": "A`B"})
     server_app.import_cdm_preview.assert_not_called()
 
@@ -2071,7 +2074,7 @@ def test_cdm_delete_job_handler_no_delete_method(server_app: MagicMock) -> None:
 def test_cdm_delete_job_handler_forbidden_name(server_app: MagicMock) -> None:
     gw = GatewayServer()
     with pytest.raises(
-        COMError, match=r"invalid job name: 'Zadanie/1' \(forbidden characters: /\)"
+        RequestError, match=r"invalid job name: 'Zadanie/1' \(forbidden characters: /\)"
     ):
         gw._handler_cdm_delete_job({"job_name": "Zadanie/1"})
     server_app.delete_cdm_job.assert_not_called()
@@ -2220,7 +2223,9 @@ def test_manifest_read_handler_fill_threshold(server_app: MagicMock) -> None:
 
 def test_manifest_read_handler_forbidden_job_name(server_app: MagicMock) -> None:
     gw = GatewayServer()
-    with pytest.raises(COMError, match=r"invalid job name: 'Fronty/1' \(forbidden characters: /\)"):
+    with pytest.raises(
+        RequestError, match=r"invalid job name: 'Fronty/1' \(forbidden characters: /\)"
+    ):
         gw._handler_manifest_read({"job_name": "Fronty/1"})
     server_app.manifest_read.assert_not_called()
 
@@ -2454,7 +2459,7 @@ def test_process_cdm_job_handler_blank_job_name(server_app: MagicMock) -> None:
 def test_process_cdm_job_handler_forbidden_name(server_app: MagicMock) -> None:
     gw = GatewayServer()
     with pytest.raises(
-        COMError, match=r"invalid job name: 'Zadanie/1' \(forbidden characters: /\)"
+        RequestError, match=r"invalid job name: 'Zadanie/1' \(forbidden characters: /\)"
     ):
         gw._handler_process_cdm_job({"job_name": "Zadanie/1"})
     server_app.process_cdm_job.assert_not_called()
@@ -2995,7 +3000,7 @@ def test_drawing_move_handler_watchdog_cancelled_on_error(server_app: MagicMock)
     watchdog = MagicMock()
     gw._watchdog_arm = MagicMock(return_value=watchdog)
 
-    with pytest.raises(COMError, match="move boom"):
+    with pytest.raises(RequestError, match="move boom"):
         gw._handler_drawing_move({"dx": 1, "dy": 2})
 
     watchdog.cancel.assert_called_once()
@@ -3024,7 +3029,7 @@ def test_drawing_lint_handler_watchdog_cancelled_on_error(server_app: MagicMock)
     watchdog = MagicMock()
     gw._watchdog_arm = MagicMock(return_value=watchdog)
 
-    with pytest.raises(COMError, match="lint boom"):
+    with pytest.raises(RequestError, match="lint boom"):
         gw._handler_drawing_lint({"all": True, "units": "mm"})
 
     watchdog.cancel.assert_called_once()
@@ -3236,3 +3241,82 @@ def test_sta_loop_respects_quit_on_stop_off(monkeypatch: pytest.MonkeyPatch) -> 
     _run_sta_once(GatewayServer())
 
     ac_app.Quit.assert_not_called()
+
+
+def _direct_com_call(fn: Any, desc: str = "", timeout: float | None = None) -> Any:
+    return fn()
+
+
+def test_dispatch_maps_request_error_to_invalid_request(server_app: MagicMock) -> None:
+    drw = MagicMock()
+    drw.move.side_effect = RuntimeError("No selected geometries")
+    server_app.get_active_drawing.return_value = drw
+    gw = GatewayServer()
+    gw._com_call = _direct_com_call  # type: ignore[method-assign]
+
+    response = gw._dispatch("drawing_move", {"dx": 1, "dy": 2}, 7)
+
+    assert response is not None
+    assert response["error"]["code"] == INVALID_REQUEST
+    assert response["error"]["message"] == "No selected geometries"
+    assert response["id"] == 7
+
+
+def test_dispatch_maps_com_error_to_com_error(server_app: MagicMock) -> None:
+    drw = MagicMock()
+    drw.move.side_effect = Exception("boom")
+    server_app.get_active_drawing.return_value = drw
+    gw = GatewayServer()
+    gw._com_call = _direct_com_call  # type: ignore[method-assign]
+
+    response = gw._dispatch("drawing_move", {"dx": 1, "dy": 2}, 8)
+
+    assert response is not None
+    assert response["error"]["code"] == COM_ERROR
+
+
+def test_dispatch_maps_unexpected_error_to_internal_error() -> None:
+    gw = GatewayServer()
+    gw._com_call = _direct_com_call  # type: ignore[method-assign]
+
+    def boom(params: dict[str, Any]) -> dict[str, Any]:
+        raise ValueError("unexpected")
+
+    gw._handler_boom = boom  # type: ignore[method-assign]
+
+    response = gw._dispatch("boom", {}, 9)
+
+    assert response is not None
+    assert response["error"]["code"] == INTERNAL_ERROR
+
+
+def test_dispatch_lint_request_error_to_invalid_request(server_app: MagicMock) -> None:
+    drw = MagicMock()
+    drw.lint.side_effect = RuntimeError("No selected geometries")
+    server_app.get_active_drawing.return_value = drw
+    gw = GatewayServer()
+    gw._com_call = _direct_com_call  # type: ignore[method-assign]
+
+    response = gw._dispatch("drawing_lint", {"units": "mm"}, 10)
+
+    assert response is not None
+    assert response["error"]["code"] == INVALID_REQUEST
+    assert response["error"]["message"] == "No selected geometries"
+
+
+def test_dispatch_request_error_round_trips_as_remote_protocol_error(
+    server_app: MagicMock, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    drw = MagicMock()
+    drw.move.side_effect = RuntimeError("No selected geometries")
+    server_app.get_active_drawing.return_value = drw
+    gw = GatewayServer()
+    gw._com_call = _direct_com_call  # type: ignore[method-assign]
+    response = gw._dispatch("drawing_move", {"dx": 1, "dy": 2}, 1)
+
+    session = RemoteSession()
+    session._sock = MagicMock()
+    monkeypatch.setattr(client_module, "read_frame", lambda _sock: response)
+
+    with pytest.raises(RemoteProtocolError, match="No selected geometries"):
+        session.drawing_move(1, 2)
