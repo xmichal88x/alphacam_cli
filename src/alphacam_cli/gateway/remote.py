@@ -345,6 +345,12 @@ class RemoteApplication:
     def cdm_jobs(self) -> dict[str, Any]:
         return self._session.cdm_jobs()  # type: ignore[no-any-return]
 
+    def cdm_part_images(self, job_name: str, material: str | None = None) -> dict[str, Any]:
+        return self._session.cdm_part_images(job_name, material)  # type: ignore[no-any-return]
+
+    def cdm_sheet_images(self, job_name: str, material: str | None = None) -> dict[str, Any]:
+        return self._session.cdm_sheet_images(job_name, material)  # type: ignore[no-any-return]
+
     def nest_inspect(self) -> dict[str, Any]:
         return self._session.nest_inspect()  # type: ignore[no-any-return]
 

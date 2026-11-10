@@ -333,6 +333,89 @@ def list_jobs() -> None:
         console.print(t)
 
 
+@app.command("part-images")
+@handle_com_errors
+def part_images(
+    job_name: str = typer.Argument(..., help="CDM job name"),
+    material: str | None = typer.Option(
+        None, "--material", help="Material name (default: any manifest for the job)"
+    ),
+    json_output: bool = typer.Option(
+        False, "--json", help="Output raw JSON (includes base64 image data)"
+    ),
+) -> None:
+    """Show part preview images (base64 PNG) from the job report manifest."""
+    require_platform()
+    with alphacam_context(visible=get_visible()) as raw:
+        ac = resolve_app(raw)
+        result = ac.cdm_part_images(job_name, material)
+    if json_output:
+        typer.echo(json.dumps(result, indent=2, sort_keys=True, default=str))
+        return
+    parts = result.get("parts", [])
+    if not parts:
+        console.print("[yellow]No part images found[/yellow]")
+        return
+    t = Table(title=f"Part Images — {result.get('manifest', job_name)}")
+    t.add_column("Part", style="green")
+    t.add_column("Item", style="cyan")
+    t.add_column("Sheet", style="magenta")
+    t.add_column("Bytes", justify="right")
+    for item in parts:
+        item_number = item.get("item_number")
+        t.add_row(
+            str(item.get("part_name") or ""),
+            "" if item_number is None else str(item_number),
+            str(item.get("sheet_name") or ""),
+            str(item.get("image_bytes", 0)),
+        )
+    console.print(t)
+    console.print(f"{len(parts)} part image(s)")
+
+
+def _format_size(width: Any, length: Any) -> str:
+    if isinstance(width, (int, float)) and isinstance(length, (int, float)):
+        return f"{width:g}x{length:g}"
+    return ""
+
+
+@app.command("sheet-images")
+@handle_com_errors
+def sheet_images(
+    job_name: str = typer.Argument(..., help="CDM job name"),
+    material: str | None = typer.Option(
+        None, "--material", help="Material name (default: any manifest for the job)"
+    ),
+    json_output: bool = typer.Option(
+        False, "--json", help="Output raw JSON (includes base64 image data)"
+    ),
+) -> None:
+    """Show sheet images (base64 PNG) from the job report manifest."""
+    require_platform()
+    with alphacam_context(visible=get_visible()) as raw:
+        ac = resolve_app(raw)
+        result = ac.cdm_sheet_images(job_name, material)
+    if json_output:
+        typer.echo(json.dumps(result, indent=2, sort_keys=True, default=str))
+        return
+    sheets = result.get("sheets", [])
+    if not sheets:
+        console.print("[yellow]No sheet images found[/yellow]")
+        return
+    t = Table(title=f"Sheet Images — {result.get('manifest', job_name)}")
+    t.add_column("Sheet", style="green")
+    t.add_column("Size (WxH)", style="cyan")
+    t.add_column("Bytes", justify="right")
+    for item in sheets:
+        t.add_row(
+            str(item.get("sheet_name") or ""),
+            _format_size(item.get("width"), item.get("length")),
+            str(item.get("image_bytes", 0)),
+        )
+    console.print(t)
+    console.print(f"{len(sheets)} sheet image(s)")
+
+
 @app.command("import")
 @handle_com_errors
 def import_csv(

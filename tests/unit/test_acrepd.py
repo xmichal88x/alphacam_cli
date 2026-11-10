@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import base64
 import os
 import pathlib
 import textwrap
@@ -9,7 +10,10 @@ import pytest
 
 from alphacam_cli.core import acrepd
 
-_MANIFEST_ROWS = """\
+_PART_IMAGE_BYTES = b"\x89PNG\r\n\x1a\nfake-part-preview"
+_PART_IMAGE_B64 = base64.b64encode(_PART_IMAGE_BYTES).decode("ascii")
+
+_MANIFEST_ROWS = f"""\
   <AC_02_JOB>
     <JobName>Fronty</JobName>
     <JobCustomerName>Klient A</JobCustomerName>
@@ -75,6 +79,7 @@ _MANIFEST_ROWS = """\
     <PartThickness>18</PartThickness>
     <PartMaterial>MDF_18</PartMaterial>
     <PartNestKitNumber>3</PartNestKitNumber>
+    <PartImage>{_PART_IMAGE_B64}</PartImage>
   </AC_05_PARTS>
   <AC_05_PARTS>
     <PartID>2</PartID>
@@ -432,7 +437,7 @@ def test_parse_manifest_full(manifest_file: pathlib.Path) -> None:
     assert p1["thickness"] == 18.0
     assert p1["material"] == "MDF_18"
     assert p1["nest_kit_number"] == "3"
-    assert p1["has_image"] is False
+    assert p1["has_image"] is True
     assert p1["type"] == "P003"
     assert p1["handle_name"] == "H-001"
     assert p1["csv_customer_name"] == "Klient A"
@@ -464,6 +469,182 @@ def test_parse_manifest_full(manifest_file: pathlib.Path) -> None:
     assert p3["csv_customer_name"] == "Klient C"
     assert p3["csv_order_number"] == "Z-003"
     assert p3["csv_item_number"] == "I-3"
+
+
+def test_part_images(manifest_file: pathlib.Path) -> None:
+    images = acrepd.part_images(str(manifest_file))
+
+    assert len(images) == 1
+    image = images[0]
+    assert image["sheet_id"] == 1
+    assert image["sheet_name"] == "Arkusz A1"
+    assert image["part_name"] == "PF-002Small_4"
+    assert image["drawing_file_name"] == "a.amd"
+    assert image["item_number"] == 1
+    assert image["image_base64"] == _PART_IMAGE_B64
+    assert base64.b64decode(image["image_base64"]) == _PART_IMAGE_BYTES
+    assert image["image_bytes"] == len(_PART_IMAGE_BYTES)
+
+
+def test_part_images_skips_rows_without_image(tmp_path: pathlib.Path) -> None:
+    rows = f"""\
+  <AC_04_SHEETS>
+    <SheetID>1</SheetID>
+    <SheetName>Arkusz A1</SheetName>
+    <SheetImage>{_PART_IMAGE_B64}</SheetImage>
+  </AC_04_SHEETS>
+  <AC_05_PARTS>
+    <PartID>1</PartID>
+    <PartSheetID>1</PartSheetID>
+    <PartName>Z-obrazem</PartName>
+    <PartDrawingFileName>a.amd</PartDrawingFileName>
+    <PartItemNumber>7</PartItemNumber>
+    <PartImage>{_PART_IMAGE_B64}</PartImage>
+  </AC_05_PARTS>
+  <AC_05_PARTS>
+    <PartID>2</PartID>
+    <PartSheetID>1</PartSheetID>
+    <PartName>Bez-obrazu</PartName>
+  </AC_05_PARTS>
+"""
+    path = _write_minimal_manifest(tmp_path, "Job.acrepd", rows)
+
+    images = acrepd.part_images(str(path))
+
+    assert [item["part_name"] for item in images] == ["Z-obrazem"]
+    assert images[0]["item_number"] == 7
+    assert images[0]["sheet_name"] == "Arkusz A1"
+
+
+_SHEET_IMAGE_BYTES = b"\x89PNG\r\n\x1a\nfake-sheet-preview"
+_SHEET_IMAGE_B64 = base64.b64encode(_SHEET_IMAGE_BYTES).decode("ascii")
+
+
+def test_sheet_images(tmp_path: pathlib.Path) -> None:
+    rows = f"""\
+  <AC_04_SHEETS>
+    <SheetID>1</SheetID>
+    <SheetName>Arkusz A1</SheetName>
+    <SheetWidth>2800</SheetWidth>
+    <SheetLength>2070</SheetLength>
+    <SheetThickness>18</SheetThickness>
+    <SheetImage>{_SHEET_IMAGE_B64}</SheetImage>
+  </AC_04_SHEETS>
+"""
+    path = _write_minimal_manifest(tmp_path, "Job.acrepd", rows)
+
+    images = acrepd.sheet_images(str(path))
+
+    assert len(images) == 1
+    image = images[0]
+    assert image["sheet_id"] == 1
+    assert image["sheet_name"] == "Arkusz A1"
+    assert image["width"] == 2800.0
+    assert image["length"] == 2070.0
+    assert image["thickness"] == 18.0
+    assert image["image_base64"] == _SHEET_IMAGE_B64
+    assert base64.b64decode(image["image_base64"]) == _SHEET_IMAGE_BYTES
+    assert image["image_bytes"] == len(_SHEET_IMAGE_BYTES)
+
+
+def test_sheet_images_skips_rows_without_image(tmp_path: pathlib.Path) -> None:
+    rows = f"""\
+  <AC_04_SHEETS>
+    <SheetID>1</SheetID>
+    <SheetName>Z-obrazem</SheetName>
+    <SheetWidth>2800</SheetWidth>
+    <SheetLength>2070</SheetLength>
+    <SheetImage>{_SHEET_IMAGE_B64}</SheetImage>
+  </AC_04_SHEETS>
+  <AC_04_SHEETS>
+    <SheetID>2</SheetID>
+    <SheetName>Bez-obrazu</SheetName>
+    <SheetWidth>2800</SheetWidth>
+    <SheetLength>2070</SheetLength>
+  </AC_04_SHEETS>
+"""
+    path = _write_minimal_manifest(tmp_path, "Job.acrepd", rows)
+
+    images = acrepd.sheet_images(str(path))
+
+    assert [item["sheet_name"] for item in images] == ["Z-obrazem"]
+
+
+def test_sheet_images_respects_max_total_bytes(
+    tmp_path: pathlib.Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    rows = f"""\
+  <AC_04_SHEETS>
+    <SheetID>1</SheetID>
+    <SheetName>Pierwsza</SheetName>
+    <SheetImage>{_SHEET_IMAGE_B64}</SheetImage>
+  </AC_04_SHEETS>
+  <AC_04_SHEETS>
+    <SheetID>2</SheetID>
+    <SheetName>Druga</SheetName>
+    <SheetImage>{_SHEET_IMAGE_B64}</SheetImage>
+  </AC_04_SHEETS>
+"""
+    path = _write_minimal_manifest(tmp_path, "Job.acrepd", rows)
+
+    with caplog.at_level("WARNING", logger="alphacam_cli.core.acrepd"):
+        images = acrepd.sheet_images(str(path), max_total_bytes=len(_SHEET_IMAGE_B64))
+
+    assert [item["sheet_name"] for item in images] == ["Pierwsza"]
+    assert "skipped 1 image" in caplog.text
+
+
+def test_image_bytes_accepts_whitespace() -> None:
+    wrapped = f"{_PART_IMAGE_B64[:4]}\n  {_PART_IMAGE_B64[4:]}\t"
+    assert acrepd._image_bytes(wrapped) == len(_PART_IMAGE_BYTES)
+
+
+def test_part_images_accepts_base64_with_whitespace(tmp_path: pathlib.Path) -> None:
+    split = f"{_PART_IMAGE_B64[:4]}\n{_PART_IMAGE_B64[4:]}"
+    rows = f"""\
+  <AC_04_SHEETS>
+    <SheetID>1</SheetID>
+    <SheetName>Arkusz A1</SheetName>
+  </AC_04_SHEETS>
+  <AC_05_PARTS>
+    <PartID>1</PartID>
+    <PartSheetID>1</PartSheetID>
+    <PartName>Z-obrazem</PartName>
+    <PartImage>{split}</PartImage>
+  </AC_05_PARTS>
+"""
+    path = _write_minimal_manifest(tmp_path, "Job.acrepd", rows)
+
+    images = acrepd.part_images(str(path))
+
+    assert len(images) == 1
+    assert images[0]["image_bytes"] == len(_PART_IMAGE_BYTES)
+
+
+def test_part_images_respects_max_total_bytes(
+    tmp_path: pathlib.Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    rows = f"""\
+  <AC_05_PARTS>
+    <PartID>1</PartID>
+    <PartSheetID>1</PartSheetID>
+    <PartName>Pierwsza</PartName>
+    <PartImage>{_PART_IMAGE_B64}</PartImage>
+  </AC_05_PARTS>
+  <AC_05_PARTS>
+    <PartID>2</PartID>
+    <PartSheetID>1</PartSheetID>
+    <PartName>Druga</PartName>
+    <PartImage>{_PART_IMAGE_B64}</PartImage>
+  </AC_05_PARTS>
+"""
+    path = _write_minimal_manifest(tmp_path, "Job.acrepd", rows)
+
+    with caplog.at_level("WARNING", logger="alphacam_cli.core.acrepd"):
+        images = acrepd.part_images(str(path), max_total_bytes=len(_PART_IMAGE_B64))
+
+    assert [item["part_name"] for item in images] == ["Pierwsza"]
+    assert "skipped 1 image" in caplog.text
 
 
 _SENTINEL_MATERIAL = "Nie można odnaleźć materiału w bazie danych materiałów"

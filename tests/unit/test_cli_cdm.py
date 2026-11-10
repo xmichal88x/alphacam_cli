@@ -1090,6 +1090,162 @@ def test_cdm_jobs_empty() -> None:
     assert "No CDM jobs found" in result.stderr
 
 
+def test_cdm_part_images_command_table() -> None:
+    from tests.unit.test_cli import _mock_com
+
+    payload = {
+        "success": True,
+        "job_name": "JOB-001",
+        "manifest": "JOB-001 - MDF_18.acrepd",
+        "parts": [
+            {
+                "sheet_id": 1,
+                "sheet_name": "Arkusz A1",
+                "part_name": "PF-002",
+                "drawing_file_name": "a.amd",
+                "item_number": 3,
+                "image_base64": "QUJD",
+                "image_bytes": 3,
+            }
+        ],
+    }
+    with (
+        _mock_com(),
+        patch(
+            "alphacam_cli.core.application.Application.cdm_part_images",
+            return_value=payload,
+        ) as images,
+    ):
+        result = runner.invoke(app, ["cdm", "part-images", "JOB-001", "--material", "MDF_18"])
+    assert result.exit_code == 0
+    assert "PF-002" in result.stderr
+    assert "Arkusz A1" in result.stderr
+    assert "QUJD" not in result.stderr
+    assert "1 part image(s)" in result.stderr
+    images.assert_called_once_with("JOB-001", "MDF_18")
+
+
+def test_cdm_part_images_command_json_includes_base64() -> None:
+    from tests.unit.test_cli import _mock_com
+
+    payload = {
+        "success": True,
+        "job_name": "JOB-001",
+        "manifest": "JOB-001.acrepd",
+        "parts": [
+            {
+                "sheet_id": 1,
+                "sheet_name": "Arkusz A1",
+                "part_name": "PF-002",
+                "drawing_file_name": "a.amd",
+                "item_number": 3,
+                "image_base64": "QUJD",
+                "image_bytes": 3,
+            }
+        ],
+    }
+    with (
+        _mock_com(),
+        patch(
+            "alphacam_cli.core.application.Application.cdm_part_images",
+            return_value=payload,
+        ),
+    ):
+        result = runner.invoke(app, ["cdm", "part-images", "JOB-001", "--json"])
+    assert result.exit_code == 0
+    data, _ = json.JSONDecoder().raw_decode(result.stdout)
+    assert data["parts"][0]["image_base64"] == "QUJD"
+    assert data["manifest"] == "JOB-001.acrepd"
+
+
+def test_cdm_part_images_command_empty() -> None:
+    from tests.unit.test_cli import _mock_com
+
+    with (
+        _mock_com(),
+        patch(
+            "alphacam_cli.core.application.Application.cdm_part_images",
+            return_value={
+                "success": True,
+                "job_name": "JOB-001",
+                "manifest": "JOB-001.acrepd",
+                "parts": [],
+            },
+        ),
+    ):
+        result = runner.invoke(app, ["cdm", "part-images", "JOB-001"])
+    assert result.exit_code == 0
+    assert "No part images found" in result.stderr
+
+
+def test_cdm_sheet_images_command_table() -> None:
+    from tests.unit.test_cli import _mock_com
+
+    payload = {
+        "success": True,
+        "job_name": "JOB-001",
+        "manifest": "JOB-001 - MDF_18.acrepd",
+        "sheets": [
+            {
+                "sheet_id": 1,
+                "sheet_name": "Arkusz A1",
+                "width": 2800.0,
+                "length": 2070.0,
+                "thickness": 18.0,
+                "image_base64": "QUJD",
+                "image_bytes": 3,
+            }
+        ],
+    }
+    with (
+        _mock_com(),
+        patch(
+            "alphacam_cli.core.application.Application.cdm_sheet_images",
+            return_value=payload,
+        ) as images,
+    ):
+        result = runner.invoke(app, ["cdm", "sheet-images", "JOB-001", "--material", "MDF_18"])
+    assert result.exit_code == 0
+    assert "Arkusz A1" in result.stderr
+    assert "2800x2070" in result.stderr
+    assert "QUJD" not in result.stderr
+    assert "1 sheet image(s)" in result.stderr
+    images.assert_called_once_with("JOB-001", "MDF_18")
+
+
+def test_cdm_sheet_images_command_json_includes_base64() -> None:
+    from tests.unit.test_cli import _mock_com
+
+    payload = {
+        "success": True,
+        "job_name": "JOB-001",
+        "manifest": "JOB-001.acrepd",
+        "sheets": [
+            {
+                "sheet_id": 1,
+                "sheet_name": "Arkusz A1",
+                "width": 2800.0,
+                "length": 2070.0,
+                "thickness": 18.0,
+                "image_base64": "QUJD",
+                "image_bytes": 3,
+            }
+        ],
+    }
+    with (
+        _mock_com(),
+        patch(
+            "alphacam_cli.core.application.Application.cdm_sheet_images",
+            return_value=payload,
+        ),
+    ):
+        result = runner.invoke(app, ["cdm", "sheet-images", "JOB-001", "--json"])
+    assert result.exit_code == 0
+    data, _ = json.JSONDecoder().raw_decode(result.stdout)
+    assert data["sheets"][0]["image_base64"] == "QUJD"
+    assert data["manifest"] == "JOB-001.acrepd"
+
+
 def test_cdm_import_command_success() -> None:
     from tests.unit.test_cli import _mock_com
 

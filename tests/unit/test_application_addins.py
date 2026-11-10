@@ -451,6 +451,197 @@ def _mock_manifest_read(
     )
 
 
+def test_cdm_part_images_returns_manifest_and_parts(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        "alphacam_cli.core.application.acrepd._reports_data_dir",
+        lambda *args, **kwargs: os.path.abspath("."),
+    )
+    monkeypatch.setattr(
+        "alphacam_cli.core.application.acrepd.find_manifest",
+        lambda *args, **kwargs: "JOB - MDF.acrepd",
+    )
+    parts = [
+        {
+            "sheet_id": 1,
+            "sheet_name": "Arkusz A1",
+            "part_name": "P1",
+            "drawing_file_name": "p1.amd",
+            "item_number": 1,
+            "image_base64": "QUJD",
+            "image_bytes": 3,
+        }
+    ]
+    monkeypatch.setattr(
+        "alphacam_cli.core.application.acrepd.part_images",
+        lambda path: parts,
+    )
+
+    ac = Application(MagicMock())
+    result = ac.cdm_part_images("JOB", "MDF")
+
+    assert result == {
+        "success": True,
+        "job_name": "JOB",
+        "manifest": "JOB - MDF.acrepd",
+        "parts": parts,
+    }
+
+
+def test_cdm_part_images_raises_when_manifest_missing(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        "alphacam_cli.core.application.acrepd._reports_data_dir",
+        lambda *args, **kwargs: os.path.abspath("."),
+    )
+    monkeypatch.setattr(
+        "alphacam_cli.core.application.acrepd.find_manifest",
+        lambda *args, **kwargs: None,
+    )
+
+    ac = Application(MagicMock())
+    with pytest.raises(RuntimeError, match="report manifest not found"):
+        ac.cdm_part_images("JOB")
+
+
+def test_cdm_part_images_falls_back_to_job_scoped_manifest(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        "alphacam_cli.core.application.acrepd._reports_data_dir",
+        lambda *args, **kwargs: os.path.abspath("."),
+    )
+    materials: list[str | None] = []
+
+    def fake_find_manifest(
+        data_dir: str, job_name: str, material: str | None = None
+    ) -> str | None:
+        materials.append(material)
+        return "JOB.acrepd" if material is None else None
+
+    monkeypatch.setattr(
+        "alphacam_cli.core.application.acrepd.find_manifest", fake_find_manifest
+    )
+    monkeypatch.setattr(
+        "alphacam_cli.core.application.acrepd.part_images", lambda path: []
+    )
+
+    ac = Application(MagicMock())
+    result = ac.cdm_part_images("JOB", "MDF_18")
+
+    assert result == {
+        "success": True,
+        "job_name": "JOB",
+        "manifest": "JOB.acrepd",
+        "parts": [],
+    }
+    assert materials[-1] is None
+
+
+def test_cdm_part_images_matches_material_space_variant(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        "alphacam_cli.core.application.acrepd._reports_data_dir",
+        lambda *args, **kwargs: os.path.abspath("."),
+    )
+    materials: list[str | None] = []
+
+    def fake_find_manifest(
+        data_dir: str, job_name: str, material: str | None = None
+    ) -> str | None:
+        materials.append(material)
+        return "JOB - MDF 18.acrepd" if material == "MDF 18" else None
+
+    monkeypatch.setattr(
+        "alphacam_cli.core.application.acrepd.find_manifest", fake_find_manifest
+    )
+    monkeypatch.setattr(
+        "alphacam_cli.core.application.acrepd.part_images", lambda path: []
+    )
+
+    ac = Application(MagicMock())
+    result = ac.cdm_part_images("JOB", "MDF_18")
+
+    assert result["manifest"] == "JOB - MDF 18.acrepd"
+    assert "MDF 18" in materials
+    assert None not in materials
+
+
+def test_cdm_part_images_raises_when_material_and_fallback_missing(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        "alphacam_cli.core.application.acrepd._reports_data_dir",
+        lambda *args, **kwargs: os.path.abspath("."),
+    )
+    monkeypatch.setattr(
+        "alphacam_cli.core.application.acrepd.find_manifest",
+        lambda *args, **kwargs: None,
+    )
+
+    ac = Application(MagicMock())
+    with pytest.raises(RuntimeError, match="report manifest not found"):
+        ac.cdm_part_images("JOB", "MDF_18")
+
+
+def test_cdm_sheet_images_returns_manifest_and_sheets(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        "alphacam_cli.core.application.acrepd._reports_data_dir",
+        lambda *args, **kwargs: os.path.abspath("."),
+    )
+    monkeypatch.setattr(
+        "alphacam_cli.core.application.acrepd.find_manifest",
+        lambda *args, **kwargs: "JOB - MDF.acrepd",
+    )
+    sheets = [
+        {
+            "sheet_id": 1,
+            "sheet_name": "Arkusz A1",
+            "width": 2800.0,
+            "length": 2070.0,
+            "thickness": 18.0,
+            "image_base64": "QUJD",
+            "image_bytes": 3,
+        }
+    ]
+    monkeypatch.setattr(
+        "alphacam_cli.core.application.acrepd.sheet_images",
+        lambda path: sheets,
+    )
+
+    ac = Application(MagicMock())
+    result = ac.cdm_sheet_images("JOB", "MDF")
+
+    assert result == {
+        "success": True,
+        "job_name": "JOB",
+        "manifest": "JOB - MDF.acrepd",
+        "sheets": sheets,
+    }
+
+
+def test_cdm_sheet_images_raises_when_manifest_missing(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        "alphacam_cli.core.application.acrepd._reports_data_dir",
+        lambda *args, **kwargs: os.path.abspath("."),
+    )
+    monkeypatch.setattr(
+        "alphacam_cli.core.application.acrepd.find_manifest",
+        lambda *args, **kwargs: None,
+    )
+
+    ac = Application(MagicMock())
+    with pytest.raises(RuntimeError, match="report manifest not found"):
+        ac.cdm_sheet_images("JOB")
+
+
 def _manifest_with_parts(*parts: dict[str, Any]) -> dict[str, Any]:
     return {
         "job_name": "CusPO 002",

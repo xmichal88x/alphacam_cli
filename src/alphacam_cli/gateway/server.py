@@ -1195,6 +1195,38 @@ class GatewayServer:
         except Exception as e:
             raise COMError(f"cdm: list jobs failed: {e}") from e
 
+    def _handler_cdm_part_images(self, params: dict[str, Any]) -> dict[str, Any]:
+        from alphacam_cli.gateway.server import _app as com_app
+
+        job_name = str(params.get("job_name") or "").strip()
+        if not job_name:
+            raise RequestError("cdm: job_name is required")
+        try:
+            job_name = _validate_job_name(job_name)
+        except RuntimeError as exc:
+            raise RequestError(str(exc)) from None
+        material = str(params.get("material") or "").strip() or None
+        try:
+            return com_app.cdm_part_images(job_name, material)  # type: ignore[no-any-return]
+        except Exception as e:
+            raise COMError(f"cdm: part images failed: {e}") from e
+
+    def _handler_cdm_sheet_images(self, params: dict[str, Any]) -> dict[str, Any]:
+        from alphacam_cli.gateway.server import _app as com_app
+
+        job_name = str(params.get("job_name") or "").strip()
+        if not job_name:
+            raise RequestError("cdm: job_name is required")
+        try:
+            job_name = _validate_job_name(job_name)
+        except RuntimeError as exc:
+            raise RequestError(str(exc)) from None
+        material = str(params.get("material") or "").strip() or None
+        try:
+            return com_app.cdm_sheet_images(job_name, material)  # type: ignore[no-any-return]
+        except Exception as e:
+            raise COMError(f"cdm: sheet images failed: {e}") from e
+
     def _handler_cdm_import_csv(self, params: dict[str, Any]) -> dict[str, Any]:
         from alphacam_cli.gateway.server import _app as com_app
 
@@ -1480,7 +1512,7 @@ class GatewayServer:
 
         job_name = str(params.get("job_name") or "").strip()
         if not job_name:
-            raise COMError("manifest: job_name required")
+            raise RequestError("cdm: job_name is required")
         try:
             job_name = _validate_job_name(job_name)
         except RuntimeError as exc:

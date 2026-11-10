@@ -443,6 +443,16 @@ class RemoteSession:
     def cdm_jobs(self) -> dict[str, Any]:
         return self._call("cdm_jobs")  # type: ignore[no-any-return]
 
+    def cdm_part_images(self, job_name: str, material: str | None = None) -> dict[str, Any]:
+        return self._call(  # type: ignore[no-any-return]
+            "cdm_part_images", {"job_name": job_name, "material": material}
+        )
+
+    def cdm_sheet_images(self, job_name: str, material: str | None = None) -> dict[str, Any]:
+        return self._call(  # type: ignore[no-any-return]
+            "cdm_sheet_images", {"job_name": job_name, "material": material}
+        )
+
     def import_cdm_csv(
         self,
         csv: str,

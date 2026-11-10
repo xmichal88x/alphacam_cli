@@ -109,6 +109,88 @@ def test_offcut_create_handler_wraps_com_error(server_app: MagicMock) -> None:
         )
 
 
+def test_cdm_part_images_handler_delegates(server_app: MagicMock) -> None:
+    expected = {"success": True, "job_name": "JOB", "manifest": "JOB.acrepd", "parts": []}
+    server_app.cdm_part_images.return_value = expected
+
+    result = GatewayServer()._handler_cdm_part_images(
+        {"job_name": " JOB ", "material": " MDF "}
+    )
+
+    assert result == expected
+    server_app.cdm_part_images.assert_called_once_with("JOB", "MDF")
+
+
+def test_cdm_part_images_handler_requires_job_name(server_app: MagicMock) -> None:
+    with pytest.raises(RequestError, match="job_name"):
+        GatewayServer()._handler_cdm_part_images({"job_name": "   "})
+    server_app.cdm_part_images.assert_not_called()
+
+
+def test_cdm_part_images_handler_requires_job_name_key(server_app: MagicMock) -> None:
+    with pytest.raises(RequestError, match="job_name"):
+        GatewayServer()._handler_cdm_part_images({})
+    server_app.cdm_part_images.assert_not_called()
+
+
+def test_cdm_part_images_handler_wraps_error(server_app: MagicMock) -> None:
+    server_app.cdm_part_images.side_effect = RuntimeError("boom")
+
+    with pytest.raises(COMError, match="part images failed: boom"):
+        GatewayServer()._handler_cdm_part_images({"job_name": "JOB"})
+
+
+def test_cdm_part_images_handler_rejects_forbidden_name(server_app: MagicMock) -> None:
+    with pytest.raises(
+        RequestError, match=r"invalid job name: '\.\.' \(forbidden characters"
+    ):
+        GatewayServer()._handler_cdm_part_images({"job_name": ".."})
+    server_app.cdm_part_images.assert_not_called()
+
+
+def test_cdm_part_images_handler_rejects_path_separator(server_app: MagicMock) -> None:
+    with pytest.raises(RequestError, match=r"invalid job name: 'A/B' \(forbidden characters: /\)"):
+        GatewayServer()._handler_cdm_part_images({"job_name": "A/B"})
+    server_app.cdm_part_images.assert_not_called()
+
+
+def test_cdm_sheet_images_handler_delegates(server_app: MagicMock) -> None:
+    expected = {"success": True, "job_name": "JOB", "manifest": "JOB.acrepd", "sheets": []}
+    server_app.cdm_sheet_images.return_value = expected
+
+    result = GatewayServer()._handler_cdm_sheet_images(
+        {"job_name": " JOB ", "material": " MDF "}
+    )
+
+    assert result == expected
+    server_app.cdm_sheet_images.assert_called_once_with("JOB", "MDF")
+
+
+def test_cdm_sheet_images_handler_requires_job_name(server_app: MagicMock) -> None:
+    with pytest.raises(RequestError, match="job_name"):
+        GatewayServer()._handler_cdm_sheet_images({"job_name": "   "})
+    server_app.cdm_sheet_images.assert_not_called()
+
+
+def test_cdm_sheet_images_handler_requires_job_name_key(server_app: MagicMock) -> None:
+    with pytest.raises(RequestError, match="job_name"):
+        GatewayServer()._handler_cdm_sheet_images({})
+    server_app.cdm_sheet_images.assert_not_called()
+
+
+def test_cdm_sheet_images_handler_wraps_error(server_app: MagicMock) -> None:
+    server_app.cdm_sheet_images.side_effect = RuntimeError("boom")
+
+    with pytest.raises(COMError, match="sheet images failed: boom"):
+        GatewayServer()._handler_cdm_sheet_images({"job_name": "JOB"})
+
+
+def test_cdm_sheet_images_handler_rejects_path_separator(server_app: MagicMock) -> None:
+    with pytest.raises(RequestError, match=r"invalid job name: 'A/B' \(forbidden characters: /\)"):
+        GatewayServer()._handler_cdm_sheet_images({"job_name": "A/B"})
+    server_app.cdm_sheet_images.assert_not_called()
+
+
 def test_material_add_handler_returns_result_and_delegates(server_app: MagicMock) -> None:
     expected = {
         "success": True,
@@ -2148,7 +2230,7 @@ def test_manifest_read_handler(server_app: MagicMock) -> None:
 def test_manifest_read_handler_no_params(server_app: MagicMock) -> None:
     server_app.manifest_read.return_value = {"success": True, "manifest": {}}
     gw = GatewayServer()
-    with pytest.raises(COMError, match=r"manifest: job_name required"):
+    with pytest.raises(RequestError, match=r"cdm: job_name is required"):
         gw._handler_manifest_read({})
     server_app.manifest_read.assert_not_called()
 

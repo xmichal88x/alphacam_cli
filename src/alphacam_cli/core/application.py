@@ -1162,6 +1162,63 @@ class Application:
             raise RuntimeError(f"cdm: list jobs failed: {e}") from e  # noqa: TRY003
         return {"jobs": jobs_out}
 
+    def _find_report_manifest(self, job_name: str, material: str | None) -> str:
+        """Znajdź manifest raportu dla joba (z wariantami materiału); inaczej RuntimeError."""
+        data_dir = acrepd._reports_data_dir(self.licomdir_path)
+        path = acrepd.find_manifest(data_dir, job_name, material)
+        if path is None and material:
+            tried = {material}
+            for variant in (material.replace("_", " "), material.replace(" ", "_")):
+                if variant in tried:
+                    continue
+                tried.add(variant)
+                path = acrepd.find_manifest(data_dir, job_name, variant)
+                if path is not None:
+                    logger.info(
+                        "cdm: manifest for job %s found as material variant %s (requested %s)",
+                        job_name,
+                        variant,
+                        material,
+                    )
+                    break
+            if path is None:
+                path = acrepd.find_manifest(data_dir, job_name, None)
+                if path is not None:
+                    logger.info(
+                        "cdm: manifest for job %s not found with material %s"
+                        " — using job-scoped manifest",
+                        job_name,
+                        material,
+                    )
+        if path is None:
+            suffix = f" (material: {material})" if material else ""
+            raise RuntimeError(  # noqa: TRY003
+                f"cdm: report manifest not found for job {job_name}{suffix}"
+            )
+        return path
+
+    def cdm_part_images(self, job_name: str, material: str | None = None) -> dict[str, Any]:
+        """Zwróć podglądy części (base64 PNG) z manifestu raportu dla joba."""
+        job_name = _validate_job_name(job_name)
+        path = self._find_report_manifest(job_name, material)
+        return {
+            "success": True,
+            "job_name": job_name,
+            "manifest": os.path.basename(path),
+            "parts": acrepd.part_images(path),
+        }
+
+    def cdm_sheet_images(self, job_name: str, material: str | None = None) -> dict[str, Any]:
+        """Zwróć obrazy arkuszy (base64 PNG) z manifestu raportu dla joba."""
+        job_name = _validate_job_name(job_name)
+        path = self._find_report_manifest(job_name, material)
+        return {
+            "success": True,
+            "job_name": job_name,
+            "manifest": os.path.basename(path),
+            "sheets": acrepd.sheet_images(path),
+        }
+
     def import_cdm_csv(
         self,
         csv: str,

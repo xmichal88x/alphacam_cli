@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import base64
+import binascii
 import contextlib
 import glob
 import logging
@@ -538,6 +540,170 @@ def parse_manifest(path: str) -> dict[str, Any]:
         "unmatched_parts": unmatched_parts,
         "path": path,
     }
+
+
+def _image_bytes(value: str) -> int:
+    """Return the decoded byte length of a base64 image; 0 when it is invalid.
+
+    Whitespace (including line breaks produced by XML pretty-printing) is
+    stripped before strict decoding.
+    """
+    compact = "".join(value.split())
+    try:
+        return len(base64.b64decode(compact, validate=True))
+    except (binascii.Error, ValueError):
+        logger.warning("acrepd: part image is not valid base64 (keeping length 0)")
+        return 0
+
+
+def part_images(
+    path: str, *, max_total_bytes: int = 6 * 1024 * 1024
+) -> list[dict[str, Any]]:
+    """Zwróć podglądy części (``PartImage``, base64) z manifestu ``.acrepd``.
+
+    Dla każdego wiersza ``AC_05_PARTS`` z niepustym ``PartImage`` zwraca
+    nazwę części i pliku rysunku, numer pozycji, arkusz (id + nazwa) oraz
+    obraz w base64 z długością po dekodowaniu. Wiersze bez obrazu są
+    pomijane; ``SheetImage`` (obraz całego arkusza) nie jest zwracany.
+
+    ``max_total_bytes`` ogranicza sumę długości zwracanych ciągów
+    ``image_base64``. Po przekroczeniu limitu kolejne obrazy są pomijane
+    (pętla przerywana, ``logger.warning`` z liczbą pominiętych obrazów).
+    """
+    size = os.path.getsize(path)
+    if size > _MAX_ACREPD_SIZE:
+        raise RuntimeError(  # noqa: TRY003
+            f"manifest: file too large: {size} bytes (max {_MAX_ACREPD_SIZE})"
+        )
+    try:
+        root = ET.parse(path).getroot()
+    except ParseError as e:
+        raise RuntimeError(f"manifest: invalid XML in {path}: {e}") from e  # noqa: TRY003
+
+    sheet_names: dict[int, str] = {}
+    for sheet_el in _children(root, "AC_04_SHEETS"):
+        sheet_id: int | None = None
+        sheet_name: str | None = None
+        for child in sheet_el:
+            tag = _local_name(child.tag).lower()
+            text = (child.text or "").strip()
+            if tag == "sheetid":
+                sheet_id = _num(text, int)
+            elif tag == "sheetname":
+                sheet_name = text or None
+        if sheet_id is not None and sheet_name is not None:
+            sheet_names[sheet_id] = sheet_name
+
+    candidates: list[dict[str, Any]] = []
+    for part_el in _children(root, "AC_05_PARTS"):
+        fields: dict[str, str] = {}
+        image: str | None = None
+        for child in part_el:
+            tag = _local_name(child.tag).lower()
+            text = (child.text or "").strip()
+            if tag == "partimage":
+                image = text or None
+                continue
+            if text:
+                fields[tag] = text
+        if image is None:
+            continue
+        sheet_id = _num(fields.get("partsheetid"), int)
+        candidates.append(
+            {
+                "sheet_id": sheet_id,
+                "sheet_name": sheet_names.get(sheet_id) if sheet_id is not None else None,
+                "part_name": fields.get("partname", ""),
+                "drawing_file_name": fields.get("partdrawingfilename", ""),
+                "item_number": _num(fields.get("partitemnumber"), int),
+                "image_base64": image,
+            }
+        )
+
+    images: list[dict[str, Any]] = []
+    total_bytes = 0
+    for index, candidate in enumerate(candidates):
+        image = candidate["image_base64"]
+        if total_bytes + len(image) > max_total_bytes:
+            skipped = len(candidates) - index
+            logger.warning(
+                "acrepd: part_images skipped %d image(s): max_total_bytes=%d exceeded",
+                skipped,
+                max_total_bytes,
+            )
+            break
+        total_bytes += len(image)
+        candidate["image_bytes"] = _image_bytes(image)
+        images.append(candidate)
+    return images
+
+
+def sheet_images(
+    path: str, *, max_total_bytes: int = 6 * 1024 * 1024
+) -> list[dict[str, Any]]:
+    """Zwróć obrazy arkuszy (``SheetImage``, base64) z manifestu ``.acrepd``.
+
+    Dla każdego wiersza ``AC_04_SHEETS`` z niepustym ``SheetImage`` zwraca
+    identyfikator i nazwę arkusza, jego wymiary (szerokość, długość,
+    grubość) oraz obraz w base64 z długością po dekodowaniu. Jest to ten sam
+    obraz PNG, który AlphaCAM wstawia do raportu „CDM Nest Extra Details
+    Portrait”. Wiersze bez obrazu są pomijane.
+
+    ``max_total_bytes`` ogranicza sumę długości zwracanych ciągów
+    ``image_base64``. Po przekroczeniu limitu kolejne obrazy są pomijane
+    (pętla przerywana, ``logger.warning`` z liczbą pominiętych obrazów).
+    """
+    size = os.path.getsize(path)
+    if size > _MAX_ACREPD_SIZE:
+        raise RuntimeError(  # noqa: TRY003
+            f"manifest: file too large: {size} bytes (max {_MAX_ACREPD_SIZE})"
+        )
+    try:
+        root = ET.parse(path).getroot()
+    except ParseError as e:
+        raise RuntimeError(f"manifest: invalid XML in {path}: {e}") from e  # noqa: TRY003
+
+    candidates: list[dict[str, Any]] = []
+    for sheet_el in _children(root, "AC_04_SHEETS"):
+        fields: dict[str, str] = {}
+        image: str | None = None
+        for child in sheet_el:
+            tag = _local_name(child.tag).lower()
+            text = (child.text or "").strip()
+            if tag == "sheetimage":
+                image = text or None
+                continue
+            if text:
+                fields[tag] = text
+        if image is None:
+            continue
+        candidates.append(
+            {
+                "sheet_id": _num(fields.get("sheetid"), int),
+                "sheet_name": fields.get("sheetname", ""),
+                "width": _num(fields.get("sheetwidth"), float),
+                "length": _num(fields.get("sheetlength"), float),
+                "thickness": _num(fields.get("sheetthickness"), float),
+                "image_base64": image,
+            }
+        )
+
+    images: list[dict[str, Any]] = []
+    total_bytes = 0
+    for index, candidate in enumerate(candidates):
+        image = candidate["image_base64"]
+        if total_bytes + len(image) > max_total_bytes:
+            skipped = len(candidates) - index
+            logger.warning(
+                "acrepd: sheet_images skipped %d image(s): max_total_bytes=%d exceeded",
+                skipped,
+                max_total_bytes,
+            )
+            break
+        total_bytes += len(image)
+        candidate["image_bytes"] = _image_bytes(image)
+        images.append(candidate)
+    return images
 
 
 def _find_sheet(sheets: list[dict[str, Any]], sheet_id: Any) -> dict[str, Any] | None:
